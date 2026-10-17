@@ -30,7 +30,7 @@ from navsim.planning.script.run_pdm_score import compute_final_scores, calculate
                                                  calculate_individual_mapping_scores, create_scene_aggregators
 from navsim.planning.simulation.planner.pdm_planner.scoring.pdm_scorer import PDMScorer
 from navsim.planning.simulation.planner.pdm_planner.simulation.pdm_simulator import PDMSimulator
-from navsim.planning.training.agent_lightning_module_ssl_v1 import AgentLightningModuleSSL
+from navsim.planning.training.agent_lightning_module_ssl import AgentLightningModuleSSL
 from navsim.planning.training.dataset_ssl import DatasetSSL as Dataset
 from navsim.traffic_agents_policies.abstract_traffic_agents_policy import AbstractTrafficAgentsPolicy
 

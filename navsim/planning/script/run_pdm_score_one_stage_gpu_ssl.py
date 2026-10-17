@@ -290,14 +290,15 @@ def main(cfg: DictConfig) -> None:
     )
 
     dist.barrier()
-    all_predictions = [None for _ in range(dist.get_world_size())]
-
-    if dist.is_initialized():
+    
+    # Исправление: вызываем all_gather только если процессов больше одного
+    if dist.is_initialized() and dist.get_world_size() > 1:
+        all_predictions = [None for _ in range(dist.get_world_size())]
         dist.all_gather_object(all_predictions, predictions)
     else:
-        all_predictions.append(predictions)
+        all_predictions = [predictions]
 
-    if dist.get_rank() != 0:
+    if dist.is_initialized() and dist.get_rank() != 0:
         return None
 
     merged_predictions = {}

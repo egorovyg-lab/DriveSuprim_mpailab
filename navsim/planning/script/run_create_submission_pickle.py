@@ -71,7 +71,8 @@ def run_test_evaluation(
     scene_loader_tokens_stage_two = input_loader.reactive_tokens_stage_two
 
     second_stage_output: Dict[str, Trajectory] = {}
-    for token in tqdm(scene_loader_tokens_stage_two, desc="Running second stage evaluation"):
+    if scene_loader_tokens_stage_two is not None:
+        for token in tqdm(scene_loader_tokens_stage_two, desc="Running second stage evaluation"):
         try:
             agent_input = input_loader.get_agent_input_from_token(token)
             trajectory = agent.compute_trajectory(agent_input)

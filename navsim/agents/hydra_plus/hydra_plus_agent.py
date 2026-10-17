@@ -1,0 +1,2 @@
+class HydraPlusAgent:
+    pass

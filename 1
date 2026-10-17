@@ -1,0 +1,6 @@
+--- COMMAND ---
+/auto/ws/drivesuprim_workspace/DriveSuprim/navsim/planning/script/run_pdm_score_one_stage_gpu_ssl.py +debug=false +use_pdm_closed=false agent=teacher train_test_split=navtest worker.threads_per_node=16 agent.checkpoint_path='/auto/ws/drivesuprim_workspace/exp_v2/drivesuprim_r34/agent_r.ckpt' agent.config.training=false agent.config.only_ori_input=true agent.config.inference.model=teacher agent.config.inference.save_pickle=true agent.config.refinement.use_multi_stage=true agent.config.refinement.num_refinement_stage=3 agent.config.refinement.stage_layers=256 agent.config.refinement.topks=drivesuprim_agent_r34 experiment_name=drivesuprim_r34/test-agent_r +cache_path=null metric_cache_path=/auto/ws/drivesuprim_workspace/exp_v2/metric_cache/test/ori scorer.config.human_penalty_filter=false scorer.config.lane_keeping_weight=0.0 scorer.config.history_comfort_weight=0.0 scorer.config.two_frame_extended_comfort_weight=0.0 scorer.config.progress_weight=5.0 scorer.config.ttc_weight=5.0
+
+
+
+DCN v3 unsupported, ignored
