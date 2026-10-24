@@ -15,6 +15,22 @@ from navsim.agents.utils.attn import MemoryEffTransformer
 from navsim.agents.utils.nerf import nerf_positional_encoding
 
 
+def _navsim_v1_selection_scores(result, include_imitation=True):
+    """Paper Appendix B, Table 8: selection scores for both decoder stages."""
+    score = (
+        0.5 * result["no_at_fault_collisions"].sigmoid().log()
+        + 0.5 * result["drivable_area_compliance"].sigmoid().log()
+        + 8.0 * (
+            5.0 * result["ego_progress"].sigmoid()
+            + 5.0 * result["time_to_collision_within_bound"].sigmoid()
+            + 2.0 * result["history_comfort"].sigmoid()
+        ).log()
+    )
+    if include_imitation:
+        score = score + 0.05 * result["imi"].softmax(-1).log()
+    return score
+
+
 class DriveSuprimModel(nn.Module):
     def __init__(self, config: DriveSuprimConfig):
         super().__init__()
@@ -209,18 +225,21 @@ class HydraTrajHead(nn.Module):
         for k, head in self.heads.items():
             result[k] = head(dist_status).squeeze(-1)
 
-        scores = (
-            0.02 * result['imi'].softmax(-1).log() +
-            0.1 * result['traffic_light_compliance'].sigmoid().log() +
-            0.5 * result['no_at_fault_collisions'].sigmoid().log() +
-            0.5 * result['drivable_area_compliance'].sigmoid().log() +
-            0.3 * result['driving_direction_compliance'].sigmoid().log() +
-            6.0 * (5.0 * result['time_to_collision_within_bound'].sigmoid() +
-                   5.0 * result['ego_progress'].sigmoid() +
-                   2.0 * result['lane_keeping'].sigmoid() +
-                   1.0 * result['history_comfort'].sigmoid()
-                  ).log()
-        )  # [bs, n_vocab]
+        if getattr(self._config.inference, "protocol", "navsim_v2") == "navsim_v1":
+            scores = _navsim_v1_selection_scores(result)
+        else:
+            scores = (
+                0.02 * result['imi'].softmax(-1).log() +
+                0.1 * result['traffic_light_compliance'].sigmoid().log() +
+                0.5 * result['no_at_fault_collisions'].sigmoid().log() +
+                0.5 * result['drivable_area_compliance'].sigmoid().log() +
+                0.3 * result['driving_direction_compliance'].sigmoid().log() +
+                6.0 * (5.0 * result['time_to_collision_within_bound'].sigmoid() +
+                       5.0 * result['ego_progress'].sigmoid() +
+                       2.0 * result['lane_keeping'].sigmoid() +
+                       1.0 * result['history_comfort'].sigmoid()
+                      ).log()
+            )  # [bs, n_vocab]
         
         selected_indices = scores.argmax(1)
         result["trajectory"] = self.vocab.data[selected_indices]
@@ -374,20 +393,25 @@ class RefineTrajHead(nn.Module):
             
             last_layer_result = layer_results[-1]
 
-            scores = (
-                0.1 * last_layer_result['traffic_light_compliance'].sigmoid().log() +
-                0.5 * last_layer_result['no_at_fault_collisions'].sigmoid().log() +
-                0.5 * last_layer_result['drivable_area_compliance'].sigmoid().log() +
-                0.3 * last_layer_result['driving_direction_compliance'].sigmoid().log() +
-                6.0 * (5.0 * last_layer_result['time_to_collision_within_bound'].sigmoid() +
-                       5.0 * last_layer_result['ego_progress'].sigmoid() +
-                       2.0 * last_layer_result['lane_keeping'].sigmoid() +
-                       1.0 * last_layer_result['history_comfort'].sigmoid()
-                      ).log()
-            )
+            if getattr(self._config.inference, "protocol", "navsim_v2") == "navsim_v1":
+                scores = _navsim_v1_selection_scores(
+                    last_layer_result, self._config.refinement.use_imi_learning_in_refinement
+                )
+            else:
+                scores = (
+                    0.1 * last_layer_result['traffic_light_compliance'].sigmoid().log() +
+                    0.5 * last_layer_result['no_at_fault_collisions'].sigmoid().log() +
+                    0.5 * last_layer_result['drivable_area_compliance'].sigmoid().log() +
+                    0.3 * last_layer_result['driving_direction_compliance'].sigmoid().log() +
+                    6.0 * (5.0 * last_layer_result['time_to_collision_within_bound'].sigmoid() +
+                           5.0 * last_layer_result['ego_progress'].sigmoid() +
+                           2.0 * last_layer_result['lane_keeping'].sigmoid() +
+                           1.0 * last_layer_result['history_comfort'].sigmoid()
+                          ).log()
+                )
 
-            if self._config.refinement.use_imi_learning_in_refinement:
-                scores += 0.02 * last_layer_result['imi'].softmax(-1).log()
+                if self._config.refinement.use_imi_learning_in_refinement:
+                    scores += 0.02 * last_layer_result['imi'].softmax(-1).log()
 
             if i != self.num_stage-1:
                 _next_topk = self.topks[i+1]
