@@ -169,6 +169,9 @@ class PredictionModule(pl.LightningModule):
         super().__init__()
         self.agent = agent
         self.config = config
+        # The Hydra config lacks derived fields such as num_poses.
+        # AbstractAgent already holds the instantiated TrajectorySampling.
+        self.trajectory_sampling = agent._trajectory_sampling
 
     def predict_step(self, batch, batch_idx):
         self.agent.eval()
@@ -176,7 +179,7 @@ class PredictionModule(pl.LightningModule):
         use_refine = self.config.refinement.use_multi_stage and not self.config.inference.use_first_stage_traj_in_infer
         poses = predictions["final_traj" if use_refine else "trajectory"].detach().cpu().numpy()
         return {
-            token: {"trajectory": Trajectory(pose, self.config.trajectory_sampling)}
+            token: {"trajectory": Trajectory(pose, self.trajectory_sampling)}
             for token, pose in zip(batch[2], poses)
         }
 

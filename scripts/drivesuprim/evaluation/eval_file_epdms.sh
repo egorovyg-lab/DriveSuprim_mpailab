@@ -10,7 +10,7 @@ fi
 : "${NAVSIM_EXP_ROOT:?Не задана переменная NAVSIM_EXP_ROOT}"
 
 dir=$1
-file=$2
+file=$2z
 num_refinement_stage=$3
 stage_layers=$4
 topks=$5
