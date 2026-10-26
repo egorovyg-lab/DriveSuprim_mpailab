@@ -72,6 +72,65 @@ def write_rows(path, records):
         writer.writerows(records)
 
 
+
+def csv_component_contrast(v1, v2):
+    """Exact symmetric arithmetic decomposition; not a causal/protocol attribution."""
+    if not v1 or set(v1) != set(v2):
+        raise ValueError("Contrast requires equal, nonempty token sets.")
+    components = {key: [] for key in ["nc_dac_gate", "ep", "ttc", "comfort_to_hc"]}
+    groups = {name: [] for name in ["v1_gate_zero", "v1_gate_partial", "v1_gate_one"]}
+    deltas = []
+    for token in sorted(v1):
+        before, after = v1[token], v2[token]
+        k1 = before["no_at_fault_collisions"] * before["drivable_area_compliance"]
+        k2 = after["no_at_fault_collisions"] * after["drivable_area_compliance"]
+        w1 = (5 * before["ego_progress"] + 5 * before["time_to_collision_within_bound"] + 2 * before["comfort"]) / 12
+        w2 = (5 * after["ego_progress"] + 5 * after["time_to_collision_within_bound"] + 2 * after["history_comfort"]) / 12
+        average_gate = (k1 + k2) / 2
+        parts = {
+            "nc_dac_gate": (k2 - k1) * (w1 + w2) / 2,
+            "ep": average_gate * 5 / 12 * (after["ego_progress"] - before["ego_progress"]),
+            "ttc": average_gate * 5 / 12 * (after["time_to_collision_within_bound"] - before["time_to_collision_within_bound"]),
+            "comfort_to_hc": average_gate * 2 / 12 * (after["history_comfort"] - before["comfort"]),
+        }
+        delta = k2 * w2 - k1 * w1
+        if abs(sum(parts.values()) - delta) > 1e-12:
+            raise ValueError("Component decomposition failed for " + token)
+        deltas.append(delta)
+        for name, value in parts.items():
+            components[name].append(value)
+        name = "v1_gate_zero" if abs(k1) < 1e-12 else ("v1_gate_one" if abs(k1 - 1) < 1e-12 else "v1_gate_partial")
+        groups[name].append((before, after, k1, k2))
+    grouped = []
+    for name, rows in groups.items():
+        count = len(rows)
+        grouped.append({
+            "group": name, "scene_count": count,
+            "share_percent": 100 * count / len(v1),
+            "mean_ep_v1_percent": 100 * mean(r[0]["ego_progress"] for r in rows) if rows else None,
+            "mean_ep_v2_percent": 100 * mean(r[1]["ego_progress"] for r in rows) if rows else None,
+            "contribution_to_unweighted_ep_delta_pp": 100 * sum(
+                r[1]["ego_progress"] - r[0]["ego_progress"] for r in rows
+            ) / len(v1),
+            "v2_gate_positive_count": sum(r[3] > 0 for r in rows),
+        })
+    result = {
+        "decomposition_pp": {key: 100 * mean(values) for key, values in components.items()},
+        "total_change_pp": 100 * mean(deltas), "ep_groups": grouped,
+        "unweighted_ep_delta_pp": 100 * mean(v2[t]["ego_progress"] - v1[t]["ego_progress"] for t in v1),
+        "scope": (
+            "Exact symmetric decomposition of TWO CSV snapshots. K=NC*DAC; "
+            "gate term is delta(K)*average(W), metric terms use average(K)*delta(metric). "
+            "Terms sum to the CSV score difference, NOT to the paper gap. "
+            "Different predictions, caches and metric definitions remain confounded. "
+            "Grouping by saved v1 gate does not prove identical gates/trajectories in v2."
+        ),
+    }
+    if abs(sum(result["decomposition_pp"].values()) - result["total_change_pp"]) > 1e-10:
+        raise ValueError("Mean component decomposition failed.")
+    return result
+
+
 def csv_comparison(v1_path, v2_path, output):
     v1 = read_snapshot(v1_path, METRICS)
     v2 = read_snapshot(v2_path, V2_METRICS)
@@ -104,6 +163,18 @@ def csv_comparison(v1_path, v2_path, output):
         result["v2_old_formula_hc"] - result["v1_averages"]["pdm_score"]
     )
     result["gap_to_paper_v1_pp"] = 100 * (result["v2_old_formula_hc"] - PAPER_R34["pdm_score"])
+    contrast = csv_component_contrast(v1, v2)
+    result["component_contrast"] = contrast
+    (output / "csv_component_contrast.json").write_text(json.dumps(contrast, indent=2), encoding="utf-8")
+    print("CSV contrast: exact arithmetic components (NOT causal contributions or paper-gap contributions).", flush=True)
+    for name, value in contrast["decomposition_pp"].items():
+        print(f"  {name}: {value:+.6f} pp", flush=True)
+    print(f"  sum: {contrast['total_change_pp']:+.6f} pp", flush=True)
+    print("EP by saved v1 NC*DAC gate; columns show group means and contribution to the full EP mean difference.", flush=True)
+    print("group                 scenes   EP v1 %   EP v2 %   EP delta pp", flush=True)
+    for group in contrast["ep_groups"]:
+        if group["scene_count"]:
+            print(f"{group['group']:<22} {group['scene_count']:6d} {group['mean_ep_v1_percent']:9.4f} {group['mean_ep_v2_percent']:9.4f} {group['contribution_to_unweighted_ep_delta_pp']:+13.4f}", flush=True)
     write_rows(output / "per_scene_csv_comparison.csv", records)
     (output / "csv_summary.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
     print(f"Matched CSV scenes: {len(records)}", flush=True)
