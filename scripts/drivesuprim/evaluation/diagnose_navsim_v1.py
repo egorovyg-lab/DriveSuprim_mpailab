@@ -17,6 +17,7 @@ METRICS = [
     "time_to_collision_within_bound", "comfort", "pdm_score",
 ]
 PAPER_R34 = dict(zip(METRICS, [0.978, 0.973, 0.867, 0.936, 1.0, 0.899]))
+PAPER_HUMAN = dict(zip(METRICS, [1.0, 1.0, 0.875, 1.0, 0.999, 0.948]))
 LABELS = dict(zip(METRICS, ["NC", "DAC", "EP", "TTC", "C", "PDMS"]))
 
 
@@ -70,12 +71,13 @@ def audit_csv(path):
     }
 
 
-def print_summary(report):
+def print_summary(report, paper_reference=PAPER_R34, reference_name="DriveSuprim ResNet34, paper Table 2"):
+    print("Reference:", reference_name)
     print("Scenes: {scene_count}; valid: {valid_count}; invalid: {invalid_count}".format(**report))
     print("Metric      ours %     paper %    delta pp")
     for key in METRICS:
         actual = report["averages"][key]
-        print(f"{LABELS[key]:<8} {100 * actual:9.4f} {100 * PAPER_R34[key]:11.4f} {100 * (actual - PAPER_R34[key]):11.4f}")
+        print(f"{LABELS[key]:<8} {100 * actual:9.4f} {100 * paper_reference[key]:11.4f} {100 * (actual - paper_reference[key]):11.4f}")
     print("Maximum per-scene PDMS formula error:", report["max_formula_error"])
     print("Loss from a perfect score (pp; these are NOT contributions to the paper gap):")
     for key, value in report["loss_from_perfect_score"].items():
@@ -180,13 +182,92 @@ def rescore_comparison(run_dir, baseline_report, alternative, changed):
     print("Saved diagnostic comparison to", diagnostic_dir)
 
 
+
+def human_score_worker(args):
+    from hydra.utils import instantiate
+    from navsim.agents.human_agent import HumanAgent
+    from navsim.planning.script.run_drivesuprim_navsim_v1 import make_loader, score_worker
+
+    cfg = args[0]["cfg"]
+    requested = sorted(token for item in args for token in item["tokens"])
+    scene_filter = instantiate(cfg.train_test_split.scene_filter)
+    scene_filter.log_names = [item["log_name"] for item in args]
+    scene_filter.tokens = requested
+    loader = make_loader(cfg, scene_filter)
+    if set(loader.tokens) != set(requested):
+        raise RuntimeError("Human baseline scene coverage differs from the baseline run.")
+    agent = HumanAgent()  # Official human agent: 8 future poses, 0.5 s interval.
+    predictions = {}
+    for index, token in enumerate(requested):
+        scene = loader.get_scene_from_token(token)
+        predictions[token] = {"trajectory": agent.compute_trajectory(None, scene)}
+        if (index + 1) % 500 == 0:
+            print(f"Human trajectories prepared: {index + 1}/{len(requested)}", flush=True)
+    return score_worker([{
+        "cfg": cfg, "tokens": requested, "predictions": predictions,
+        "cache_paths": args[0]["cache_paths"],
+    }])
+
+
+def run_human_baseline(run_dir, baseline_report):
+    import sys
+    from datetime import datetime
+    project_root = Path(__file__).resolve().parents[3]
+    sys.path.insert(0, str(project_root))
+    import pandas as pd
+    from omegaconf import OmegaConf
+    from nuplan.planning.utils.multithreading.worker_utils import worker_map
+    from navsim.planning.script.builders.worker_pool_builder import build_worker
+    from navsim.planning.script.run_drivesuprim_navsim_v1 import read_cache_index
+
+    config_path = run_dir / "code" / "hydra" / "config.yaml"
+    if not config_path.is_file():
+        raise FileNotFoundError("Saved Hydra configuration not found: " + str(config_path))
+    cfg = OmegaConf.load(config_path)
+    if cfg.scorer._target_ != "navsim.evaluate.navsim_v1.pdm_scorer.PDMScorer":
+        raise ValueError("Expected the original run's NAVSIM v1 scorer.")
+    cache_paths = read_cache_index(cfg, baseline_report["tokens"])
+    out_dir = run_dir / "diagnostics_human_baseline" / datetime.now().strftime("%Y.%m.%d.%H.%M.%S")
+    out_dir.mkdir(parents=True, exist_ok=False)
+    cfg.output_dir = str(out_dir)
+    by_log = {}
+    for token in baseline_report["tokens"]:
+        by_log.setdefault(Path(cache_paths[token]).parents[2].name, []).append(token)
+    jobs = [
+        {"cfg": cfg, "log_name": log_name, "tokens": sorted(tokens), "cache_paths": cache_paths}
+        for log_name, tokens in sorted(by_log.items())
+    ]
+    print("Evaluating HumanAgent on the SAME v1 cache/scorer; no DriveSuprim checkpoint or GPU inference.", flush=True)
+    records = worker_map(build_worker(cfg), human_score_worker, jobs)
+    frame = pd.DataFrame(records).sort_values("token")
+    csv_path = out_dir / "human_navsim_v1_scores.csv"
+    frame.to_csv(csv_path, index=False)
+    report = audit_csv(csv_path)
+    if set(report["tokens"]) != set(baseline_report["tokens"]) or report["invalid_count"]:
+        raise RuntimeError("Human baseline incomplete; inspect " + str(csv_path))
+    print_summary(report, paper_reference=PAPER_HUMAN, reference_name="Human Agent, paper Table 2")
+    summary = {
+        "reference": "DriveSuprim paper v3, Table 2, Human Agent",
+        "paper_metrics": PAPER_HUMAN,
+        "observed": {key: value for key, value in report.items() if key != "tokens"},
+        "cache_manifest_sha256": sha256(Path(cfg.metric_cache_path) / "navsim_v1_manifest.json"),
+        "human_agent_sha256": sha256(project_root / "navsim/agents/human_agent.py"),
+        "scope": "Checks the scoring/data pipeline independently of DriveSuprim predictions. Agreement alone does not prove full protocol identity.",
+    }
+    (out_dir / "human_baseline_summary.json").write_text(json.dumps(summary, indent=2))
+    print("Human baseline complete. Saved results:", out_dir, flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("run_dir", type=Path)
     parser.add_argument("--csv", type=Path, help="CSV inside the run; defaults to the sole CSV in run_dir.")
     parser.add_argument("--compare-predictions", type=Path, help="Saved predictions from another run, e.g. v2.")
     parser.add_argument("--rescore-comparison", action="store_true", help="CPU scoring of alternative predictions; requires --compare-predictions.")
+    parser.add_argument("--human-baseline", action="store_true", help="Evaluate the official HumanAgent on the same v1 cache, without DriveSuprim inference.")
     args = parser.parse_args()
+    if args.human_baseline and (args.compare_predictions or args.rescore_comparison):
+        parser.error("--human-baseline is a separate diagnostic; omit comparison flags.")
     if args.rescore_comparison and not args.compare_predictions:
         parser.error("--rescore-comparison requires --compare-predictions")
     run_dir = args.run_dir.resolve()
@@ -200,6 +281,9 @@ def main():
     report = audit_csv(csv_path)
     print_summary(report)
     audit_manifest(run_dir, report)
+    if args.human_baseline:
+        run_human_baseline(run_dir, report)
+        return
     if args.compare_predictions is not None:
         reference_path = run_dir / "predictions_navsim_v1.pkl"
         if not reference_path.is_file() or not args.compare_predictions.is_file():
