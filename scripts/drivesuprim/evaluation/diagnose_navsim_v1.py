@@ -258,6 +258,107 @@ def run_human_baseline(run_dir, baseline_report):
     print("Human baseline complete. Saved results:", out_dir, flush=True)
 
 
+
+def checkpoint_key_report(expected_keys, missing_keys, unexpected_keys):
+    missing = sorted(missing_keys)
+    unexpected = sorted(unexpected_keys)
+    return {
+        "expected_key_count": len(expected_keys),
+        "missing_keys": missing,
+        "missing_teacher_keys": [key for key in missing if key.startswith("model.teacher.")],
+        "missing_student_keys": [key for key in missing if key.startswith("model.student.")],
+        "unexpected_keys": unexpected,
+    }
+
+
+def run_checkpoint_audit(run_dir, baseline_report):
+    import sys
+    from datetime import datetime
+    project_root = Path(__file__).resolve().parents[3]
+    sys.path.insert(0, str(project_root))
+    import torch
+    import numpy as np
+    from hydra.utils import instantiate
+    from omegaconf import OmegaConf
+
+    expected_tokens_sha256 = "8d42fef68542f095d0e03894fdaf38babfdc89f3fd7cdc26080c3a6009cb4108"
+    expected_checkpoint_sha256 = "73db58e4ed4353f2238623f11c9ab409cf02470929a585a1b425266077d52a21"
+    token_digest = hashlib.sha256("\n".join(sorted(baseline_report["tokens"])).encode()).hexdigest()
+    print("Run token set matches official NAVSIM v1.1 navtest:", token_digest == expected_tokens_sha256, flush=True)
+    print("Run tokens SHA256:", token_digest, flush=True)
+    cfg = OmegaConf.load(run_dir / "code" / "hydra" / "config.yaml")
+    if cfg.agent.config.training or not cfg.agent.config.only_ori_input:
+        raise ValueError("Checkpoint audit requires the saved evaluation config.")
+    if cfg.agent.config.backbone_type != "resnet34":
+        raise ValueError("This official checkpoint fingerprint is for ResNet34 only.")
+    path = Path(cfg.agent.checkpoint_path)
+    current_digest = sha256(path)
+    print("Checkpoint matches public R34 file:", current_digest == expected_checkpoint_sha256, flush=True)
+    print("Loading checkpoint and constructing agent on CPU; no inference.", flush=True)
+    checkpoint = torch.load(path, map_location=torch.device("cpu"))
+    if "state_dict" not in checkpoint:
+        raise ValueError("Checkpoint has no Lightning state_dict.")
+    # Match DriveSuprimAgent.initialize exactly, but retain its compatibility report.
+    state = {key.replace("agent.", ""): value for key, value in checkpoint["state_dict"].items()}
+    agent = instantiate(cfg.agent)
+    expected = agent.state_dict()
+    try:
+        incompatible = agent.load_state_dict(state, strict=False)
+    except RuntimeError as error:
+        print("CHECKPOINT SHAPE/TYPE FAILURE:", error, flush=True)
+        raise
+    report = checkpoint_key_report(expected, incompatible.missing_keys, incompatible.unexpected_keys)
+    loaded = agent.state_dict()
+    unequal = []
+    for key in expected.keys() & state.keys():
+        value = state[key]
+        if torch.is_tensor(value):
+            value = value.to(device="cpu", dtype=loaded[key].dtype)
+            if not torch.equal(loaded[key].cpu(), value):
+                unequal.append(key)
+    report["loaded_values_differ_from_checkpoint"] = sorted(unequal)
+    vocab = torch.from_numpy(np.load(cfg.agent.config.vocab_path))
+    vocab_reports = []
+    for key in sorted(state):
+        if key.endswith("_trajectory_head.vocab"):
+            value = state[key].cpu()
+            vocab_reports.append({
+                "key": key, "checkpoint_shape": list(value.shape),
+                "configured_vocab_shape": list(vocab.shape),
+                "equals_configured_vocab": bool(value.shape == vocab.shape and torch.equal(value, vocab.to(dtype=value.dtype))),
+            })
+    report["vocabularies"] = vocab_reports
+    prefix = "model.teacher.model._trajectory_head.heads."
+    report["teacher_metric_heads"] = sorted({key[len(prefix):].split(".")[0] for key in state if key.startswith(prefix)})
+    manifest_path = run_dir / "reproduction_manifest.json"
+    previous = json.loads(manifest_path.read_text()) if manifest_path.is_file() else {}
+    report.update({
+        "tokens_sha256": token_digest,
+        "tokens_match_official_navtest": token_digest == expected_tokens_sha256,
+        "checkpoint_sha256": current_digest,
+        "checkpoint_matches_public_r34": current_digest == expected_checkpoint_sha256,
+        "checkpoint_matches_recorded_run": current_digest == previous.get("checkpoint_sha256"),
+        "checkpoint_epoch": checkpoint.get("epoch"),
+        "checkpoint_global_step": checkpoint.get("global_step"),
+        "checkpoint_lightning_version": checkpoint.get("pytorch-lightning_version"),
+        "has_hyper_parameters": "hyper_parameters" in checkpoint,
+        "teacher_weights_complete": not report["missing_teacher_keys"],
+        "comparison_scope": "Checks loading now using the saved config; it does not retrospectively prove every byte loaded in an earlier process.",
+    })
+    out = run_dir / "diagnostics_checkpoint" / datetime.now().strftime("%Y.%m.%d.%H.%M.%S")
+    out.mkdir(parents=True, exist_ok=False)
+    (out / "checkpoint_audit.json").write_text(json.dumps(report, indent=2, default=str))
+    print("Expected state keys:", report["expected_key_count"], flush=True)
+    print("Missing keys:", len(report["missing_keys"]), report["missing_keys"][:30], flush=True)
+    print("Missing teacher keys:", len(report["missing_teacher_keys"]), flush=True)
+    print("Unexpected keys:", len(report["unexpected_keys"]), report["unexpected_keys"][:30], flush=True)
+    print("Loaded values differing from checkpoint:", len(unequal), flush=True)
+    print("Teacher metric heads:", report["teacher_metric_heads"], flush=True)
+    print("Checkpoint epoch/global_step:", report["checkpoint_epoch"], report["checkpoint_global_step"], flush=True)
+    print("Vocab comparison:", vocab_reports, flush=True)
+    print("Checkpoint audit complete. Saved report:", out, flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("run_dir", type=Path)
@@ -265,7 +366,10 @@ def main():
     parser.add_argument("--compare-predictions", type=Path, help="Saved predictions from another run, e.g. v2.")
     parser.add_argument("--rescore-comparison", action="store_true", help="CPU scoring of alternative predictions; requires --compare-predictions.")
     parser.add_argument("--human-baseline", action="store_true", help="Evaluate the official HumanAgent on the same v1 cache, without DriveSuprim inference.")
+    parser.add_argument("--checkpoint-audit", action="store_true", help="Audit state_dict loading and official R34/split fingerprints on CPU; no inference.")
     args = parser.parse_args()
+    if args.checkpoint_audit and (args.human_baseline or args.compare_predictions or args.rescore_comparison):
+        parser.error("--checkpoint-audit is a separate diagnostic; omit other mode flags.")
     if args.human_baseline and (args.compare_predictions or args.rescore_comparison):
         parser.error("--human-baseline is a separate diagnostic; omit comparison flags.")
     if args.rescore_comparison and not args.compare_predictions:
@@ -281,6 +385,9 @@ def main():
     report = audit_csv(csv_path)
     print_summary(report)
     audit_manifest(run_dir, report)
+    if args.checkpoint_audit:
+        run_checkpoint_audit(run_dir, report)
+        return
     if args.human_baseline:
         run_human_baseline(run_dir, report)
         return
