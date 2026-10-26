@@ -307,11 +307,11 @@ def sampled_vocab_index_match(candidate, reference, sample_count=64):
     for index in indices:
         squared_distance = ((b[..., :2] - a[index, None, :, :2]) ** 2).sum(axis=(1, 2))
         nearest = int(np.argmin(squared_distance))
-        matches += nearest == index
+        matches += int(nearest == int(index))
         nearest_distances.append(float(np.sqrt(squared_distance[nearest] / a.shape[1])))
     return {
-        "sample_count": len(indices), "same_index_nearest_count": matches,
-        "same_index_nearest_fraction": matches / len(indices),
+        "sample_count": len(indices), "same_index_nearest_count": int(matches),
+        "same_index_nearest_fraction": float(matches / len(indices)),
         "largest_nearest_rms_position_error_m": max(nearest_distances),
         "scope": "Position-only nearest matching on a sample, not a proof of all-index permutation identity.",
     }
