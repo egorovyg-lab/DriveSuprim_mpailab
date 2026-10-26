@@ -1,56 +1,59 @@
-# Draft: reproducing NAVSIM v1 Table 2 with the released R34 checkpoint
+# Draft: exact checkpoint and scoring protocol for NAVSIM v1 Table 2
 
 This draft has not been posted or sent.
 
-Hello, thank you for releasing DriveSuprim.
+Hello, we are trying to reproduce Table 2 of arXiv:2506.06659v3.
+With the released R34 checkpoint, we obtain 83.0677 EPDMS (83.1 rounded).
+We have not reproduced the Table 2 result of 89.9 PDMS.
 
-We obtain 83.0677 EPDMS with the released R34 checkpoint, matching 83.1
-after rounding, but have not reproduced the NAVSIM v1 PDMS of 89.9 in
-Table 2 of arXiv:2506.06659v3.
+Could you clarify whether Table 2 uses the same released checkpoint, or
+separately trained weights / a different checkpoint selection?
 
-Is the released drivesuprim_r34.ckpt also the checkpoint used for Table 2,
-or does the v1 experiment use separately trained weights or a different
-checkpoint selection?
-
-Checkpoint SHA256:
+Released checkpoint SHA256:
 73db58e4ed4353f2238623f11c9ab409cf02470929a585a1b425266077d52a21
-(epoch 8, global_step 11970).
+(epoch 8, global_step 11970). All 872 state keys load without missing or
+unexpected keys. Evaluation covers all 12146 official navtest tokens.
 
-We made an explicit compatibility adaptation, rather than just disabling
-v2 metric weights:
-- NAVSIM v1.1 scorer/cache processor pinned to
-  3e8291bfa89ff247231e0227778840cd0a036896;
-- 5-second observations for full-horizon TTC;
-- NC * DAC * (5 EP + 5 TTC + 2 C) / 12;
-- Table 8 inference coefficients on both coarse and refinement stages:
-  imitation 0.05, NC 0.5, DAC 0.5, EP 5, TTC 5, C 2, lambda_avg 8;
-- teacher, one refinement stage, three layers, top-K 256.
+Our compatibility adaptation uses the original NAVSIM v1.1 scorer/cache
+processor at 3e8291bfa89ff247231e0227778840cd0a036896, Table 8 inference
+weights, teacher, one refinement stage, three layers, and top-K 256.
+It is an adaptation, not a claim to have reproduced your exact v1 pipeline.
 
-The released model has a history_comfort head and no separate C head.
-Our adaptation currently uses the history_comfort prediction for C when
-ranking candidates, while evaluating actual comfort with the v1 function.
-We do not know whether this matches your Table 2 procedure.
+The released checkpoint has a history_comfort prediction head, with no
+separate v1 comfort head. We use that prediction for candidate selection,
+then compute actual comfort with the original v1 evaluator.
 
-On all 12146 navtest scenes with zero failures we obtain:
-NC 97.3695, DAC 96.2868, EP 83.0635, TTC 90.8859, C 99.9918,
-PDMS 86.7300.
+Results:
+- Original v1.1 definitions: NC 97.3695, DAC 96.2868, EP 83.0635,
+  TTC 90.8859, C 99.9918, PDMS 86.7300.
+- Same predictions, simulated states, 5s observation cache and all other
+  metrics, changing ONLY the TTC ego loop endpoint from 4.0s to 3.1s:
+  TTC 96.5009, PDMS 88.9221. Baseline replay matches the saved per-scene CSV.
+- Applying aggregate_old_pdms from grid_search_unlog_expand.py row-wise
+  to our saved v2 CSV gives 88.8797 (using v2 EP/TTC/history_comfort).
+  This is a different comparison, not a controlled single-factor test.
 
-Checks completed:
-- all 872 checkpoint state keys load, with no missing/unexpected keys;
-- the local split equals the official v1.1/released navtest token set;
-- HumanAgent gives 94.5455 PDMS, compared with 94.8 in Table 2;
-- two saved prediction sets differ on 48.18% of scenes but give 86.7300
-  and 86.7467 on the same v1 scorer;
-- substituting reference trajectories/centerlines from a pre-existing
-  cache has no visible score effect on a deterministic 256-scene sample;
-- teacher vocabulary differs by at most 0.71 mm; nearest-index identity
-  matches for 64/64 sampled trajectories. The checkpoint was not changed.
+The apparent mean EP difference is largely a definition effect:
+750 scenes have NC*DAC=0 in the v1 run; their EP is 0 in v1 but averages
+85.99% in v2. In the 11384 scenes with v1 NC*DAC=1, mean EP is 88.5472%
+in v1 and 88.4438% in v2. These CSVs may have different selected trajectories.
 
-Could you confirm or provide:
-1. The exact checkpoint and command for the v1 result in Table 2.
-2. The NAVSIM commit, scorer config and cache-generation setup.
-3. How the C prediction in Table 8 is obtained from the released model.
-4. Whether the HumanAgent 94.8 uses the same public navtest/cache setup.
+Additional controls:
+- HumanAgent on the full v1 cache gives 94.5455 PDMS, versus 94.8 in Table 2.
+- Two prediction sets differ on 48.18% of scenes, but score 86.7300 and
+  86.7467 on the same v1 evaluator/cache.
+- Teacher vocabulary differs from the configured vocabulary by at most
+  0.71 mm; checkpoint and vocabulary were not modified.
 
-We aim to reproduce the original experiment, not tune evaluation settings
-to approach the reported score.
+Could you provide:
+1. The exact checkpoint (ideally its hash) and command that produced Table 2.
+2. The NAVSIM commit, scorer configuration and cache-generation setup.
+3. Whether TTC uses ego positions through 4.0s or 3.1s, and whether EP and
+   comfort are original v1 definitions or v2 submetrics with old aggregation.
+4. Whether metric heads were trained with v1 or v2 labels for Table 2,
+   and how the v1 C prediction is obtained.
+5. Whether the reported HumanAgent 94.8 uses the same public setup.
+
+The shorter-TTC result exceeds the paper's TTC (96.5 vs 93.6), so we do
+not interpret its closer PDMS as proof of the paper protocol.
+We aim to reproduce the experiment rather than tune settings to 89.9.

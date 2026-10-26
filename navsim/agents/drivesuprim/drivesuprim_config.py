@@ -14,6 +14,7 @@ class InferConfig:
     use_first_stage_traj_in_infer: bool = False
     save_pickle: bool = False
     protocol: str = "navsim_v2"  # navsim_v1 uses paper Table 8 coefficients
+    export_candidates: bool = False  # diagnostic only; does not change trajectory selection
 
 
 @dataclass

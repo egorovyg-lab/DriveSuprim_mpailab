@@ -428,6 +428,9 @@ class RefineTrajHead(nn.Module):
                 select_indices = scores.argmax(1)
                 batch_indices = torch.arange(B, device=select_indices.device)
                 final_traj = refinement_dict[-1]['trajs'][batch_indices, select_indices]  # [bs, 40, 3]
+                if getattr(self._config.inference, 'export_candidates', False):
+                    refinement_dict[-1]['final_selection_scores'] = scores
+                    refinement_dict[-1]['final_selected_local_indices'] = select_indices
                 # filtered_scores = scores
         
         return final_traj
