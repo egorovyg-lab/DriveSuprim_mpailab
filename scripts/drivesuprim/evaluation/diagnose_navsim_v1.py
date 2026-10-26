@@ -259,6 +259,96 @@ def run_human_baseline(run_dir, baseline_report):
 
 
 
+
+def vocab_difference_stats(candidate, reference):
+    """Measure index-wise geometry differences; no nearest-neighbor assumptions."""
+    import numpy as np
+    a = np.asarray(candidate)
+    b = np.asarray(reference)
+    report = {"candidate_dtype": str(a.dtype), "reference_dtype": str(b.dtype), "same_shape": a.shape == b.shape}
+    if a.shape != b.shape:
+        report.update(candidate_shape=list(a.shape), reference_shape=list(b.shape))
+        return report
+    if a.ndim != 3 or a.shape[-1] != 3 or not a.size:
+        raise ValueError("Expected a nonempty [trajectory, pose, 3] vocabulary.")
+    if not np.isfinite(a).all() or not np.isfinite(b).all():
+        raise ValueError("Vocabulary contains non-finite coordinates.")
+    delta = a.astype(np.float64) - b.astype(np.float64)
+    position_error = np.linalg.norm(delta[..., :2], axis=-1)
+    heading_error = np.abs(np.arctan2(np.sin(delta[..., 2]), np.cos(delta[..., 2])))
+    max_per_trajectory = position_error.max(axis=1)
+    report.update(
+        exact_equal=bool(np.array_equal(a, b)),
+        equal_after_reference_dtype_cast=bool(np.array_equal(a, b.astype(a.dtype))),
+        max_position_error_m=float(position_error.max()),
+        mean_position_error_m=float(position_error.mean()),
+        rms_position_error_m=float(np.sqrt(np.mean(position_error ** 2))),
+        max_endpoint_error_m=float(position_error[:, -1].max()),
+        max_heading_error_rad=float(heading_error.max()),
+        max_heading_error_deg=float(np.degrees(heading_error.max())),
+        fraction_trajectories_within_1um=float(np.mean(max_per_trajectory <= 1e-6)),
+        fraction_trajectories_within_0_1mm=float(np.mean(max_per_trajectory <= 1e-4)),
+        fraction_trajectories_within_1mm=float(np.mean(max_per_trajectory <= 1e-3)),
+        fraction_trajectories_within_1cm=float(np.mean(max_per_trajectory <= 1e-2)),
+    )
+    return report
+
+
+def sampled_vocab_index_match(candidate, reference, sample_count=64):
+    """Position-only nearest-neighbor diagnostic on a deterministic sample."""
+    import numpy as np
+    a = np.asarray(candidate, dtype=np.float64)
+    b = np.asarray(reference, dtype=np.float64)
+    if a.shape != b.shape or a.ndim != 3 or a.shape[-1] != 3:
+        raise ValueError("Vocabularies must have matching [N, H, 3] shapes.")
+    indices = np.linspace(0, len(a) - 1, min(sample_count, len(a)), dtype=int)
+    matches = 0
+    nearest_distances = []
+    for index in indices:
+        squared_distance = ((b[..., :2] - a[index, None, :, :2]) ** 2).sum(axis=(1, 2))
+        nearest = int(np.argmin(squared_distance))
+        matches += nearest == index
+        nearest_distances.append(float(np.sqrt(squared_distance[nearest] / a.shape[1])))
+    return {
+        "sample_count": len(indices), "same_index_nearest_count": matches,
+        "same_index_nearest_fraction": matches / len(indices),
+        "largest_nearest_rms_position_error_m": max(nearest_distances),
+        "scope": "Position-only nearest matching on a sample, not a proof of all-index permutation identity.",
+    }
+
+
+def run_vocab_audit(run_dir):
+    import sys
+    from datetime import datetime
+    project_root = Path(__file__).resolve().parents[3]
+    sys.path.insert(0, str(project_root))
+    import numpy as np
+    import torch
+    from omegaconf import OmegaConf
+
+    cfg = OmegaConf.load(run_dir / "code" / "hydra" / "config.yaml")
+    checkpoint = torch.load(cfg.agent.checkpoint_path, map_location=torch.device("cpu"))
+    state = {key.replace("agent.", ""): value for key, value in checkpoint["state_dict"].items()}
+    teacher = state["model.teacher.model._trajectory_head.vocab"].detach().cpu().numpy()
+    student = state["model.student.model._trajectory_head.vocab"].detach().cpu().numpy()
+    configured = np.load(cfg.agent.config.vocab_path)
+    report = {
+        "teacher_vs_configured": vocab_difference_stats(teacher, configured),
+        "student_vs_configured": vocab_difference_stats(student, configured),
+        "teacher_vs_student": vocab_difference_stats(teacher, student),
+        "teacher_vs_student_index_sample": sampled_vocab_index_match(teacher, student),
+        "checkpoint_sha256": sha256(cfg.agent.checkpoint_path),
+        "scope": "Read-only numeric audit; checkpoint and model vocabulary are not modified.",
+        "ema_note": "The released update_teacher() updates all parameters, including the non-trainable vocabulary. A difference may be floating-point EMA drift; its cause and score effect are not proven by this audit.",
+    }
+    for name in ["teacher_vs_configured", "student_vs_configured", "teacher_vs_student", "teacher_vs_student_index_sample"]:
+        print(name + ":", json.dumps(report[name], sort_keys=True), flush=True)
+    out = run_dir / "diagnostics_vocab" / datetime.now().strftime("%Y.%m.%d.%H.%M.%S")
+    out.mkdir(parents=True, exist_ok=False)
+    (out / "vocab_audit.json").write_text(json.dumps(report, indent=2))
+    print("Vocabulary audit complete. Saved report:", out, flush=True)
+
+
 def checkpoint_key_report(expected_keys, missing_keys, unexpected_keys):
     missing = sorted(missing_keys)
     unexpected = sorted(unexpected_keys)
@@ -367,7 +457,10 @@ def main():
     parser.add_argument("--rescore-comparison", action="store_true", help="CPU scoring of alternative predictions; requires --compare-predictions.")
     parser.add_argument("--human-baseline", action="store_true", help="Evaluate the official HumanAgent on the same v1 cache, without DriveSuprim inference.")
     parser.add_argument("--checkpoint-audit", action="store_true", help="Audit state_dict loading and official R34/split fingerprints on CPU; no inference.")
+    parser.add_argument("--vocab-audit", action="store_true", help="Read-only numeric teacher/student vocabulary audit on CPU; no model construction or inference.")
     args = parser.parse_args()
+    if args.vocab_audit and (args.checkpoint_audit or args.human_baseline or args.compare_predictions or args.rescore_comparison):
+        parser.error("--vocab-audit is a separate diagnostic; omit other mode flags.")
     if args.checkpoint_audit and (args.human_baseline or args.compare_predictions or args.rescore_comparison):
         parser.error("--checkpoint-audit is a separate diagnostic; omit other mode flags.")
     if args.human_baseline and (args.compare_predictions or args.rescore_comparison):
@@ -385,6 +478,9 @@ def main():
     report = audit_csv(csv_path)
     print_summary(report)
     audit_manifest(run_dir, report)
+    if args.vocab_audit:
+        run_vocab_audit(run_dir)
+        return
     if args.checkpoint_audit:
         run_checkpoint_audit(run_dir, report)
         return
