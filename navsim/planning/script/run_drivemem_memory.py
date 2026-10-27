@@ -98,17 +98,28 @@ def verify_identity(cfg, root):
 def inventory(cfg, root):
     from navsim.common.dataloader import SceneLoader
     from navsim.common.dataclasses import SensorConfig
+    logs_path = Path(cfg.navsim_log_path)
+    sensor_path = Path(cfg.original_sensor_path)
+    if not logs_path.is_dir():
+        raise FileNotFoundError(
+            f"navtrain log directory not found: {logs_path}\n"
+            f"OPENSCENE_DATA_ROOT={os.environ.get('OPENSCENE_DATA_ROOT')}\n"
+            "Run run_drivemem_memory.sh paths. Set DRIVEMEM_LOGS_PATH if logs are stored elsewhere.")
+    if not sensor_path.is_dir():
+        print(f"Images are not present at {sensor_path}. Metadata inventory can proceed; "
+              "GPU export will require the trainval images.", flush=True)
     if (root / "identity.json").exists():
         if read_json(root / "identity.json") != identity(cfg):
-            raise RuntimeError("Inventory identity changed; choose a new root")
+            if {p.name for p in root.iterdir()} == {"identity.json"}:
+                print("Refreshing identity from an earlier failed preflight; no committed results exist.", flush=True)
+            else:
+                raise RuntimeError("Inventory identity changed; choose a new root")
         if (root / "split_identity.json").exists() and (root / "inventory_report.json").exists():
             verify_identity(cfg, root)
             print("Inventory already complete; using frozen splits.", flush=True)
             return
     root.mkdir(parents=True, exist_ok=True)
     write_json(root / "identity.json", identity(cfg))
-    if not Path(cfg.navsim_log_path).is_dir() or not Path(cfg.original_sensor_path).is_dir():
-        raise FileNotFoundError("navtrain logs or trainval sensor_blobs are missing; see resolved paths in identity.json")
     base_filter = instantiate(cfg.train_test_split.scene_filter)
     if base_filter.max_scenes is not None or base_filter.include_synthetic_scenes:
         raise ValueError("Inventory requires full ORIGINAL navtrain filter")
@@ -245,6 +256,9 @@ def export(cfg, root):
     from navsim.common.dataloader import SceneLoader
     from navsim.planning.training.dataset_ssl import DatasetSSL
     from navsim.planning.script.run_drivemem_oracle_pilot import on_device
+    if not Path(cfg.original_sensor_path).is_dir():
+        raise FileNotFoundError(f"Trainval image directory not found: {cfg.original_sensor_path}. "
+                                "Run run_drivemem_memory.sh paths; set DRIVEMEM_SENSOR_PATH if necessary.")
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA unavailable")
     agent = instantiate(cfg.agent)

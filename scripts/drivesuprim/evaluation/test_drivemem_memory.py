@@ -6,6 +6,8 @@ import json
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
+import sys
 from pathlib import Path
 from types import SimpleNamespace as N
 
@@ -132,6 +134,22 @@ class ConfigurationTests(unittest.TestCase):
         self.assertFalse(cfg.agent.config.training)
         self.assertTrue(cfg.agent.config.inference.export_candidates)
         self.assertEqual(cfg.drivemem.stage, "inventory")
+
+    def test_paths_diagnostic_distinguishes_logs_and_missing_images(self):
+        text = Path("scripts/drivesuprim/evaluation/run_drivemem_memory.sh").read_text(encoding="utf-8")
+        code = text.split('python - "$root" <<\'PY\'\n', 1)[1].split('\nPY\n', 1)[0]
+        with tempfile.TemporaryDirectory(dir=str(Path.cwd())) as tmp:
+            root = Path(tmp).resolve()
+            self.assertEqual(root.parent, Path.cwd().resolve())
+            logs = root / "navsim_logs/trainval"
+            logs.mkdir(parents=True)
+            (logs / "example.pkl").write_text("test")
+            with patch.dict(os.environ, {"OPENSCENE_DATA_ROOT": str(root), "NAVSIM_DEVKIT_ROOT": str(root)}), \
+                    patch.object(sys, "argv", ["paths", str(root / "run")]), \
+                    contextlib.redirect_stdout(io.StringIO()) as output:
+                exec(compile(code, "<paths diagnostic>", "exec"), {"__name__": "__main__"})
+            self.assertIn("FOUND " + str(logs), output.getvalue())
+            self.assertIn("MISSING " + str(root / "sensor_blobs/trainval"), output.getvalue())
 
 
 class PipelineTests(unittest.TestCase):
