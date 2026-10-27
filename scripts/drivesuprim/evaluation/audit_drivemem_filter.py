@@ -46,6 +46,10 @@ def main():
     parser.add_argument("--candidate-limit", type=int, default=256)
     parser.add_argument("--samples-per-scene", type=int, default=3,
                         help="In addition to baseline and oracle: largest mismatches")
+    parser.add_argument("--all-scenes", action="store_true",
+                        help="Audit baseline and saved oracle for every scene")
+    parser.add_argument("--summary-only", action="store_true",
+                        help="Print scene details only if filter changes a selected metric or safety comparison")
     args = parser.parse_args()
     if args.samples_per_scene < 0:
         parser.error("--samples-per-scene must be nonnegative")
@@ -68,8 +72,9 @@ def main():
     df["reconstructed"] = local_formula(df)
     df["difference"] = df["pdm_score"] - df["reconstructed"]
     mismatch = df[~np.isclose(df["difference"], 0, atol=1e-6, rtol=1e-6)]
-    tokens = sorted(mismatch["token"].unique())
-    print(f"Candidates={len(df)}; mismatches={len(mismatch)}; affected scenes={len(tokens)}")
+    mismatch_tokens = sorted(mismatch["token"].unique())
+    tokens = sorted(df["token"].unique()) if args.all_scenes else mismatch_tokens
+    print(f"Candidates={len(df)}; mismatches={len(mismatch)}; affected scenes={len(mismatch_tokens)}")
     print("This audit rescores selected candidates, not the complete 256-candidate oracle.")
     if not tokens:
         return
@@ -88,6 +93,10 @@ def main():
     with np.load(root / "vocab.npz", allow_pickle=False) as data:
         vocab = data["vocab"]
 
+    overview = {"scenes": 0, "candidate_evaluations": 0, "raw_safe": 0, "filtered_safe": 0,
+                "safety_disagreement": 0, "baseline_score_changed": 0, "oracle_score_changed": 0,
+                "baseline_filter_changed": 0, "oracle_filter_changed": 0,
+                "raw_gain_sum_pp": 0.0, "filtered_gain_sum_pp": 0.0}
     for token in tokens:
         group = df[df.token == token]
         if len(group) != args.candidate_limit or int(group.is_baseline.sum()) != 1:
@@ -103,10 +112,12 @@ def main():
         worst = (group.assign(abs_diff=group.difference.abs())
                  .sort_values(["abs_diff", "model_rank"], ascending=[False, True])
                  .head(args.samples_per_scene))
+        if args.all_scenes:
+            worst = worst.iloc[:0]
         selected = list(dict.fromkeys([int(baseline.candidate_local), int(oracle.candidate_local)]
                                       + [int(x) for x in worst.candidate_local]))
-        print(f"\nSCENE {token} log={baseline.log_name} candidates_to_rescore={selected}")
-        print(f"Saved baseline score={baseline.pdm_score:.6f}; saved oracle score={oracle.pdm_score:.6f}")
+        details = [f"\nSCENE {token} log={baseline.log_name} candidates_to_rescore={selected}",
+                   f"Saved baseline score={baseline.pdm_score:.6f}; saved oracle score={oracle.pdm_score:.6f}"]
         results = {}
         for local in selected:
             saved = group[group.candidate_local == local]
@@ -138,17 +149,38 @@ def main():
             results[local] = (raw, filtered)
             kind = "baseline" if local == int(baseline.candidate_local) else (
                 "saved_oracle" if local == int(oracle.candidate_local) else "mismatch_sample")
-            print(f"  {kind} local={local} vocab={ids[local]} model_rank={int(saved.model_rank)} "
-                  f"raw_score={raw['pdm_score']:.6f} filtered_score={filtered['pdm_score']:.6f} "
-                  f"filtered_formula={float(local_formula(filtered)):.6f}")
-            print("    filtered_changes=" + json.dumps(changed, sort_keys=True))
+            details.append(f"  {kind} local={local} vocab={ids[local]} model_rank={int(saved.model_rank)} "
+                           f"raw_score={raw['pdm_score']:.6f} filtered_score={filtered['pdm_score']:.6f} "
+                           f"filtered_formula={float(local_formula(filtered)):.6f}")
+            details.append("    filtered_changes=" + json.dumps(changed, sort_keys=True))
         base_raw, base_filtered = results[int(baseline.candidate_local)]
         best_raw, best_filtered = results[int(oracle.candidate_local)]
+        safe_results = {}
         for name, base, best in (("raw", base_raw, best_raw), ("filtered", base_filtered, best_filtered)):
             safe = all(best[key] + 1e-8 >= base[key] for key in SAFETY)
-            print(f"  saved_oracle_vs_baseline {name}: gain_pp="
-                  f"{100 * (best['pdm_score'] - base['pdm_score']):.6f}; "
-                  f"safety_components_not_worse={safe}")
+            safe_results[name] = safe
+            details.append(f"  saved_oracle_vs_baseline {name}: gain_pp="
+                           f"{100 * (best['pdm_score'] - base['pdm_score']):.6f}; "
+                           f"safety_components_not_worse={safe}")
+        changed_base = any(not np.isclose(base_raw[k], base_filtered[k], atol=1e-8, rtol=1e-7) for k in METRICS)
+        changed_oracle = any(not np.isclose(best_raw[k], best_filtered[k], atol=1e-8, rtol=1e-7) for k in METRICS)
+        if not args.summary_only or changed_base or changed_oracle or safe_results["raw"] != safe_results["filtered"]:
+            print("\n".join(details))
+        overview["scenes"] += 1
+        overview["candidate_evaluations"] += len(selected)
+        overview["raw_safe"] += int(safe_results["raw"])
+        overview["filtered_safe"] += int(safe_results["filtered"])
+        overview["safety_disagreement"] += int(safe_results["raw"] != safe_results["filtered"])
+        overview["baseline_filter_changed"] += int(changed_base)
+        overview["oracle_filter_changed"] += int(changed_oracle)
+        overview["baseline_score_changed"] += int(not np.isclose(base_raw["pdm_score"], base_filtered["pdm_score"], atol=1e-8, rtol=1e-7))
+        overview["oracle_score_changed"] += int(not np.isclose(best_raw["pdm_score"], best_filtered["pdm_score"], atol=1e-8, rtol=1e-7))
+        overview["raw_gain_sum_pp"] += 100 * (best_raw["pdm_score"] - base_raw["pdm_score"])
+        overview["filtered_gain_sum_pp"] += 100 * (best_filtered["pdm_score"] - base_filtered["pdm_score"])
+    if overview["scenes"]:
+        overview["raw_gain_mean_pp"] = overview["raw_gain_sum_pp"] / overview["scenes"]
+        overview["filtered_gain_mean_pp"] = overview["filtered_gain_sum_pp"] / overview["scenes"]
+    print("\nAUDIT SUMMARY: " + json.dumps(overview, sort_keys=True))
     print("\nAudit complete. Raw/filtered comparisons cover only the selected candidates above.")
 
 
