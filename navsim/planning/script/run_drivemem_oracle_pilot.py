@@ -21,6 +21,8 @@ from torch.utils.data import DataLoader
 from navsim.common.dataclasses import Trajectory
 from navsim.common.dataloader import MetricCacheLoader, SceneLoader
 from navsim.evaluate.pdm_score import pdm_score
+from navsim.evaluate.drivemem_oracle_utils import sample_logs, summarize_candidates, aggregate_report
+import navsim.evaluate.drivemem_oracle_utils as oracle_utils
 from navsim.planning.training.dataset_ssl import DatasetSSL
 
 CONFIG_PATH = "config/pdm_scoring"
@@ -108,6 +110,24 @@ def export(cfg, out):
     scene_loader = SceneLoader(original_sensor_path=Path(cfg.original_sensor_path),
                                data_path=Path(cfg.navsim_log_path), scene_filter=scene_filter,
                                sensor_config=agent.get_sensor_config())
+    sampling_info = {"method": "first_scenes"}
+    selected_metadata = []
+    if cfg.drivemem.get("sampling", "first") == "logs":
+        if scene_filter.max_scenes is not None or scene_loader.synthetic_scenes:
+            raise ValueError("Log sampling requires max_scenes=null and ORIGINAL scenes only")
+        records = []
+        for token, frames in scene_loader.scene_frames_dicts.items():
+            current = frames[scene_filter.num_history_frames - 1]
+            records.append({"token": token, "log_name": current["log_name"],
+                            "timestamp_us": current["timestamp"]})
+        selected_metadata, sampling_info = sample_logs(
+            records, int(cfg.drivemem.n_logs), int(cfg.drivemem.scenes_per_log),
+            float(cfg.drivemem.min_gap_s), int(cfg.drivemem.seed),
+            list(cfg.drivemem.get("excluded_logs", [])))
+        scene_loader.scene_frames_dicts = {item["token"]: scene_loader.scene_frames_dicts[item["token"]]
+                                          for item in selected_metadata}
+        print(f"Selected {len(selected_metadata)} scenes from {sampling_info['n_logs']} logs; "
+              f"eligible logs: {sampling_info['eligible_logs']}", flush=True)
     cache = MetricCacheLoader(Path(cfg.metric_cache_path))
     missing = sorted(set(scene_loader.tokens) - set(cache.tokens))
     if missing:
@@ -120,6 +140,8 @@ def export(cfg, out):
     loader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0)
     manifest = {"schema_version": 1, "status": "export_in_progress", "git": git_info(),
                 "pilot_script_sha256": sha256(Path(__file__)),
+                "utils_sha256": sha256(Path(oracle_utils.__file__)),
+                "sampling": sampling_info, "selected_metadata": selected_metadata,
                 "checkpoint": str(ckpt), "checkpoint_sha256": sha256(ckpt),
                 "metric_cache_path": str(cfg.metric_cache_path),
                 "torch": torch.__version__, "cuda": torch.version.cuda,
@@ -174,6 +196,7 @@ def export(cfg, out):
                   coarse_selected=np.array(int(to_numpy(pred["selected_indices"])[0]), dtype=np.int64),
                   selected_trajectory=final_traj, **heads)
         manifest["tokens"].append(token)
+        write_json(out / "manifest.json", manifest)
         print(f"EXPORT {n + 1}/{len(dataset)} token={token} selected={selected} candidates={len(ids)}", flush=True)
         del pred, stage, last, batch
     if set(manifest["tokens"]) != set(scene_loader.tokens):
@@ -201,6 +224,8 @@ def score(cfg, out):
         raise RuntimeError("Vocabulary file changed since export.")
     if sha256(Path(__file__)) != manifest["pilot_script_sha256"]:
         raise RuntimeError("Pilot script changed since export.")
+    if sha256(Path(oracle_utils.__file__)) != manifest.get("utils_sha256"):
+        raise RuntimeError("Oracle utilities changed since export.")
     original_cfg = manifest["config"]
     current_cfg = OmegaConf.to_container(cfg, resolve=True)
     for key in ("agent", "simulator", "scorer", "traffic_agents", "traffic_agents_policy", "metric_cache_path", "proposal_sampling"):
@@ -212,8 +237,6 @@ def score(cfg, out):
     if limit < 1:
         raise ValueError("candidate_limit must be positive")
     results = out / f"scoring_k{limit}"
-    if results.exists() and any(results.iterdir()):
-        raise RuntimeError(f"Scoring directory not empty: {results}; choose a new export directory.")
     results.mkdir(exist_ok=True)
     simulator = instantiate(cfg.simulator)
     scorer = instantiate(cfg.scorer)
@@ -230,17 +253,48 @@ def score(cfg, out):
         if "token" not in ref or ref["token"].duplicated().any():
             raise RuntimeError("Reference CSV has missing or duplicate tokens")
         reference = ref.set_index("token")
+    scoring_identity = {"export_manifest_sha256": sha256(out / "manifest.json"),
+                        "candidate_limit": limit, "reference_csv": csv_path,
+                        "reference_sha256": sha256(csv_path) if csv_path else None}
+    identity_path = results / "scoring_identity.json"
+    if identity_path.exists():
+        if json.loads(identity_path.read_text(encoding="utf-8")) != scoring_identity:
+            raise RuntimeError("Existing scoring results belong to a different export/config/reference")
+    else:
+        if any(results.iterdir()):
+            raise RuntimeError("Cannot resume a legacy or unidentified scoring directory")
+        write_json(identity_path, scoring_identity)
     all_rows, summaries = [], []
+    resumed = 0
     start = time.monotonic()
     for number, token in enumerate(manifest["tokens"]):
+        done_path = results / f"{token}_done.json"
+        candidate_path = out / "candidates" / f"{token}.npz"
+        if done_path.exists():
+            done = json.loads(done_path.read_text(encoding="utf-8"))
+            if (done["candidate_sha256"] != sha256(candidate_path)
+                    or done["states_sha256"] != sha256(results / f"{token}_states.npz")
+                    or done["summary"]["token"] != token
+                    or summarize_candidates(done["rows"]) != done["summary"]):
+                raise RuntimeError(f"Corrupted completed scene: {token}")
+            all_rows.extend(done["rows"])
+            summaries.append(done["summary"])
+            resumed += 1
+            print(f"RESUME {number + 1}/{len(manifest['tokens'])} token={token}", flush=True)
+            continue
         with np.load(out / "candidates" / f"{token}.npz", allow_pickle=False) as data:
             ids, selection = data["candidate_ids"], data["selection_scores"]
             selected = int(data["selected_local"])
             selected_trajectory = data["selected_trajectory"]
+            predicted_nc = 1 / (1 + np.exp(-np.clip(data["head_no_at_fault_collisions"].astype(np.float64), -700, 700)))
+            predicted_ttc = 1 / (1 + np.exp(-np.clip(data["head_time_to_collision_within_bound"].astype(np.float64), -700, 700)))
         if not np.array_equal(vocab[ids[selected]], selected_trajectory):
             raise RuntimeError(f"Stored baseline trajectory mismatch: {token}")
         # Stable score order; baseline is forcibly included even for ties.
-        order = list(np.argsort(-selection, kind="stable")[:min(limit, len(ids))])
+        full_order = np.argsort(-selection, kind="stable")
+        model_rank = np.empty(len(ids), dtype=np.int64)
+        model_rank[full_order] = np.arange(1, len(ids) + 1)
+        order = list(full_order[:min(limit, len(ids))])
         if selected not in order:
             order[-1] = selected
         order = [selected] + [int(i) for i in order if i != selected]
@@ -280,6 +334,8 @@ def score(cfg, out):
             row = {"token": token, "log_name": meta.log_name, "start_time": float(meta.timepoint.time_s),
                    "candidate_local": int(index), "candidate_id": int(ids[index]),
                    "is_baseline": index == selected, "selection_score": float(selection[index]), **values}
+            row.update(model_rank=int(model_rank[index]), predicted_nc=float(predicted_nc[index]),
+                       predicted_ttc=float(predicted_ttc[index]))
             row["safe_vs_baseline"] = all(values[k] + 1e-8 >= baseline[k] for k in SAFETY)
             rows.append(row)
             states_out.append(states)
@@ -288,23 +344,20 @@ def score(cfg, out):
         compare_rows(baseline, after, f"Baseline after candidates {token}")
         if not np.allclose(baseline_states, after_states, rtol=1e-7, atol=1e-8):
             raise RuntimeError(f"Baseline states changed after candidates: {token}")
-        frame = pd.DataFrame(rows)
-        best = frame.loc[frame["pdm_score"].idxmax()]
-        safe = frame[frame["safe_vs_baseline"]]
-        safe_best = safe.loc[safe["pdm_score"].idxmax()]
-        summaries.append({"token": token, "log_name": meta.log_name, "n_candidates": len(rows),
-                          "baseline_local_pdm": baseline["pdm_score"], "oracle_local_pdm": float(best.pdm_score),
-                          "safe_oracle_local_pdm": float(safe_best.pdm_score),
-                          "oracle_gain_pp": 100 * (float(best.pdm_score) - baseline["pdm_score"]),
-                          "safe_oracle_gain_pp": 100 * (float(safe_best.pdm_score) - baseline["pdm_score"])})
+        summaries.append(summarize_candidates(rows))
         all_rows.extend(rows)
         write_npz(results / f"{token}_states.npz", candidate_local=np.asarray(order, dtype=np.int64),
                   simulated_states=np.stack(states_out))
+        write_json(done_path, {"rows": rows, "summary": summaries[-1],
+                               "candidate_sha256": sha256(candidate_path),
+                               "states_sha256": sha256(results / f"{token}_states.npz")})
         print(f"SCORE {number + 1}/{len(manifest['tokens'])} token={token} "
               f"local_gain={summaries[-1]['oracle_gain_pp']:.4f} pp", flush=True)
     pd.DataFrame(all_rows).to_csv(results / "candidate_metrics.csv", index=False)
     summary = pd.DataFrame(summaries)
     summary.to_csv(results / "scene_summary.csv", index=False)
+    extra_report, log_summary = aggregate_report(summary)
+    log_summary.to_csv(results / "log_summary.csv", index=False)
     report = {"status": "complete", "scenes": len(summary), "candidate_limit": limit,
               "reference_csv": csv_path or None, "reference_checked": reference is not None,
               "baseline_local_pdm_mean": float(summary.baseline_local_pdm.mean()),
@@ -313,7 +366,9 @@ def score(cfg, out):
               "oracle_gain_mean_pp": float(summary.oracle_gain_pp.mean()),
               "safe_oracle_gain_mean_pp": float(summary.safe_oracle_gain_pp.mean()),
               "scoring_seconds": time.monotonic() - start,
+              "resumed_scenes": resumed, "sampling": manifest.get("sampling", {}),
               "note": "Local PDM metric without two-frame extended comfort; not full EPDMS."}
+    report.update(extra_report)
     write_json(results / "report.json", report)
     print(json.dumps(report, ensure_ascii=False, indent=2), flush=True)
 

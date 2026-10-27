@@ -17,6 +17,7 @@ reference_csv=${DRIVEMEM_REFERENCE_CSV:-}
 scene_count=${DRIVEMEM_SCENES:-8}
 candidate_limit=${DRIVEMEM_CANDIDATES:-16}
 split=${DRIVEMEM_SPLIT:-navtest_debug}
+sampling=${DRIVEMEM_SAMPLING:-first}
 
 [[ -f "$checkpoint" ]] || { echo "Checkpoint not found: $checkpoint" >&2; exit 1; }
 [[ -d "$metric_cache/metadata" ]] || { echo "Metric cache metadata not found: $metric_cache" >&2; exit 1; }
@@ -54,6 +55,12 @@ cmd=(python -u navsim/planning/script/run_drivemem_oracle_pilot.py
     "+drivemem.output_dir=$output"
     "+drivemem.candidate_limit=$candidate_limit"
     "+drivemem.reference_csv=$reference_csv"
+    "+drivemem.sampling=$sampling"
+    "+drivemem.n_logs=${DRIVEMEM_LOGS:-32}"
+    "+drivemem.scenes_per_log=${DRIVEMEM_SCENES_PER_LOG:-2}"
+    "+drivemem.min_gap_s=${DRIVEMEM_MIN_GAP_S:-10}"
+    "+drivemem.seed=${DRIVEMEM_SEED:-20261027}"
+    "+drivemem.excluded_logs=${DRIVEMEM_EXCLUDED_LOGS:-[]}"
 )
 
 echo "Stage: $stage; output: $output; split: $split; scenes: $scene_count; candidates: $candidate_limit"
