@@ -1,0 +1,65 @@
+hydra:
+  run:
+    dir: ${output_dir}
+  output_subdir: ${output_dir}/code/hydra
+  searchpath:
+    - pkg://navsim.planning.script.config.common
+  job:
+    chdir: false
+
+defaults:
+  - default_common
+  - default_evaluation
+  - ddp
+  - scorer: pdm_scorer
+  - agent: drivesuprim_agent_r34
+  - _self_
+  - override train_test_split: navtrain
+
+experiment_name: drivemem_memory/hydra
+train_test_split:
+  scene_filter:
+    max_scenes: null
+agent:
+  checkpoint_path: ${oc.env:NAVSIM_EXP_ROOT}/model_ckpt/drivesuprim_r34.ckpt
+  config:
+    training: false
+    only_ori_input: true
+    inference:
+      model: teacher
+      export_candidates: true
+    refinement:
+      use_multi_stage: true
+      num_refinement_stage: 1
+      stage_layers: '3'
+      topks: '256'
+
+simulator:
+  _target_: navsim.planning.simulation.planner.pdm_planner.simulation.pdm_simulator.PDMSimulator
+  _convert_: all
+  proposal_sampling: ${proposal_sampling}
+
+drivemem:
+  stage: inventory
+  root: ${oc.env:NAVSIM_EXP_ROOT}/drivemem_memory/pilot_v1
+  seed: 20261027
+  gap_s: 10.0
+  sessions:
+    memory: 24
+    fit: 16
+    development: 8
+    calibration: 8
+    test: 8
+  scenes:
+    memory: 8
+    fit: 4
+    development: 4
+    calibration: 4
+    test: 4
+  label_top: 8
+  label_random: 8
+  memory_mode: enriched
+  neighbors: 5
+  strength: 0.5
+  ridge_lambda: 10.0
+  threshold_quantile: 0.75
