@@ -67,6 +67,17 @@ docker exec -w /workspace/DriveSuprim egorov_drivesuprim \
 
 Если не найдены каталоги данных, сначала выполнить `run_drivemem_memory.sh paths`. Он выведет ожидаемые пути и проверит стандартные альтернативы, включая папки download-скриптов. Можно передать реальные пути через `docker exec -e DRIVEMEM_LOGS_PATH=... -e DRIVEMEM_SENSOR_PATH=...`; те же значения нужно передавать во все последующие стадии. Отсутствие изображений больше не блокирует inventory по метаданным, но export требует их наличия. Папка с одним identity.json от неудачной предварительной проверки может быть обновлена автоматически; папка с готовыми данными не переиспользуется при смене конфигурации.
 
+Если на сервере есть только test, установить сначала метаданные:
+
+```bash
+docker exec -w /workspace/DriveSuprim egorov_drivesuprim \
+  python -u download/prepare_drivemem_navtrain.py metadata
+```
+
+Источник — официальный OpenDriveLab/OpenScene, файл `openscene-v1.1/openscene_metadata_trainval.tgz`. Размер 7052210642 байта, SHA256 `193138ac68b29d977d4438a95dfda35a07ff4ad3efb1800b3ee47d6e1dcb3764` проверены по публичному LFS pointer 27 октября 2026. Скрипт поддерживает продолжение загрузки через curl, проверяет архив и записывает только allowlisted navtrain logs в `$OPENSCENE_DATA_ROOT/navsim_logs/trainval`. Test и отличающиеся существующие файлы не перезаписываются. Архив сохраняется в `.downloads/drivemem`, потребуется место и под 7,05 GB загрузки, и под извлечённые метаданные. Изображения эта команда не скачивает.
+
+После `METADATA COMPLETE` повторить inventory. До export/all ещё требуется подготовка trainval images. Не запускать полный `download_trainval.sh` только ради этого пилота: он включает существенно больший объём камер и LiDAR. Отбор будущих изображений планируется по зафиксированному splits.json; сжатые архивы могут потребовать передачи большего числа байтов, чем размер выбранных изображений.
+
 По умолчанию:
 
 ```text
