@@ -120,6 +120,18 @@ docker exec egorov_drivesuprim \
 
 Если cache завершился без строк CACHE, возможно, все записи уже были проиндексированы. Проверить покрытие выбранных сцен, существование файлов и SHA256 можно командой `run_drivemem_memory.sh cache-status`. После обновления launcher такая проверка автоматически выполняется в конце cache. Успех означает `status: complete`, `selected_scenes: 352`, `valid_files: 352`, пустые missing_tokens/invalid_files/extra_tokens. Пустой набор сцен не считается успешным результатом.
 
+## План изображений после готового cache
+
+```bash
+docker exec -e OPENSCENE_DATA_ROOT=/workspace/exp_v2/drivemem_data \
+  -w /workspace/DriveSuprim egorov_drivesuprim \
+  bash scripts/drivesuprim/evaluation/run_drivemem_memory.sh image-plan
+```
+
+Требуются новые файлы `download/plan_drivemem_images.py` и `scripts/drivesuprim/evaluation/test_drivemem_images.py`, а также обновлённый launcher. Планировщик проверяет frozen splits и hashes логов и выписывает точные пути восьми камер четырёх past/current кадров, которые загружает исходный SensorConfig. Будущие кадры и LiDAR не включаются. Он сохраняет `image_preparation/requests.json`, `archive_plan.json`, `report.json`.
+
+По официальным небольшим JSON-индексам сравниваются два маршрута: все 64 компактных navtrain current/history архива (около 449 GB верхней границы передачи) и только архивы полных камер, содержащие выбранные log_name. В обоих случаях на диск можно извлекать только нужные изображения, но .tgz не обеспечивает отдельного скачивания произвольного внутреннего JPEG. Поэтому сетевой объём может существенно превосходить размер конечных изображений пилота. Команда image-plan скачивает только индексы, не большие архивы. Фактические bytes, архивы и SHA256 фиксируются в плане перед выбором дальнейшего способа загрузки.
+
 ## 4. Отчёт
 
 ```bash

@@ -2,8 +2,8 @@
 set -euo pipefail
 
 stage=${1:-inventory}
-case "$stage" in inventory|cache|cache-status|export|label|fit|evaluate|test|report|all|check|paths) ;; *)
-  echo "Usage: $0 inventory|cache|cache-status|export|label|fit|evaluate|test|report|all|check|paths" >&2; exit 2 ;;
+case "$stage" in inventory|cache|cache-status|image-plan|export|label|fit|evaluate|test|report|all|check|paths) ;; *)
+  echo "Usage: $0 inventory|cache|cache-status|image-plan|export|label|fit|evaluate|test|report|all|check|paths" >&2; exit 2 ;;
 esac
 : "${NAVSIM_DEVKIT_ROOT:?NAVSIM_DEVKIT_ROOT is not set}"
 : "${NAVSIM_EXP_ROOT:?NAVSIM_EXP_ROOT is not set}"
@@ -21,6 +21,10 @@ if [[ "$stage" == check ]]; then
 fi
 
 root=${DRIVEMEM_MEMORY_ROOT:-${NAVSIM_EXP_ROOT}/drivemem_memory/pilot_v1}
+if [[ "$stage" == image-plan ]]; then
+    python -u download/plan_drivemem_images.py "$root"
+    exit 0
+fi
 if [[ "$stage" == cache-status ]]; then
     python scripts/drivesuprim/evaluation/check_drivemem_cache.py "$root"
     exit 0
