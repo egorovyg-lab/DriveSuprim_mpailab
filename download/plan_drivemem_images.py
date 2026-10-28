@@ -54,6 +54,7 @@ def collect_requests(run):
     if not records:
         raise RuntimeError("Empty selection")
     requests = set()
+    images_by_log = {}
     for log in sorted({r["log_name"] for r in records}):
         path = Path(identity["navsim_log_path"]) / (log + ".pkl")
         if sha(path) != split["log_sha256"][log]:
@@ -65,6 +66,7 @@ def collect_requests(run):
             if frame["token"] in positions:
                 raise RuntimeError(f"Duplicate frame token in source log: {log}")
             positions[frame["token"]] = i
+        log_requests = set()
         for record in (r for r in records if r["log_name"] == log):
             current = positions[record["token"]]
             if current < history - 1:
@@ -74,13 +76,15 @@ def collect_requests(run):
                 for name, camera in frame["cams"].items():
                     if name.lower() in CAMERAS:
                         present.add(name.lower())
-                        requests.add(safe_image_path(camera["data_path"]))
+                        log_requests.add(safe_image_path(camera["data_path"]))
                 if present != CAMERAS:
                     raise RuntimeError(f"Missing camera metadata: {log}/{frame['token']}")
+        images_by_log[log] = sorted(log_requests)
+        requests.update(log_requests)
     return {"schema_version": 1, "split_sha256": sha(run / "splits.json"),
             "sensor_root": identity["original_sensor_path"], "images": sorted(requests),
             "scenes": len(records), "sessions": len({r["session_id"] for r in records}),
-            "logs": sorted({r["log_name"] for r in records}),
+            "logs": sorted({r["log_name"] for r in records}), "images_by_log": images_by_log,
             "sensor_policy": "original agent SensorConfig: eight cameras at history indices 0,1,2,3; no LiDAR"}
 
 
