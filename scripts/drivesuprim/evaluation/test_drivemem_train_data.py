@@ -1,4 +1,5 @@
 import hashlib
+import errno
 import importlib.util
 import io
 import tarfile
@@ -21,6 +22,11 @@ def archive(path, entries):
 
 
 class MetadataTests(unittest.TestCase):
+    def test_readonly_mount_fails_with_writable_alternative(self):
+        with patch.object(data.Path, "mkdir", side_effect=OSError(errno.EROFS, "Read-only file system")):
+            with self.assertRaisesRegex(PermissionError, "exp_v2/drivemem_data"):
+                data.ensure_writable_directory(Path("/readonly"))
+
     def test_allowlist_flat_layout_resume_and_existing_test_unchanged(self):
         with tempfile.TemporaryDirectory(dir=str(Path.cwd())) as tmp:
             root = Path(tmp).resolve()

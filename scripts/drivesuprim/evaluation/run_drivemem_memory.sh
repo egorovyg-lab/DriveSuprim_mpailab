@@ -2,8 +2,8 @@
 set -euo pipefail
 
 stage=${1:-inventory}
-case "$stage" in inventory|cache|export|label|fit|evaluate|test|report|all|check|paths) ;; *)
-  echo "Usage: $0 inventory|cache|export|label|fit|evaluate|test|report|all|check|paths" >&2; exit 2 ;;
+case "$stage" in inventory|cache|cache-status|export|label|fit|evaluate|test|report|all|check|paths) ;; *)
+  echo "Usage: $0 inventory|cache|cache-status|export|label|fit|evaluate|test|report|all|check|paths" >&2; exit 2 ;;
 esac
 : "${NAVSIM_DEVKIT_ROOT:?NAVSIM_DEVKIT_ROOT is not set}"
 : "${NAVSIM_EXP_ROOT:?NAVSIM_EXP_ROOT is not set}"
@@ -21,6 +21,10 @@ if [[ "$stage" == check ]]; then
 fi
 
 root=${DRIVEMEM_MEMORY_ROOT:-${NAVSIM_EXP_ROOT}/drivemem_memory/pilot_v1}
+if [[ "$stage" == cache-status ]]; then
+    python scripts/drivesuprim/evaluation/check_drivemem_cache.py "$root"
+    exit 0
+fi
 if [[ "$stage" == paths ]]; then
     python - "$root" <<'PY'
 import itertools
@@ -92,3 +96,6 @@ echo "Memory pilot stage=$stage root=$root"
 env -u WORLD_SIZE -u RANK -u LOCAL_RANK -u MASTER_ADDR -u MASTER_PORT \
     -u TORCHELASTIC_RUN_ID -u TORCHELASTIC_RESTART_COUNT -u PL_TORCH_DISTRIBUTED_BACKEND \
     "${cmd[@]}"
+if [[ "$stage" == cache ]]; then
+    python scripts/drivesuprim/evaluation/check_drivemem_cache.py "$root"
+fi

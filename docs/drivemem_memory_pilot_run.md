@@ -78,6 +78,20 @@ docker exec -w /workspace/DriveSuprim egorov_drivesuprim \
 
 После `METADATA COMPLETE` повторить inventory. До export/all ещё требуется подготовка trainval images. Не запускать полный `download_trainval.sh` только ради этого пилота: он включает существенно больший объём камер и LiDAR. Отбор будущих изображений планируется по зафиксированному splits.json; сжатые архивы могут потребовать передачи большего числа байтов, чем размер выбранных изображений.
 
+Если `/workspace/dataset` смонтирован read-only, использовать отдельный writable root:
+
+```bash
+docker exec -w /workspace/DriveSuprim egorov_drivesuprim \
+  python -u download/prepare_drivemem_navtrain.py metadata \
+  --data-root /workspace/exp_v2/drivemem_data
+
+docker exec -e OPENSCENE_DATA_ROOT=/workspace/exp_v2/drivemem_data \
+  -w /workspace/DriveSuprim egorov_drivesuprim \
+  bash scripts/drivesuprim/evaluation/run_drivemem_memory.sh inventory
+```
+
+Тот же `-e OPENSCENE_DATA_ROOT=/workspace/exp_v2/drivemem_data` передавать в последующие memory cache/export/all/evaluate/report. `NUPLAN_MAPS_ROOT` оставлять указывающим на существующие карты; они могут читаться с read-only dataset. Передача только `--download-dir` не решает проблему: распакованные логи тоже требуют writable destination. Повторная сборка контейнера и изменение mount permissions для этого способа не нужны.
+
 По умолчанию:
 
 ```text
@@ -103,6 +117,8 @@ docker exec egorov_drivesuprim \
 Каждый шаг сохраняет результаты по сценам. Повтор `all` продолжит этапы, не переписывая frozen fit; если GPU-экспорт ещё не выполнен, GPU всё ещё потребуется. Запускать один процесс на root, не менять код/конфигурацию/checkpoint между стадиями. Hash-проверка остановит смешивание версий.
 
 Для отдельных стадий вместо all доступны cache, export, label, fit, evaluate. Оценка development может продолжаться командой evaluate без повторного GPU-экспорта.
+
+Если cache завершился без строк CACHE, возможно, все записи уже были проиндексированы. Проверить покрытие выбранных сцен, существование файлов и SHA256 можно командой `run_drivemem_memory.sh cache-status`. После обновления launcher такая проверка автоматически выполняется в конце cache. Успех означает `status: complete`, `selected_scenes: 352`, `valid_files: 352`, пустые missing_tokens/invalid_files/extra_tokens. Пустой набор сцен не считается успешным результатом.
 
 ## 4. Отчёт
 

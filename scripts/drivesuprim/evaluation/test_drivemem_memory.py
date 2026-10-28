@@ -19,6 +19,7 @@ from navsim.agents.drivemem import (
     training_candidate_indices, nearest_donors, memory_correction, corrected_choice,
     fit_ridge, ridge_correction, SAFETY,
 )
+from check_drivemem_cache import inspect as inspect_cache
 
 
 def sample(token="q", session="query", n=4):
@@ -59,6 +60,42 @@ class SplitTests(unittest.TestCase):
         result = spaced_records(rows, 8, 10, 3)
         self.assertTrue(np.all(np.diff([r["timestamp_us"] for r in result]) >= 10000000))
         self.assertEqual(result, spaced_records(list(reversed(rows)), 8, 10, 3))
+
+
+class CacheStatusTests(unittest.TestCase):
+    def test_complete_cache_then_missing_file(self):
+        with tempfile.TemporaryDirectory(dir=str(Path.cwd())) as tmp:
+            root = Path(tmp).resolve()
+            self.assertEqual(root.parent, Path.cwd().resolve())
+            (root / "metric_cache").mkdir()
+            file = root / "metric_cache/a.pkl"
+            file.write_bytes(b"cache fixture")
+            (root / "splits.json").write_text(json.dumps({"records": [{"token": "a"}]}))
+            (root / "cache_index.json").write_text(json.dumps({"a": {"path": str(file),
+                "sha256": hashlib.sha256(file.read_bytes()).hexdigest()}}))
+            self.assertEqual(inspect_cache(root)["status"], "complete")
+            file.unlink()
+            report = inspect_cache(root)
+            self.assertEqual(report["status"], "incomplete")
+            self.assertEqual(report["invalid_files"][0]["reason"], "missing file")
+
+    def test_corrupt_cache_hash_is_detected(self):
+        with tempfile.TemporaryDirectory(dir=str(Path.cwd())) as tmp:
+            root = Path(tmp).resolve()
+            self.assertEqual(root.parent, Path.cwd().resolve())
+            (root / "metric_cache").mkdir()
+            file = root / "metric_cache/a.pkl"
+            file.write_bytes(b"changed")
+            (root / "splits.json").write_text(json.dumps({"records": [{"token": "a"}]}))
+            (root / "cache_index.json").write_text(json.dumps({"a": {"path": str(file), "sha256": "wrong"}}))
+            self.assertEqual(inspect_cache(root)["invalid_files"][0]["reason"], "SHA256 mismatch")
+
+    def test_empty_scene_selection_is_not_success(self):
+        with tempfile.TemporaryDirectory(dir=str(Path.cwd())) as tmp:
+            root = Path(tmp).resolve()
+            self.assertEqual(root.parent, Path.cwd().resolve())
+            (root / "splits.json").write_text(json.dumps({"records": []}))
+            self.assertEqual(inspect_cache(root)["status"], "incomplete")
 
 
 class PredictorTests(unittest.TestCase):

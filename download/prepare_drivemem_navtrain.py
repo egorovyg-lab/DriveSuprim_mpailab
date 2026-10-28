@@ -10,6 +10,7 @@ import os
 import shutil
 import subprocess
 import tarfile
+import tempfile
 import time
 from pathlib import Path, PurePosixPath
 
@@ -35,6 +36,21 @@ def write_json(path, value):
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
     os.replace(tmp, path)
+
+
+def ensure_writable_directory(directory):
+    """Fail before a multi-GB download when a Docker mount is read-only."""
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryFile(dir=str(directory)) as stream:
+            stream.write(b"writable probe")
+            stream.flush()
+    except OSError as exc:
+        raise PermissionError(
+            f"Directory is not writable: {directory}\n"
+            "Use --data-root /workspace/exp_v2/drivemem_data and pass "
+            "OPENSCENE_DATA_ROOT=/workspace/exp_v2/drivemem_data to subsequent memory commands."
+        ) from exc
 
 
 def download_archive(directory):
@@ -135,6 +151,7 @@ def main():
         print("Log files:", sum(1 for _ in destination.glob("*.pkl")))
         print("Trainval images:", sensor_path, "exists:", sensor_path.is_dir())
         return
+    download_dir = args.download_dir or root / ".downloads/drivemem"
     from omegaconf import OmegaConf
     cfg_path = Path(__file__).resolve().parents[1] / "navsim/planning/script/config/common/train_test_split/scene_filter/navtrain.yaml"
     cfg = OmegaConf.load(cfg_path)
@@ -152,7 +169,10 @@ def main():
             if set(saved["logs"]) == allowed:
                 print(f"Metadata already installed and verified: {len(allowed)} logs at {destination}")
                 return
-    archive = download_archive(args.download_dir or root / ".downloads/drivemem")
+    ensure_writable_directory(root)
+    ensure_writable_directory(root / "navsim_logs")
+    ensure_writable_directory(download_dir)
+    archive = download_archive(download_dir)
     completed = extract_logs(archive, destination, allowed)
     write_json(marker, {"status": "complete", "url": URL, "archive_sha256": EXPECTED_SHA256,
                         "archive_size": EXPECTED_SIZE, "config_sha256": digest(cfg_path), "logs": completed})
