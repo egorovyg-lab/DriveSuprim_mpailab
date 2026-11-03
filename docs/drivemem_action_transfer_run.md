@@ -63,3 +63,27 @@ B0/B1 — абсолютные residuals с исходным/локальным 
 Random результаты выводятся по каждому из трёх заранее заданных seed и агрегируются mean/std; удачный seed не выбирается. Метрики raw safety включают NC/DAC/DDC/TLC/TTC, отдельно сообщаются scalar quality degradation, absolute violations, filtered gains и все покомпонентные Δ в CSV. Средние CI считаются по session blocks. Три V-сессии и повторное использование development не дают подтверждающего теста на популяции. Local PDM не включает two-frame comfort; empirical H не является гарантией безопасности.
 
 Пакет не проводит новые большие oracle, не меняет planner и не расширяет банк. Следующая развилка определяется таблицей B0–B3 vs full-embedding ridge и random controls, а не ростом числа вмешательств.
+
+## После результата: вклад одной сцены и доступность новых сессий
+
+Для аудита крупнейшего вмешательства по существующим raw/filtered outcomes (без переоценки):
+
+```bash
+docker exec -w /workspace/DriveSuprim egorov_drivesuprim \
+  python -u scripts/drivesuprim/evaluation/audit_drivemem_action_results.py \
+  /workspace/exp_v2/drivemem_memory/experiments/action_transfer_v2
+```
+
+Показывает долю gain крупнейшей сцены, результаты без неё, все восемь компонентов, multiplicative product, weighted snapshots и проверяет соответствие frozen decisions/model/oracle hashes. PDM 0→1 при неизменных NC/TTC/progress может объясняться снятием другого multiplicative penalty; это необходимо проверить по полному вектору, не называть такой случай исправлением столкновения заранее.
+
+Новые validation-сессии в имеющихся архивах можно посчитать без выбора кадров по качеству и без изменения исходного эксперимента:
+
+```bash
+docker exec -w /workspace/DriveSuprim egorov_drivesuprim \
+  python -u download/plan_drivemem_validation.py \
+  /workspace/exp_v2/drivemem_memory/budget20gb_v1
+```
+
+Команда использует исходный `pilot_v1/inventory.csv`, проверяет его frozen hash, исключает все 17 сессий текущего пилота, дополнительные зарезервированные C/T исходного pilot_v1 и official navtest sessions. Другие использованные наборы передавать повторяемым `--exclude-run /path/to/run` (формат splits.json records); по умолчанию неизвестная история внешних экспериментов не учитывается. Метаданные новых логов должны существовать. Для каждой новой сессии нужен один сегмент с минимум четырьмя сценами через 10 секунд. Кадры ещё не фиксируются, новый split не создаётся.
+
+Скачиваются только небольшие официальные JSON manifests; большие архивы не загружаются. Локальные архивы проверяются только по размеру, SHA256 нужно проверить перед извлечением. Вывод содержит новые сессии в четырёх прежних shards, наличие локальных .tgz, shortfall относительно 12 сессий и до пяти вариантов дополнительных архивов, если текущего кэша недостаточно. Это варианты по отдельности, их покрытие может пересекаться. Пути можно переопределить `--inventory-run`/`--archive-dir`. Выборка из тех же архивов сохраняет archive-selection bias; больший размер внутри одной старой сессии не считается новой независимой сессией.
