@@ -27,9 +27,11 @@ fi
 
 case "$stage" in
   check)
+    python -m unittest discover -s scripts/drivesuprim/evaluation -p test_drivemem_development_oracle.py -v
     python -m unittest discover -s scripts/drivesuprim/evaluation -p test_drivemem_budget.py -v
     python -m unittest discover -s scripts/drivesuprim/evaluation -p test_drivemem_images.py -v
     bash scripts/drivesuprim/evaluation/run_drivemem_memory.sh check
+    python navsim/planning/script/run_drivemem_development_oracle.py --cfg job --resolve >/dev/null
     ;;
   plan)
     python -u download/prepare_drivemem_budget.py "$source_root" "$DRIVEMEM_MEMORY_ROOT" \
@@ -48,8 +50,8 @@ case "$stage" in
     python -u download/fetch_drivemem_budget_images.py status "$DRIVEMEM_MEMORY_ROOT" "${image_args[@]}"
     bash scripts/drivesuprim/evaluation/run_drivemem_memory.sh "$stage"
     ;;
-  cache|cache-status|label|fit|evaluate|test|report|paths)
+  cache|cache-status|label|fit|evaluate|test|report|paths|dev-oracle|dev-oracle-plan)
     bash scripts/drivesuprim/evaluation/run_drivemem_memory.sh "$stage"
     ;;
-  *) echo "Usage: $0 plan|images|images-status|cache|cache-status|all|export|label|fit|evaluate|test|report|check|paths" >&2; exit 2 ;;
+  *) echo "Usage: $0 plan|images|images-status|cache|cache-status|all|export|label|fit|evaluate|test|report|check|paths|dev-oracle|dev-oracle-plan" >&2; exit 2 ;;
 esac

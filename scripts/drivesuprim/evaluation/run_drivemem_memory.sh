@@ -2,8 +2,8 @@
 set -euo pipefail
 
 stage=${1:-inventory}
-case "$stage" in inventory|cache|cache-status|image-plan|export|label|fit|evaluate|test|report|all|check|paths) ;; *)
-  echo "Usage: $0 inventory|cache|cache-status|image-plan|export|label|fit|evaluate|test|report|all|check|paths" >&2; exit 2 ;;
+case "$stage" in inventory|cache|cache-status|image-plan|export|label|fit|evaluate|test|report|all|check|paths|dev-oracle|dev-oracle-plan) ;; *)
+  echo "Usage: $0 inventory|cache|cache-status|image-plan|export|label|fit|evaluate|test|report|all|check|paths|dev-oracle|dev-oracle-plan" >&2; exit 2 ;;
 esac
 : "${NAVSIM_DEVKIT_ROOT:?NAVSIM_DEVKIT_ROOT is not set}"
 : "${NAVSIM_EXP_ROOT:?NAVSIM_EXP_ROOT is not set}"
@@ -75,7 +75,11 @@ checkpoint=${DRIVEMEM_CHECKPOINT:-${NAVSIM_EXP_ROOT}/model_ckpt/drivesuprim_r34.
 [[ -f "$checkpoint" ]] || { echo "Missing checkpoint: $checkpoint" >&2; exit 1; }
 [[ -n "${NUPLAN_MAPS_ROOT:-}" ]] || { echo "NUPLAN_MAPS_ROOT is not set" >&2; exit 1; }
 
-cmd=(python -u navsim/planning/script/run_drivemem_memory.py
+runner=navsim/planning/script/run_drivemem_memory.py
+if [[ "$stage" == dev-oracle || "$stage" == dev-oracle-plan ]]; then
+    runner=navsim/planning/script/run_drivemem_development_oracle.py
+fi
+cmd=(python -u "$runner"
     "drivemem.stage=$stage" "drivemem.root=$root" "agent.checkpoint_path=$checkpoint"
     "drivemem.seed=${DRIVEMEM_SEED:-20261027}"
     "drivemem.sessions.memory=${DRIVEMEM_MEMORY_SESSIONS:-24}"

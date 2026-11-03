@@ -92,6 +92,34 @@ docker exec -w /workspace/DriveSuprim egorov_drivesuprim \
 
 Нельзя считать отсутствие harm на двух вмешательствах гарантией безопасности, а нулевой bootstrap interval при одинаковых нулевых gains — доказательством отсутствия эффекта на популяции. При отсутствии эффекта сначала проверить механизм и резерв кандидатов на development, затем фиксировать изменения метода; test не использовать для их подбора.
 
+## Oracle на тех же development-сценах
+
+После diagnostics можно проверить резерв top-16 исходного ranking на тех же 24 development-сценах. Старый multilog oracle получен на другом наборе и не задаёт резерв здесь. Новый runner `navsim/planning/script/run_drivemem_development_oracle.py` использует неизменённый evaluator: fresh cache и отдельная reference/candidate пара для каждого действия, raw/filtered режимы и повтор baseline для проверки parity. GPU, новые изображения и переобучение не нужны.
+
+Проверить план числа новых вызовов без симуляции:
+
+```bash
+docker exec -e OPENSCENE_DATA_ROOT=/workspace/exp_v2/drivemem_data \
+  -w /workspace/DriveSuprim egorov_drivesuprim \
+  bash scripts/drivesuprim/evaluation/run_drivemem_budget.sh dev-oracle-plan
+```
+
+Запустить top-16 в фоне:
+
+```bash
+docker exec -d -e OPENSCENE_DATA_ROOT=/workspace/exp_v2/drivemem_data \
+  -w /workspace/DriveSuprim egorov_drivesuprim bash -c \
+  'bash scripts/drivesuprim/evaluation/run_drivemem_budget.sh dev-oracle > /workspace/exp_v2/drivemem_dev_oracle.log 2>&1'
+
+docker exec egorov_drivesuprim tail -n 50 /workspace/exp_v2/drivemem_dev_oracle.log
+```
+
+Используются сохранённые исходы уже оценённых действий; после каждого нового кандидата пишется resumable JSON. Повтор той же команды продолжает расчёт. Резервный baseline включён, ties разрешаются в его пользу. Результаты — `budget20gb_v1/development_oracle/report_top16.json`, `scene_summary_top16.csv`, `scenes/<token>.json`. Эти диагностические query labels хранятся отдельно от memory/fit labels и не используются для обучения. Исходный экспериментальный код и frozen identity не меняются.
+
+Safe oracle разрешает лишь кандидатов без ухудшения NC/DAC/DDC/TLC/TTC относительно baseline. Это ретроспективное ограничение по измеренным исходам, не deployable safety gate и не гарантия. Oracle выбирает по известным будущим outcomes, поэтому не является достижимым memory-методом. Сохраняются mean gain и session-bootstrap CI; три сессии недостаточны для сильных выводов о популяции. Это локальный PDM без two-frame extended comfort, не полный EPDMS.
+
+Если top-16 даёт существенный резерв, далее изучить action-conditioned residuals/масштаб geometry kernel на development с зафиксированным no-memory контролем. Если резерв мал, проверить top-32 перед выводом о candidate pool. Для расширения передать `-e DRIVEMEM_ORACLE_TOPK=32` при plan и запуске: уже оценённые кандидаты повторно не считаются, повтор baseline остаётся. Большой oracle на 256 автоматически не запускается. Calibration/test outcomes эта команда не открывает.
+
 ## Ещё меньший бюджет
 
 Лимит и размеры задаются env при plan и сохраняются неизменными во всех следующих командах. Например, техническая smoke-проверка до **5 GB**, по одной сессии на роль и четыре сцены на сессию (20 сцен):
