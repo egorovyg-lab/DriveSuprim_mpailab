@@ -125,7 +125,7 @@ def installed_images(prep, sensor_root, archives):
     return installed
 
 
-def download(entry, directory):
+def download(entry, directory, offline=False):
     ensure_writable_directory(directory)
     archive = directory / Path(entry["path"]).name
     part = archive.with_name(archive.name + ".part")
@@ -133,6 +133,8 @@ def download(entry, directory):
         if archive.stat().st_size != entry["size"] or sha(archive) != entry["sha256"]:
             raise RuntimeError(f"Existing archive has incorrect size/SHA256: {archive}")
         return archive
+    if offline:
+        raise RuntimeError(f"Offline extraction requires the complete cached archive: {archive}")
     offset = part.stat().st_size if part.exists() else 0
     if offset > entry["size"]:
         raise RuntimeError(f"Partial archive exceeds expected size: {part}")
@@ -152,7 +154,7 @@ def download(entry, directory):
     return archive
 
 
-def run_stage(run, stage, max_bytes, archive_dir=None, keep_archives=False):
+def run_stage(run, stage, max_bytes, archive_dir=None, keep_archives=False, offline=False):
     requests, archives = validate_plan(run, max_bytes)
     sensor_root = Path(requests["sensor_root"])
     prep = run / "image_preparation"
@@ -167,7 +169,8 @@ def run_stage(run, stage, max_bytes, archive_dir=None, keep_archives=False):
             receipt = prep / "receipts" / (Path(entry["path"]).name + ".json")
             if receipt.exists():
                 continue  # All its files have just been checksummed above.
-            archive = download(entry, archive_dir or prep / "downloads")
+            directory = archive_dir or prep / "downloads"
+            archive = download(entry, directory, offline=True) if offline else download(entry, directory)
             expected = {image for log in entry["logs"] for image in requests["images_by_log"][log]}
             completed = extract_images(archive, sensor_root, expected)
             if set(completed) != expected:
@@ -197,10 +200,11 @@ def main():
     parser.add_argument("run_dir", type=Path)
     parser.add_argument("--max-gb", type=float, required=True)
     parser.add_argument("--archive-dir", type=Path)
+    parser.add_argument("--offline", action="store_true", help="Never download image archives; require complete cached files")
     parser.add_argument("--discard-archives", action="store_true", help="Remove verified archives after extraction")
     args = parser.parse_args()
     run_stage(args.run_dir, args.stage, int(args.max_gb * 1e9), args.archive_dir,
-              keep_archives=not args.discard_archives)
+              keep_archives=not args.discard_archives, offline=args.offline)
 
 
 if __name__ == "__main__":
