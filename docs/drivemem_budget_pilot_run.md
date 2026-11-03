@@ -78,6 +78,20 @@ docker exec -e OPENSCENE_DATA_ROOT=/workspace/exp_v2/drivemem_data \
   bash scripts/drivesuprim/evaluation/run_drivemem_budget.sh report
 ```
 
+## Диагностика завершённого development-пилота
+
+Если memory почти не меняет решения или не улучшает оценку, сначала изучить сохранённые входы/выходы:
+
+```bash
+docker exec -w /workspace/DriveSuprim egorov_drivesuprim \
+  python -u scripts/drivesuprim/evaluation/diagnose_drivemem_memory.py \
+  /workspace/exp_v2/drivemem_memory/budget20gb_v1
+```
+
+Команда read-only, без GPU, новых загрузок, simulator calls и обращения к calibration/test outcomes. Проверяет frozen splits, hashes features/labels и воспроизведение similarity decisions. Выводит число совместимых доноров, число их разных сессий, threshold acceptance, амплитуду поправки и исходный top-2 margin, результаты по сессиям и все вмешательства. Margins измеряются в model-score units, не в пунктах PDM. Лучшее действие из уже оценённого union методов — лишь нижняя граница oracle; о других кандидатах эта диагностика ничего не устанавливает.
+
+Нельзя считать отсутствие harm на двух вмешательствах гарантией безопасности, а нулевой bootstrap interval при одинаковых нулевых gains — доказательством отсутствия эффекта на популяции. При отсутствии эффекта сначала проверить механизм и резерв кандидатов на development, затем фиксировать изменения метода; test не использовать для их подбора.
+
 ## Ещё меньший бюджет
 
 Лимит и размеры задаются env при plan и сохраняются неизменными во всех следующих командах. Например, техническая smoke-проверка до **5 GB**, по одной сессии на роль и четыре сцены на сессию (20 сцен):
