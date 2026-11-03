@@ -2,7 +2,7 @@
 set -euo pipefail
 
 stage=${1:-inventory}
-case "$stage" in inventory|cache|cache-status|image-plan|export|label|fit|evaluate|test|report|all|check|paths|dev-oracle|dev-oracle-plan) ;; *)
+case "$stage" in inventory|cache|cache-status|image-plan|export|label|fit|evaluate|test|report|all|check|paths|dev-oracle|dev-oracle-plan|action-*) ;; *)
   echo "Usage: $0 inventory|cache|cache-status|image-plan|export|label|fit|evaluate|test|report|all|check|paths|dev-oracle|dev-oracle-plan" >&2; exit 2 ;;
 esac
 : "${NAVSIM_DEVKIT_ROOT:?NAVSIM_DEVKIT_ROOT is not set}"
@@ -76,6 +76,9 @@ checkpoint=${DRIVEMEM_CHECKPOINT:-${NAVSIM_EXP_ROOT}/model_ckpt/drivesuprim_r34.
 [[ -n "${NUPLAN_MAPS_ROOT:-}" ]] || { echo "NUPLAN_MAPS_ROOT is not set" >&2; exit 1; }
 
 runner=navsim/planning/script/run_drivemem_memory.py
+if [[ "$stage" == action-* ]]; then
+    runner=navsim/planning/script/run_drivemem_action_transfer.py
+fi
 if [[ "$stage" == dev-oracle || "$stage" == dev-oracle-plan ]]; then
     runner=navsim/planning/script/run_drivemem_development_oracle.py
 fi

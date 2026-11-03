@@ -26,6 +26,16 @@ if [[ "${DRIVEMEM_DISCARD_ARCHIVES:-0}" == 1 ]]; then
 fi
 
 case "$stage" in
+  action-check)
+    python -m unittest discover -s scripts/drivesuprim/evaluation -p test_drivemem_action_transfer.py -v
+    python navsim/planning/script/run_drivemem_action_transfer.py --cfg job --resolve >/dev/null
+    ;;
+  action-plan|action-diagnose|action-label|action-fit|action-evaluate|action-report|action-all)
+    export OMP_NUM_THREADS=${DRIVEMEM_CPU_THREADS:-4}
+    export OPENBLAS_NUM_THREADS=${DRIVEMEM_CPU_THREADS:-4}
+    export MKL_NUM_THREADS=${DRIVEMEM_CPU_THREADS:-4}
+    bash scripts/drivesuprim/evaluation/run_drivemem_memory.sh "$stage"
+    ;;
   check)
     python -m unittest discover -s scripts/drivesuprim/evaluation -p test_drivemem_development_oracle.py -v
     python -m unittest discover -s scripts/drivesuprim/evaluation -p test_drivemem_budget.py -v
