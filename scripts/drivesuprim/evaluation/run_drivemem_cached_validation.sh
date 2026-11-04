@@ -18,9 +18,20 @@ export OPENBLAS_NUM_THREADS=${DRIVEMEM_CPU_THREADS:-4}
 export MKL_NUM_THREADS=${DRIVEMEM_CPU_THREADS:-4}
 stage=${1:-plan}
 case "$stage" in
+  diagnose)
+    python -u scripts/drivesuprim/evaluation/diagnose_drivemem_validation.py "$DRIVEMEM_MEMORY_ROOT"
+    ;;
+  oracle-plan|oracle)
+    export DRIVEMEM_ORACLE_TOPK=${DRIVEMEM_ORACLE_TOPK:-16}
+    target=validation-oracle
+    [[ "$stage" != oracle-plan ]] || target=validation-oracle-plan
+    bash scripts/drivesuprim/evaluation/run_drivemem_memory.sh "$target"
+    ;;
   check)
     python -m unittest discover -s scripts/drivesuprim/evaluation -p test_drivemem_frozen_validation.py -v
+    python -m unittest discover -s scripts/drivesuprim/evaluation -p test_drivemem_validation_oracle.py -v
     python navsim/planning/script/run_drivemem_frozen_validation.py --cfg job --resolve >/dev/null
+    python navsim/planning/script/run_drivemem_validation_oracle.py --cfg job --resolve >/dev/null
     ;;
   plan)
     python -u download/prepare_drivemem_cached_validation.py "$source_root" "$model_root" "$DRIVEMEM_MEMORY_ROOT" --archive-dir "$archives"
@@ -50,5 +61,5 @@ case "$stage" in
   report)
     python -c 'import pathlib,json,sys; print(json.dumps(json.loads((pathlib.Path(sys.argv[1])/"frozen_evaluation/report.json").read_text()),indent=2))' "$DRIVEMEM_MEMORY_ROOT"
     ;;
-  *) echo "Usage: $0 check|plan|images|images-status|cache|cache-status|export|evaluate|all|report" >&2; exit 2 ;;
+  *) echo "Usage: $0 check|plan|images|images-status|cache|cache-status|export|evaluate|all|report|diagnose|oracle-plan|oracle" >&2; exit 2 ;;
 esac

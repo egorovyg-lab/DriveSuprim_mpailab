@@ -43,3 +43,36 @@ docker exec -e OPENSCENE_DATA_ROOT=/workspace/exp_v2/drivemem_data \
 Модель задаётся `DRIVEMEM_FROZEN_MODEL_ROOT`, исходный bank — `DRIVEMEM_FROZEN_SOURCE_ROOT`, новый набор — `DRIVEMEM_VALIDATION_ROOT`, camera cache — `DRIVEMEM_IMAGE_ARCHIVE_DIR`. Для текущего протокола seed и режим enriched зафиксированы launcher. Все пути/версия fit фиксируются plan, поэтому смена этих значений требует нового validation root. Новые runner/model/input hashes проверяются перед повтором scoring; identity вручную не редактировать.
 
 Отчёты в `validation_cached4_v1/frozen_evaluation`: identity.json, decisions.json, scenes/<token>.json, per_scene.csv, by_session.csv и report.json. Это Local PDM, не full EPDMS; H относительный по пяти safety-компонентам, абсолютные нарушения сообщаются отдельно. После просмотра новых результатов эти сессии тоже считаются использованными: для следующего metadata-планирования передавать `--exclude-run /workspace/exp_v2/drivemem_memory/validation_cached4_v1`.
+
+## Диагностика после отрицательной frozen-проверки
+
+Сначала сохранить отрицательный результат и frozen параметры. Не менять h/beta по этой выборке и не объявлять B1 новым основным методом после просмотра validation. Для деталей по четырём вмешательствам:
+
+```bash
+docker exec -e OPENSCENE_DATA_ROOT=/workspace/exp_v2/drivemem_data \
+  -w /workspace/DriveSuprim egorov_drivesuprim \
+  bash scripts/drivesuprim/evaluation/run_drivemem_cached_validation.sh diagnose
+```
+
+Команда read-only выводит gain по сессиям, все component deltas primary и полный raw-вектор худшего случая. H=0 исключает ухудшения пяти заданных safety-компонентов, но не исключает потери progress/comfort/PDM.
+
+Чтобы проверить резерв того же candidate pool, доступны oracle-plan/oracle. Используется отдельный `run_drivemem_validation_oracle.py`: original oracle runner, входящий в source hashes обученного v2, не меняется. Адаптер читает уже завершённые frozen-evaluation states и повторно использует их исходы. Эти новые labels — post-evaluation diagnostic; ни одна модель ими не обучается.
+
+```bash
+docker exec -e OPENSCENE_DATA_ROOT=/workspace/exp_v2/drivemem_data \
+  -w /workspace/DriveSuprim egorov_drivesuprim \
+  bash scripts/drivesuprim/evaluation/run_drivemem_cached_validation.sh oracle-plan
+
+docker exec -d -e OPENSCENE_DATA_ROOT=/workspace/exp_v2/drivemem_data \
+  -w /workspace/DriveSuprim egorov_drivesuprim bash -c \
+  'bash scripts/drivesuprim/evaluation/run_drivemem_cached_validation.sh oracle >> /workspace/exp_v2/drivemem_cached4_oracle.log 2>&1'
+
+docker exec egorov_drivesuprim tail -n 50 /workspace/exp_v2/drivemem_cached4_oracle.log
+
+docker exec egorov_drivesuprim cat \
+  /workspace/exp_v2/drivemem_memory/validation_cached4_v1/development_oracle/report_top16.json
+```
+
+По умолчанию k=16. Максимум 16×15 новых действий +16 baseline repeats, то есть 512 raw/filtered scorer calls; уже известные действия снижают стоимость. Выход также содержит top-8. GPU и новые изображения не нужны. Можно передать `DRIVEMEM_ORACLE_TOPK=8` для меньшего диагностического префикса, но по нему нельзя заключать об отсутствии резерва во всём top-16. Повтор или расширение k использует готовые outcomes. Пул 256 автоматически не считается. Отчёт называется development_oracle ради совместимости helper, но относится к новой 4-session cohort, не к исходным 24 V-сценам.
+
+Развилка: заметный резерв top-16 при проигрыше B3 требует анализа переносимости residuals/scene representation и action support; малый резерв ограничивает интерпретацию отсутствия gain, но не отменяет измеренные ухудшения B3. Ни один исход не обосновывает самостоятельный положительный эффект gate: на этих 16 сценах среди нынешних B3 proposals нет улучшений, и oracle отказа может лишь вернуть baseline. Перед следующей итерацией определить новые данные для проверки и явно учесть, что эти четыре сессии теперь просмотрены.
