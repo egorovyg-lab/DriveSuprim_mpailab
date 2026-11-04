@@ -118,3 +118,29 @@ docker exec -w /workspace/DriveSuprim egorov_drivesuprim \
 - `action_oracle_gain_pp`: unrestricted top-16 action oracle.
 
 Если retrieved family заметно лучше текущего B3, исследовать агрегирование/выбор среди уже найденных доноров. Если лишь all-family заметно лучше, исследовать retrieval/utility donor selection. Если оба семейства слабы при большом action oracle, простой выбор донора в этих семействах недостаточен: следующий ограниченный цикл — M label coverage и/или представление/targets. Диагностика не перебирает все комбинации пяти доноров и не доказывает невозможность любого другого переноса. Многие donor-query политики не создают новых независимых query-сессий. Все эти query outcomes остаются только анализом development, в память не добавляются.
+
+## После donor-family oracle: аналитический предел центрирования
+
+На cached4 получено: oracle отказа к B3 0 п.п.; retrieved-family oracle +0.0586; all-family oracle +0.5887 против action oracle +7.2464. На основном rank-16 случае ни одна проверенная политика не улучшила baseline. Даже ретроспективный выбор среди этих доноров не восстанавливает основной резерв; перед доразметкой M необходимо проверить ограничения самой инъекции.
+
+В B3 baseline-центрирование даёт `c(a0)=0`. При формуле `S_new(a)=S_original(a)+G(p_new(a))-G(p(a))` и ограничении p_new в [0,1] score любого альтернативного кандидата ограничен сверху:
+
+`S_upper(a)=S_original(a)+G(1)-G(p(a))`, тогда как `S_new(a0)=S_original(a0)`.
+
+Если `S_upper(a) <= S_original(a0)`, кандидат не может выиграть при любой baseline-anchored коррекции с сохранением исходного слагаемого; tie остаётся за baseline. Это ограничение не зависит от качества retrieval или количества M labels. Оно особенно существенно при ошибочно оптимистичном baseline и сильном исходном non-metric/imitative предпочтении.
+
+```bash
+docker exec -w /workspace/DriveSuprim egorov_drivesuprim \
+  python -u scripts/drivesuprim/evaluation/audit_drivemem_score_ceiling.py \
+  /workspace/exp_v2/drivemem_memory/experiments/action_transfer_v2 \
+  /workspace/exp_v2/drivemem_memory/validation_cached4_v1
+```
+
+Без GPU, новых labels, fitting, simulator calls и записи файлов. Вывод:
+
+- action oracle top-16;
+- `anchored_ceiling_gain_pp`: лучший измеренный PDM среди кандидатов, которые хотя бы теоретически могут обогнать неизменный baseline;
+- число оптимальных действий, недостижимых при этом условии, и score margins;
+- oracle-head probes: подстановка истинных query-компонентов как absolute/contrast residuals при beta=.5 и 1. Это диагностические future labels, не допустимые входы метода.
+
+Ceiling оптимистичен и задаёт необходимое условие, не обещает достижимость реальной памятью. Если он мал на важных сценах, новая M разметка при прежнем B3 не устранит структурное ограничение. Если absolute oracle-head вариант восстанавливает резерв, а contrast — нет, исследовать изменение места инъекции/коррекции baseline. Если и oracle absolute beta=1 существенно уступает action oracle, отдельно проверить соответствие G/imitation итоговому PDM. Если потолок высок и инъекция с истинными heads работает, основной вопрос возвращается к переносимости/поддержке residuals в M. Ни одна из этих проверок не оправдывает выбор гиперпараметров по просмотренным query-меткам.
