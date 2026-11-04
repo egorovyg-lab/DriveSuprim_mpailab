@@ -93,3 +93,28 @@ docker exec -w /workspace/DriveSuprim egorov_drivesuprim \
 Read-only, без GPU/загрузок/simulator. Выводит M label coverage по полосам 1–8 / 9–16 / 17–256, числа измеренных компонентов ниже 1, недостаток M top-16 labels и цену возможного дополнения (максимум 384 новых M actions +48 baseline repeats =864 raw/filtered calls; скрипт их не выполняет). Для обоих просмотренных query-наборов показывает резерв по сессиям и поддержку baseline/oracle действий: расстояния в единицах фиксированного h, ESS и точные совпадения геометрии среди retrieved-5 и всех command-compatible M эпизодов.
 
 Следующее решение после аудита: если полезные действия плохо покрыты во всём M, проверить равномерное завершение M top-16 в отдельном sidecar с фиксированным h, равной дополнительной supervision для ridge и новыми данными для последующей проверки. Если покрыты во всём M, но не в retrieved-5, исследовать выбор доноров. Если геометрически покрыты и в retrieved-5, а их residuals не переносятся, упор на M coverage недостаточен — нужен анализ контекста/targets/представления. Геометрическое совпадение не гарантирует одинаковых исходов. C/T и query oracle labels не используются как memory supervision. Нельзя использовать увиденный oracle rank как признак модели во время решения.
+
+## Результат поддержки: проверить достижимость через выбор опыта
+
+Аудит M показал 15/384 labels с локальными ranks 9–16; не хватает 369 действий для полного M top-16, стоимость с repeats — 834 raw/filtered calls. Однако главный новый oracle-кандидат `a5e429799b6753f5` (rank 16, +99.807953 п.п.) уже имеет близкую геометрическую поддержку в retrieved-5: min distance 0.698h, mean per-donor minimum 10.72h. Простая нехватка геометрического покрытия не объясняет этот случай. Сам rank 9–16 эффект также концентрирован: этот один query даёт около 97.4% прироста oracle top-16 над top-8 на cached4. Нельзя обобщать это как равномерный rank shift всех сцен.
+
+Перед новой разметкой доступна CPU-only проверка на готовых outcomes:
+
+```bash
+docker exec -w /workspace/DriveSuprim egorov_drivesuprim \
+  python -u scripts/drivesuprim/evaluation/audit_drivemem_donor_family.py \
+  /workspace/exp_v2/drivemem_memory/experiments/action_transfer_v2 \
+  /workspace/exp_v2/drivemem_memory/validation_cached4_v1
+```
+
+Сначала фиксируются предложения на обоих просмотренных query-наборах, используя исходный M, прежние h/beta и доступные query features. Семейства: текущий B3, каждый совместимый donor по одному, prefixes 1–5 ближайших, удаление одного из ближайших пяти и три прежних random-5 seeds. Затем применяется lookup готового top-16 oracle, без новых simulator calls, GPU, downloads, fitting или записи файлов.
+
+Выходные величины — **ретроспективные диагностические oracle**, не результаты deployable selector:
+
+- `gate_oracle_gain_pp`: лучший отказ/применение текущего B3;
+- `retrieved_family_oracle_gain_pp`: baseline/B3/одиночные доноры из retrieved-5/prefixes/leave-one-out;
+- `all_family_oracle_gain_pp`: плюс каждый совместимый M donor и random-5;
+- `safe_all_family_oracle_gain_pp`: тот же выбор без ухудшения заданных пяти safety-компонентов;
+- `action_oracle_gain_pp`: unrestricted top-16 action oracle.
+
+Если retrieved family заметно лучше текущего B3, исследовать агрегирование/выбор среди уже найденных доноров. Если лишь all-family заметно лучше, исследовать retrieval/utility donor selection. Если оба семейства слабы при большом action oracle, простой выбор донора в этих семействах недостаточен: следующий ограниченный цикл — M label coverage и/или представление/targets. Диагностика не перебирает все комбинации пяти доноров и не доказывает невозможность любого другого переноса. Многие donor-query политики не создают новых независимых query-сессий. Все эти query outcomes остаются только анализом development, в память не добавляются.

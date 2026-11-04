@@ -116,12 +116,7 @@ def audit_cohort(root, bank, vocab, h, seed):
     print(pd.DataFrame(dict(all_queries=frame[keys].mean(), oracle_positive=improved[keys].mean())).to_string())
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("experiment", type=Path)
-    parser.add_argument("validation", type=Path)
-    args = parser.parse_args()
-    experiment = args.experiment
+def load_frozen_bank(experiment):
     identity, fit = read_json(experiment / "identity.json"), read_json(experiment / "fit.json")
     source = Path(identity["source"])
     repo = Path(__file__).resolve().parents[3]
@@ -149,14 +144,23 @@ def main():
         bank.append(sample)
     if not bank:
         raise RuntimeError("Empty memory bank")
+    with np.load(source / "vocab.npz", allow_pickle=False) as data:
+        vocab = data["vocab"].copy()
+    return source, bank, vocab, fit, identity
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("experiment", type=Path)
+    parser.add_argument("validation", type=Path)
+    args = parser.parse_args()
+    source, bank, vocab, fit, identity = load_frozen_bank(args.experiment)
     print("MEMORY LABEL COVERAGE BY DONOR MODEL RANK:")
     print(pd.DataFrame(label_bands(bank)).to_string(index=False))
     missing = sum(len(set(np.argsort(-s["selection_scores"], kind="stable")[:16]) - set(s["label_local_indices"])) for s in bank)
     print(json.dumps(dict(memory_scenes=len(bank), missing_M_top16_actions=missing,
         scorer_calls_if_M_top16_completed=2 * (missing + len(bank)),
         note="Cost estimate only. No scoring or label changes performed."), indent=2))
-    with np.load(source / "vocab.npz", allow_pickle=False) as data:
-        vocab = data["vocab"].copy()
     h = fit["configs"][fit["primary"]]["h"]
     for cohort in (source, args.validation):
         audit_cohort(cohort, bank, vocab, h, int(identity["seed"]))
