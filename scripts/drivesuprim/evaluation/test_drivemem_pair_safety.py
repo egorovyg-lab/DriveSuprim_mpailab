@@ -40,6 +40,20 @@ class PairSafetyAuditTests(unittest.TestCase):
         self.assertAlmostEqual(oracle["measured_gain_pp"], 40)
         self.assertAlmostEqual(oracle["predicted_gain_pp"], -10)
 
+    def test_optional_tail_is_separated_from_top16(self):
+        sample = dict(self.sample, candidate_ids=np.arange(18), selection_scores=np.arange(18., 0., -1))
+        values = dict(self.values)
+        extra = dict.fromkeys(METRICS, 1.)
+        extra.update(pdm_score=.1, driving_direction_compliance=.5)
+        values["17"] = dict(raw=extra)
+        top = safety_rows(sample, values)
+        all_rows = safety_rows(sample, values, include_tail=True)
+        self.assertEqual(len(top), 80)
+        tail = [r for r in all_rows if r["rank"] > 16]
+        self.assertEqual(len(tail), 5)
+        self.assertEqual(sum(r["degraded"] for r in tail), 1)
+        self.assertTrue(all(r["rank"] == 18 for r in tail))
+
 
 if __name__ == "__main__":
     unittest.main()

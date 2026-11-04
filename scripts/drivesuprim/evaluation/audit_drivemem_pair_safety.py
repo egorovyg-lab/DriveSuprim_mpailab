@@ -11,15 +11,20 @@ from navsim.agents.drivemem_action_transfer import pool
 from navsim.agents.drivemem_pair_utility import attach_utility, features, predict, choose
 
 
-def safety_rows(sample, outcomes):
+def safety_rows(sample, outcomes, include_tail=False):
     base = int(sample["selected_local"])
+    order = np.argsort(-sample["selection_scores"], kind="stable")
+    ranks = {int(i): rank + 1 for rank, i in enumerate(order)}
+    indices = sorted(map(int, outcomes)) if include_tail else pool(sample)
     rows = []
-    for i in pool(sample):
+    for i in indices:
+        if int(i) not in ranks:
+            raise ValueError("Label candidate outside exported candidate set")
         for j in SAFETY:
             key = METRICS[j]
             before, after = outcomes[str(base)]["raw"][key], outcomes[str(i)]["raw"][key]
             rows.append(dict(role=sample["role"], session_id=sample["session_id"], token=sample["token"],
-                metric=key, nonbaseline=int(i) != base, below_one=after < 1 - 1e-8,
+                metric=key, rank=ranks[int(i)], nonbaseline=int(i) != base, below_one=after < 1 - 1e-8,
                 degraded=after + 1e-8 < before, improved=after > before + 1e-8))
     return rows
 
@@ -51,6 +56,8 @@ def case_rows(s, outcomes, method, predicted):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("experiment", type=Path)
+    parser.add_argument("--label-support-only", action="store_true",
+                        help="Inspect existing top16 and random-tail M/F labels; no query inference/outcomes")
     args = parser.parse_args()
     root = args.experiment
     identity, fitted = read_json(root / "identity.json"), read_json(root / "fit.json")
@@ -93,17 +100,28 @@ def main():
         state = read_json(path)
         if state["token"] != s["token"]:
             raise RuntimeError("Training token mismatch")
-        training.extend(safety_rows(s, state["outcomes"]))
+        training.extend(safety_rows(s, state["outcomes"], include_tail=True))
         if s["role"] == "memory":
             bank.append(attach_utility(s, state["outcomes"]))
     frame = pd.DataFrame(training)
     frame = frame[frame.nonbaseline]
+    top = frame[frame["rank"] <= 16]
     print("M/F TOP16 SAFETY SUPPORT (baseline excluded; candidate rows are correlated):")
-    print(frame.groupby(["role", "metric"]).agg(actions=("token", "size"),
+    print(top.groupby(["role", "metric"]).agg(actions=("token", "size"),
         below_one=("below_one", "sum"), degraded=("degraded", "sum"), improved=("improved", "sum")).to_string())
+    tail = frame[frame["rank"] > 16]
+    print("\nEXISTING LABELLED RANDOM TAIL (ranks >16; not used by pair_utility_v1):")
+    print(tail.groupby(["role", "metric"]).agg(actions=("token", "size"),
+        below_one=("below_one", "sum"), degraded=("degraded", "sum"), improved=("improved", "sum")).to_string()
+        if len(tail) else "None")
+    frame = frame.assign(band=np.where(frame["rank"] <= 16, "top16", "tail"))
     bad = frame[frame.degraded]
     print("\nDEGRADATION SUPPORT BY SESSION:")
-    print(bad.groupby(["role", "metric", "session_id"]).size().to_string() if len(bad) else "None")
+    print(bad.groupby(["role", "band", "metric", "session_id"]).size().to_string() if len(bad) else "None")
+    if args.label_support_only:
+        print("\nRead-only M/F label audit complete. No query features/outcomes, fitting, new labels or writes. "
+              "Tail actions are outside the deployment top16 pool; their failures do not establish top16 risk calibration.")
+        return
     frozen = read_json(root / "query_decisions.json")
     if frozen["fit_sha256"] != sha(root / "fit.json"):
         raise RuntimeError("Decision/fit mismatch")
