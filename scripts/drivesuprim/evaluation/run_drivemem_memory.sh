@@ -76,6 +76,9 @@ checkpoint=${DRIVEMEM_CHECKPOINT:-${NAVSIM_EXP_ROOT}/model_ckpt/drivesuprim_r34.
 [[ -n "${NUPLAN_MAPS_ROOT:-}" ]] || { echo "NUPLAN_MAPS_ROOT is not set" >&2; exit 1; }
 
 runner=navsim/planning/script/run_drivemem_memory.py
+if [[ "$stage" == utility-* ]]; then
+    runner=navsim/planning/script/run_drivemem_pair_utility.py
+fi
 if [[ "$stage" == completion-* ]]; then
     runner=navsim/planning/script/run_drivemem_memory_completion.py
 fi

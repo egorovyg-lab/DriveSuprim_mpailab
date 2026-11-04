@@ -26,6 +26,16 @@ if [[ "${DRIVEMEM_DISCARD_ARCHIVES:-0}" == 1 ]]; then
 fi
 
 case "$stage" in
+  utility-check)
+    python -m unittest discover -s scripts/drivesuprim/evaluation -p test_drivemem_pair_utility.py -v
+    python navsim/planning/script/run_drivemem_pair_utility.py --cfg job --resolve >/dev/null
+    ;;
+  utility-plan|utility-fit|utility-evaluate|utility-report|utility-all)
+    export OMP_NUM_THREADS=${DRIVEMEM_CPU_THREADS:-4}
+    export OPENBLAS_NUM_THREADS=${DRIVEMEM_CPU_THREADS:-4}
+    export MKL_NUM_THREADS=${DRIVEMEM_CPU_THREADS:-4}
+    bash scripts/drivesuprim/evaluation/run_drivemem_memory.sh "$stage"
+    ;;
   completion-check)
     python -m unittest discover -s scripts/drivesuprim/evaluation -p test_drivemem_memory_completion.py -v
     python navsim/planning/script/run_drivemem_memory_completion.py --cfg job --resolve >/dev/null
