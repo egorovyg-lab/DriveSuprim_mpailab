@@ -27,6 +27,7 @@ fi
 
 case "$stage" in
   utility-check)
+    bash scripts/drivesuprim/evaluation/test_drivemem_utility_launchers.sh
     python -m unittest discover -s scripts/drivesuprim/evaluation -p test_drivemem_pair_utility.py -v
     python navsim/planning/script/run_drivemem_pair_utility.py --cfg job --resolve >/dev/null
     ;;

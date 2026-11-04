@@ -2,8 +2,8 @@
 set -euo pipefail
 
 stage=${1:-inventory}
-case "$stage" in inventory|cache|cache-status|image-plan|export|label|fit|evaluate|test|report|all|check|paths|dev-oracle|dev-oracle-plan|action-*|completion-*|frozen-validation|validation-oracle|validation-oracle-plan) ;; *)
-  echo "Usage: $0 inventory|cache|cache-status|image-plan|export|label|fit|evaluate|test|report|all|check|paths|dev-oracle|dev-oracle-plan" >&2; exit 2 ;;
+case "$stage" in inventory|cache|cache-status|image-plan|export|label|fit|evaluate|test|report|all|check|paths|dev-oracle|dev-oracle-plan|action-*|completion-*|utility-plan|utility-fit|utility-evaluate|utility-report|utility-all|frozen-validation|validation-oracle|validation-oracle-plan) ;; *)
+  echo "Usage: $0 inventory|cache|cache-status|image-plan|export|label|fit|evaluate|test|report|all|check|paths|dev-oracle|dev-oracle-plan|action-*|completion-*|utility-{plan,fit,evaluate,report,all}|frozen-validation|validation-oracle[-plan]" >&2; exit 2 ;;
 esac
 : "${NAVSIM_DEVKIT_ROOT:?NAVSIM_DEVKIT_ROOT is not set}"
 : "${NAVSIM_EXP_ROOT:?NAVSIM_EXP_ROOT is not set}"
