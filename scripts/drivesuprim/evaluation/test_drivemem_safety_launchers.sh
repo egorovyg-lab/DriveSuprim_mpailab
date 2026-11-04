@@ -10,7 +10,7 @@ STUB
 chmod +x "$scratch/python"
 touch "$scratch/checkpoint"
 cd "$repo"
-for stage in plan images-offline images-status cache cache-status export screen label-pilot label support-report prepare; do
+for stage in capacity plan images-offline images-status cache cache-status export screen label-pilot label support-report prepare; do
     : > "$scratch/trace"
     env PATH="$scratch:$PATH" NAVSIM_DEVKIT_ROOT="$repo" NAVSIM_EXP_ROOT="$scratch" \
         OPENSCENE_DATA_ROOT="$scratch/data" NUPLAN_MAPS_ROOT="$scratch/maps" \
@@ -20,6 +20,7 @@ for stage in plan images-offline images-status cache cache-status export screen 
         || { cat "$scratch/output" >&2; exit 1; }
     trace=$(< "$scratch/trace")
     case "$stage" in
+      capacity) [[ "$trace" == *"plan_drivemem_mf_capacity.py"* && "$trace" == *"--max-extra-gb 5"* ]] ;;
       plan) [[ "$trace" == *"download/prepare_drivemem_mf_expansion.py"* && "$trace" == *"drivemem.stage=data-validate"* ]] ;;
       images-*) [[ "$trace" == *"fetch_drivemem_budget_images.py"* && "$trace" == *"--offline"* ]] ;;
       cache|export) [[ "$trace" == *"drivemem.stage=$stage"* ]] ;;
@@ -33,4 +34,4 @@ for stage in plan images-offline images-status cache cache-status export screen 
         [[ "$trace" == *"drivemem.root=$scratch/expansion"* && "$trace" == *"drivemem.scenes.fit=16"* ]]
     fi
 done
-echo "Safety-data launcher routing: all eleven stages OK"
+echo "Safety-data launcher routing: all twelve stages OK"

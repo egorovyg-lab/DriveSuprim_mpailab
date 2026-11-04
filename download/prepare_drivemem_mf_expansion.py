@@ -17,6 +17,16 @@ def read(path):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def spaced_capacity(times, gap=10.):
+    """Exact maximum for equal minimum separation, by earliest-time greedy."""
+    last, count = None, 0
+    for t in sorted(set(map(int, times))):
+        if last is None or t - last >= round(gap * 1e6):
+            count += 1
+            last = t
+    return count
+
+
 def select_pool(rows, old, roles, logs, count=16, gap=10., seed=20261027):
     chosen, report = [], []
     for sid, role in sorted(roles.items()):
@@ -35,7 +45,8 @@ def select_pool(rows, old, roles, logs, count=16, gap=10., seed=20261027):
         except ValueError:
             pick = []
         report.append(dict(session_id=sid, role=role, eligible_scenes=len(group),
-                           requested=count, selected=len(pick)))
+                           requested=count, max_spaced_scenes=spaced_capacity([r["timestamp_us"] for r in group], gap),
+                           selected=len(pick)))
         chosen.extend(pick)
     return chosen, report
 

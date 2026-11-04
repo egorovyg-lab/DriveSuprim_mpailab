@@ -13,6 +13,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "download"))
 import prepare_drivemem_mf_expansion as prep
+import plan_drivemem_mf_capacity as capacity_plan
 from navsim.planning.script import run_drivemem_safety_data as runner
 from test_drivemem_action_transfer import make_sample
 from test_drivemem_pair_utility import outcomes
@@ -28,6 +29,18 @@ def sha(p):
 
 
 class SafetyDataTests(unittest.TestCase):
+    def test_dense_frames_are_not_independent_slots(self):
+        self.assertEqual(prep.spaced_capacity([i * 500000 for i in range(111)]), 6)
+        self.assertEqual(prep.spaced_capacity([0, 0, 9999999, 10000000, 20000000]), 3)
+        rows = [dict(token=str(i), timestamp_us=i * 500000, log_name="a", session_id="s") for i in range(111)]
+        _, report = prep.select_pool(rows, [], {"s": "fit"}, {"a"})
+        self.assertEqual(report[0]["max_spaced_scenes"], 6)
+        self.assertEqual(report[0]["selected"], 0)
+        eligible = capacity_plan.eligible_rows(rows, [rows[0]], {"s": "fit"})
+        self.assertTrue(all(r["timestamp_us"] >= 10000000 for r in eligible))
+        _, report = prep.select_pool(rows, [rows[0]], {"s": "fit"}, {"a"})
+        self.assertEqual(capacity_plan.capacity(eligible, {"s": "fit"}, {"a"})["s"], report[0]["max_spaced_scenes"])
+
     def test_pool_excludes_old_times_and_roles_and_is_deterministic(self):
         rows = [dict(token=str(i), timestamp_us=i * 1000000, log_name="log", session_id="s") for i in range(500)]
         old = [dict(rows[100])]

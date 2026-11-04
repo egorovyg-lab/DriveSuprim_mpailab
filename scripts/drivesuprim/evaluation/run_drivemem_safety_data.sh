@@ -19,6 +19,10 @@ export OPENBLAS_NUM_THREADS=${DRIVEMEM_CPU_THREADS:-4}
 export MKL_NUM_THREADS=${DRIVEMEM_CPU_THREADS:-4}
 stage=${1:-plan}
 case "$stage" in
+  capacity)
+    python -u download/plan_drivemem_mf_capacity.py "$source_root" --inventory "$inventory" \
+      --validation "$validation" --archive-dir "$archives" --max-extra-gb "${DRIVEMEM_CAPACITY_BUDGET_GB:-5}"
+    ;;
   check)
     bash scripts/drivesuprim/evaluation/test_drivemem_safety_launchers.sh
     python -m unittest discover -s scripts/drivesuprim/evaluation -p test_drivemem_safety_data.py -v
@@ -53,5 +57,5 @@ case "$stage" in
   prepare)
     for step in plan images-offline cache export screen; do bash "$0" "$step"; done
     ;;
-  *) echo "Usage: $0 check|plan|prepare|images-offline|images-status|cache|cache-status|export|screen|label-pilot|label|support-report" >&2; exit 2 ;;
+  *) echo "Usage: $0 check|capacity|plan|prepare|images-offline|images-status|cache|cache-status|export|screen|label-pilot|label|support-report" >&2; exit 2 ;;
 esac
