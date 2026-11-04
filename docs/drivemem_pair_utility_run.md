@@ -139,3 +139,36 @@ Bootstrap по 3–4 сессиям — только описание этой �
 matched no-memory control, selective refusal на независимой calibration,
 проверка на свежих сессиях, затем full EPDMS / closed-loop и growing-memory
 оценка. Текущий эксперимент проверяет только первую предпосылку.
+
+## Полученный результат и проверка safety support
+
+`pair_utility_v1` дал +0,121335 п.п. на исходном development и +0,090908 п.п.
+на cached4. Преимущество над no-memory: +0,216157 и +0,410593 п.п.
+На исходном development 98,4% суммарного парного преимущества приходится на
+одну сессию; на cached4 — 92,5%. Baseline-relative gain меняет знак при
+исключении отдельных сессий. Это не подтверждение устойчивого улучшения.
+
+Замена на `31f2320ece515ff7` ухудшила DDC на 0,5 и local PDM на 48,380674 п.п.
+На другой сцене модель исправила TTC и получила +35,714286 п.п. На cached4
+показанные улучшения и потери связаны с progress. Coverage обеих моделей 100%.
+
+В F-CV выбран λ=100 без памяти и λ=1000 с памятью. При одинаковом λ=100
+F-CV gain памяти 1,423061, контроля 1,454276 п.п.; при λ=1000 картина иная.
+Это допустимое сравнение двух отдельно настроенных методов, но ещё не изоляция
+информационного вклада retrieval. Не выбирать новый λ по development.
+
+Следующая проверка читает только существующие M/F labels, признаки, модели и
+development oracle. Она считает safety failures/degradations по метрикам и
+сессиям M/F, проверяет воспроизведение решений, печатает predicted/actual ΔPDM
+и head deltas для safety failures и двух важных oracle-сцен. Новый gate или
+модель не обучаются; гиперпараметры и threshold не подбираются.
+
+```bash
+docker exec -w /workspace/DriveSuprim egorov_drivesuprim \
+  python -u scripts/drivesuprim/evaluation/audit_drivemem_pair_safety.py \
+  /workspace/exp_v2/drivemem_memory/experiments/pair_utility_v1
+```
+
+Редкие или отсутствующие ухудшения в M/F означают недостаточную поддержку для
+обучения/проверки соответствующего safety-ограничения. Наличие предупреждения
+head на просмотренном development случае само по себе не обосновывает gate.
