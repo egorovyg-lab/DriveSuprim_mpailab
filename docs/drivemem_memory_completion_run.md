@@ -64,3 +64,19 @@ docker exec -e OPENSCENE_DATA_ROOT=/workspace/exp_v2/drivemem_data \
 Артефакты: identity.json, memory_labels/<token>.json, fit.json, ridge.npz, query_decisions.json, два *_per_scene.csv и *_by_session.csv, report.json. Отчёт содержит F-trials, выбранный primary, старый/новый ridge, safety/quality counts, actual coverage, oracle regret/reserve и paired primary−new-ridge CI. CPU threads по умолчанию 4 (`DRIVEMEM_CPU_THREADS`). GPU и новые загрузки не требуются.
 
 Если дополнение меток и absolute-инъекция дадут полезный сигнал, следующий шаг — заранее зафиксировать метод и проверить его на новых сессиях, не выбирать удачный вариант по текущему cached4. Если убедительного сигнала нет, простое расширение такой памяти/обучение gate не обоснованы: нужен пересмотр контекстных признаков и transfer targets либо сужение гипотезы статьи. Нулевой H на малой выборке не является гарантией; метрика остаётся Local PDM без two-frame comfort.
+
+## Полученный результат и остановка подбора текущей формулы
+
+Completion-report выбрал по F прежний original_M_contrast. На cached4 этот вариант сохранил −0.95794 п.п.; original_M_absolute, completed_M_contrast и completed_M_absolute дали одинаковые −0.06508 п.п., ни один не улучшил сцену. Изменения устранили одну крупную quality loss, но не породили положительные вмешательства. На старом V три изменённых варианта дали +4.55236 п.п. против +4.23561 у исходного B3; прежняя концентрация эффекта не считается новым доказательством обобщения. Новый ridge дал −0.16541 на старом V и −0.87424 на cached4. Дополнительные labels сами по себе проблему не решили.
+
+Подбор h/beta на текущих query outcomes прекращается. До пересмотра представления/targets можно сделать одну итоговую проверку возможностей уже обогащённого семейства, без новой разметки:
+
+```bash
+docker exec -w /workspace/DriveSuprim egorov_drivesuprim \
+  python -u scripts/drivesuprim/evaluation/audit_drivemem_completed_families.py \
+  /workspace/exp_v2/drivemem_memory/experiments/memory_top16_v1
+```
+
+Скрипт сравнивает четыре клетки controlled experiment. Сначала строит proposals всех compatible single donors, prefixes/leave-one-out retrieved-5 и random-5, проверяя воспроизведение реальных full-bank choices. Только затем использует уже известный oracle top16. Печатает компактную общую таблицу, per-session границы и крупнейшие непокрытые случаи. `--all-cases` добавляет все строки. Все модели/файлы read-only; GPU, fitting, simulator calls и новые данные не нужны. Primary, выбранный по F, явно помечен; oracle-вариант не переименовывается в выбранный метод.
+
+Если обогащённое absolute-семейство всё ещё не предлагает полезных альтернатив в достаточном числе сцен/сессий, отказаться от дальнейшего тюнинга этого residual-transfer семейства. Следующая гипотеза должна менять targets/контекстное представление, с обязательным таким же изменением сильного no-memory контроля и свежими сессиями для последующей проверки. Если capacity заметно выросла, но реальный reranker её не использует, становится обоснованной отдельная проверка выбора/агрегации опыта на M/F. Это oracle-capacity, не результат обученного selector; проверка не перебирает все комбинации пяти доноров. C/T остаются закрытыми.
