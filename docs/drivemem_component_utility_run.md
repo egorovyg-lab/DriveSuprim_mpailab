@@ -114,3 +114,41 @@ docker exec egorov_drivesuprim cat \
 не переходить автоматически к CRC или новым image acquisitions. Это один
 ограниченный exploratory experiment, не подтверждение risk-controlled continual
 planning или full EPDMS улучшения.
+
+## Полученный результат и решение
+
+Серверный эксперимент завершён; F-CV снова выбрал primary=baseline.
+
+| Вариант | Исходный development gain, п.п. | Cached4 gain, п.п. | H исходный / cached4 |
+|---|---:|---:|---:|
+| memory_raw | +1,091792 | −6,329654 | 1 / 1 |
+| no_memory_raw | +1,181255 | −6,092771 | 1 / 1 |
+| random_raw | +1,114413 | −5,610051 | 1 / 1 |
+| shuffled_raw | +0,685399 | −5,677731 | 1 / 1 |
+| memory_component | −0,233908 | 0 | 0 / 0 |
+| memory_guarded | −0,136687 | 0 | 0 / 0 |
+
+Memory_guarded вмешался в 2/24 исходных сцен: обе ухудшили PDM, ни одна не
+улучшилась. На cached4 он не вмешивался вовсе. Нулевой H получен при coverage
+8,3% / 0%; это сохранение baseline, не полезный recall. Парное преимущество
+guarded memory +0,003202 / +0,258334 п.п. объясняет преимущество над конкретным
+контролем, но не является улучшением DriveSuprim: оба baseline-relative gains
+неположительны. Все четыре guarded family имеют ноль improved scenes в обоих
+cohorts. Raw weights выбраны по guarded F-CV, а не отдельной raw-оптимизацией.
+
+Реальные memory outcomes не дали устойчивого преимущества над no-memory или
+одним проверенным random seed. Это не доказывает бесполезность любой памяти,
+но критерии продолжения данной версии не выполнены. Не выбирать memory_raw
+постфактум по положительному результату только первой когорты. C/T не открывать,
+не переходить автоматически к CRC или новой закупке данных.
+
+Завершить эту ветку targets/gates. Если продолжается исходная гипотеза статьи,
+остаётся одна предусмотренная ранее ограниченная feature-абляция: отдельный
+экспорт frozen candidate-conditioned decoder states вместо reliance на spatial
+mean embedding и handcrafted geometry interactions. Она должна сохранить
+teacher/candidates/scores, существующие labels, одинаковые query-входы у
+memory/no-memory и тот же заранее объявленный selection protocol. Это новая
+проверяемая гипотеза, не установленное объяснение ошибки и не обещание gain.
+Никакой новый privileged query input не разрешается. Если преимущество реальных
+memory outcomes не появится и в ней, пересматривать постановку/claims статьи,
+а не продолжать подбор thresholds на тех же семи development-сессиях.
