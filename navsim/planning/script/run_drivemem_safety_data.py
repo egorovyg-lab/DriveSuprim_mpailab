@@ -131,7 +131,10 @@ def main(cfg):
         raise ValueError("Unknown collection stage")
     protocol = read(root / "expansion_protocol.json")
     repo = Path(__file__).resolve().parents[3]
-    if sha(repo / "download/prepare_drivemem_mf_expansion.py") != protocol["preparer"]:
+    preparer = protocol.get("preparer_path", "download/prepare_drivemem_mf_expansion.py")
+    if preparer not in ("download/prepare_drivemem_mf_expansion.py", "download/prepare_drivemem_new_mf.py"):
+        raise ValueError("Unknown collection preparer")
+    if sha(repo / preparer) != protocol["preparer"]:
         raise RuntimeError("Frozen data preparer changed")
     for location, files in protocol["inputs"].items():
         for name, digest in files.items():
@@ -145,11 +148,13 @@ def main(cfg):
         cache_index=sha(root / "cache_index.json"))
     records = read(root / "splits.json")["records"]
     samples = {r["token"]: sample(root, r) for r in records}
-    if len(samples) != 160 or any(s["role"] not in ("memory", "fit") for s in samples.values()):
-        raise ValueError("Expected 160 M/F-only screening records")
+    session_count = int(protocol.get("session_count", 10))
+    expected_scenes, expected_labels = session_count * 16, session_count * 8
+    if len(samples) != expected_scenes or len({s["session_id"] for s in samples.values()}) != session_count or any(s["role"] not in ("memory", "fit") for s in samples.values()):
+        raise ValueError("Unexpected M/F-only screening membership")
     selected = select_labels(list(samples.values()), protocol["seed"])
-    if len(selected) != 80:
-        raise ValueError("Expected exactly 80 label scenes")
+    if len(selected) != expected_labels:
+        raise ValueError("Unexpected label scene count")
     state = dict(identity=manifest, records=selected)
     marker = root / "label_selection.json"
     if marker.exists() and read(marker) != state:
@@ -158,8 +163,9 @@ def main(cfg):
         raise RuntimeError("Run screen first to freeze choices before labels")
     if stage == "screen":
         write(marker, state)
-        print(json.dumps(dict(selected_scenes=80, uniform=40, challenge=40, candidate_evaluations=1280,
-                              raw_filtered_calls=2560, note="Choices frozen without outcomes"), indent=2))
+        print(json.dumps(dict(selected_scenes=expected_labels, uniform=expected_labels // 2, challenge=expected_labels // 2,
+                              candidate_evaluations=16 * expected_labels, raw_filtered_calls=32 * expected_labels,
+                              note="Choices frozen without outcomes"), indent=2))
         return
     previous = root / "support_report.json"
     if previous.exists():
@@ -168,8 +174,8 @@ def main(cfg):
                 raise RuntimeError("Previously committed complete labels changed")
     if stage == "label":
         limit = int(os.environ.get("DRIVEMEM_LABEL_LIMIT", "8"))
-        if not 1 <= limit <= 80:
-            raise ValueError("DRIVEMEM_LABEL_LIMIT must be between 1 and 80")
+        if not 1 <= limit <= expected_labels:
+            raise ValueError(f"DRIVEMEM_LABEL_LIMIT must be between 1 and {expected_labels}")
         evaluate, _ = evaluators(cfg, root)
         print(json.dumps(collect(samples, selected, root, evaluate, read, write, sha, verify_baseline, limit), indent=2))
     report = support(samples, selected, root, read, sha)

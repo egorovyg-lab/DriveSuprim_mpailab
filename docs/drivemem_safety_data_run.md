@@ -41,6 +41,31 @@ SHA256 обязательно проверять перед extraction.
 и свежая validation должны планироваться раздельно. Не запускать prepare/label
 до решения shortfall. Не менять вручную frozen manifests.
 
+Фактический capacity report: 41 новый screening slot (29 M / 12 F),
+из них ни одна сессия не достигает исходной квоты 16 в локальном кэше.
+Сессия `2021.06.07.17.48.02_veh-38` имеет нулевую новую ёмкость даже по всем
+установленным metadata. Дополнительный shard 188 стоит около 4,034 GB,
+добавляет 17 slots и не завершает ни одной квоты. Это не решение исходного плана.
+
+Следующее решение — планировать дополнительные M/F-сессии, сохраняя старые
+банк/метки, и отдельно будущую независимую проверку. Для поиска ещё не
+просмотренных сессий с достаточной screening-ёмкостью используем существующий
+metadata-only planner (историческое имя validation не назначает роли):
+
+```bash
+docker exec -w /workspace/DriveSuprim egorov_drivesuprim \
+  python -u download/plan_drivemem_validation.py \
+  /workspace/exp_v2/drivemem_memory/budget20gb_v1 \
+  --inventory-run /workspace/exp_v2/drivemem_memory/pilot_v1 \
+  --exclude-run /workspace/exp_v2/drivemem_memory/validation_cached4_v1 \
+  --archive-dir /workspace/exp_v2/drivemem_data/.downloads/drivemem_camera \
+  --target-sessions 4 --scenes-per-session 16
+```
+
+Это только оценка доступности/стоимости. Она не скачивает архивы, не создаёт
+разбиение и не изменяет текущие roles. Если четыре новые сессии будут выделены
+в M/F, они не смогут затем стать независимой confirmation-выборкой.
+
 ## Что выбирается
 
 - Только исходные 6 M и 4 F сессии; другие роли не включаются.
