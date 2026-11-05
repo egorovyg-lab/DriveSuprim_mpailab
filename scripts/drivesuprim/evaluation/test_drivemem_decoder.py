@@ -7,12 +7,14 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+from types import SimpleNamespace as N
 
 import numpy as np
 
 from navsim.agents import drivemem_component_utility as old_model
 from navsim.agents import drivemem_decoder_utility as model
 from navsim.planning.script import run_drivemem_decoder_export as exporter
+from navsim.planning.script import run_drivemem_decoder_diagnose as diagnostic
 from navsim.planning.script import run_drivemem_decoder_utility as runner
 from navsim.planning.script import run_drivemem_component_utility as old_runner
 from test_drivemem_action_transfer import make_sample
@@ -20,6 +22,46 @@ from test_drivemem_pair_utility import outcomes
 
 
 class DecoderTests(unittest.TestCase):
+    def test_diagnosis_distinguishes_order_set_and_values(self):
+        rng = np.random.default_rng(19)
+        old = make_sample("q", "q", "development", rng)
+        fresh = copy.deepcopy(old)
+        order = np.arange(16)[::-1]
+        for field in ("candidate_ids", "selection_scores") + tuple(k for k in old if k.startswith("head_")):
+            fresh[field] = fresh[field][order]
+        fresh["selected_local"] = np.array(15)
+        report = diagnostic.compare(old, fresh)
+        self.assertFalse(report["ordered_ids_equal"])
+        self.assertTrue(report["same_id_set"])
+        self.assertTrue(report["selected_vocab_equal"])
+        self.assertTrue(all(r["allclose"] for r in report["by_vocab_numeric_parity"].values()))
+        fresh["candidate_ids"][0] = 10000
+        report = diagnostic.compare(old, fresh)
+        self.assertFalse(report["same_id_set"])
+        self.assertEqual(report["missing_ids"], [15])
+        self.assertEqual(report["added_ids"], [10000])
+        fresh["selection_scores"][2] += .1
+        self.assertFalse(diagnostic.compare(old, fresh)["by_vocab_numeric_parity"]["selection_scores"]["allclose"])
+
+    def test_diagnostic_is_read_only_and_restores_original_functions(self):
+        rng = np.random.default_rng(14)
+        old = make_sample("q", "q", "development", rng)
+        vocab = rng.normal(size=(16, 40, 3))
+        fresh = dict(old, final_traj=vocab[0])
+        unhooked = {k: v for k, v in fresh.items() if k != "token"}
+        parity = exporter.parity
+        def fake(cfg):
+            exporter.write(None, {})
+            exporter.parity(old, fresh, vocab)
+            exporter.parity(unhooked, fresh, vocab)
+            self.fail("Probe should stop before artifact saving")
+        with patch.object(exporter, "main", side_effect=fake), patch.object(exporter, "write") as writer, patch.object(exporter, "save") as saver, contextlib.redirect_stdout(io.StringIO()) as output:
+            diagnostic.main(N(drivemem=N(stage="decoder-diagnose")))
+            writer.assert_not_called()
+            saver.assert_not_called()
+        self.assertIs(exporter.parity, parity)
+        self.assertIn('"status": "diagnostic_only"', output.getvalue())
+
     def test_feature_only_ablation_and_shared_algorithms(self):
         rng = np.random.default_rng(9)
         s = make_sample("q", "q", "development", rng)

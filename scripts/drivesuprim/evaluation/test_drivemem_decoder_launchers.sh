@@ -9,7 +9,7 @@ printf 'LIMIT=%s %s\n' "${DRIVEMEM_DECODER_EXPORT_LIMIT:-unset}" "$*" > "$DRIVEM
 STUB
 chmod +x "$scratch/python"
 touch "$scratch/checkpoint"
-for stage in plan export-pilot export export-status fit evaluate report all; do
+for stage in plan export-pilot export export-status diagnose fit evaluate report all; do
     env PATH="$scratch:$PATH" NAVSIM_DEVKIT_ROOT="$repo" NAVSIM_EXP_ROOT="$scratch" \
       OPENSCENE_DATA_ROOT="$scratch/data" NUPLAN_MAPS_ROOT="$scratch/maps" \
       DRIVEMEM_CHECKPOINT="$scratch/checkpoint" DRIVEMEM_TEST_TRACE="$scratch/trace" \
@@ -20,6 +20,7 @@ for stage in plan export-pilot export export-status fit evaluate report all; do
       plan) [[ "$trace" == *"run_drivemem_decoder_export.py"* && "$trace" == *"drivemem.stage=decoder-plan"* ]] ;;
       export-pilot|export) [[ "$trace" == *"run_drivemem_decoder_export.py"* && "$trace" == *"drivemem.stage=decoder-export"* ]] ;;
       export-status) [[ "$trace" == *"drivemem.stage=decoder-status"* ]] ;;
+      diagnose) [[ "$trace" == *"run_drivemem_decoder_diagnose.py"* && "$trace" == *"drivemem.stage=decoder-diagnose"* ]] ;;
       *) [[ "$trace" == *"run_drivemem_decoder_utility.py $stage"* && "$trace" == *"--decoder $scratch/drivemem_memory/decoder_features_v1"* ]] ;;
     esac
     if [[ "$stage" == export-pilot ]]; then [[ "$trace" == *"LIMIT=4"* ]]; fi
@@ -28,4 +29,4 @@ for stage in plan export-pilot export export-status fit evaluate report all; do
         [[ "$trace" == *"drivemem.root=$scratch/drivemem_memory/budget20gb_v1"* ]]
     fi
 done
-echo "Decoder launcher: all eight stages OK"
+echo "Decoder launcher: all nine stages OK"
