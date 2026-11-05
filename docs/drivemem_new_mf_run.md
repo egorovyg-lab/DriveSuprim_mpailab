@@ -46,8 +46,7 @@ composition на сервере. Plan загружает только мален
 После успешного plan:
 
 ```bash
-dm_new prepare
-dm_new label-pilot
+dm_new prepare && dm_new label-pilot
 ```
 
 ВНИМАНИЕ: `prepare` включает реальную разрешённую загрузку shard 174, extraction
@@ -61,8 +60,7 @@ Images хранятся в общем writable data root, архив — в об
 Повторный pilot идёт к следующим сценам. Для остальных:
 
 ```bash
-dm_new label
-dm_new support-report
+dm_new label && dm_new support-report
 ```
 
 Успешный итог: status=complete, completed_scenes=32. Support показывает отдельно
@@ -76,3 +74,25 @@ uniform/challenge по M/F, baseline/oracle reserve и деградации по
 Нельзя изменять preparer/collector/экспорты после screen для обхода provenance.
 При intentional protocol change задать новый DRIVEMEM_NEW_MF_ROOT. Полный
 протокол моделей следующего этапа готовится после результатов support.
+
+## Восстановление после CUDA unavailable
+
+В первом серверном прогоне archive 174 загружен и проверен, установлены все
+2048 images, cache 64/64 готов. Export остановился до создания export_index.json
+из-за CUDA unavailable. Последующий FileNotFoundError в label — следствие
+незавершённого export, а не потеря dataset. Новая загрузка/сбор cache не нужны.
+
+Проверить nvidia-smi на host и внутри контейнера, затем CUDA allocation в том
+же Python контейнера. Если host работает, а внутри NVML падает, возможна потеря
+GPU-доступа контейнером. Перезапускать только egorov_drivesuprim и только после
+проверки отсутствия других нужных вычислений в нём; весь Docker daemon не трогать.
+При неудаче восстановления собрать DeviceRequests/torch/env diagnostics.
+
+После восстановления CUDA продолжить:
+
+```bash
+dm_new export && dm_new screen && dm_new label-pilot
+```
+
+Связка && останавливает последовательность при первой ошибке. Identity,
+подготовленные данные и старые frozen code не редактируются.
