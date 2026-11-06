@@ -2,7 +2,7 @@
 set -euo pipefail
 
 stage=${1:-inventory}
-case "$stage" in inventory|cache|cache-status|image-plan|export|label|fit|evaluate|test|report|all|check|paths|dev-oracle|dev-oracle-plan|action-*|completion-*|utility-plan|utility-fit|utility-evaluate|utility-report|utility-all|data-validate|data-screen|data-label|data-support-report|decoder-plan|decoder-export|decoder-status|decoder-diagnose|frozen-validation|validation-oracle|validation-oracle-plan) ;; *)
+case "$stage" in inventory|cache|cache-status|image-plan|export|label|fit|evaluate|test|report|all|check|paths|dev-oracle|dev-oracle-plan|action-*|completion-*|utility-plan|utility-fit|utility-evaluate|utility-report|utility-all|data-validate|data-screen|data-label|data-support-report|decoder-plan|decoder-export|decoder-status|decoder-diagnose|decoder-replay-plan|decoder-replay-export|decoder-replay-status|frozen-validation|validation-oracle|validation-oracle-plan) ;; *)
   echo "Usage: $0 inventory|cache|cache-status|image-plan|export|label|fit|evaluate|test|report|all|check|paths|dev-oracle|dev-oracle-plan|action-*|completion-*|utility-{plan,fit,evaluate,report,all}|data-{validate,screen,label,support-report}|frozen-validation|validation-oracle[-plan]" >&2; exit 2 ;;
 esac
 : "${NAVSIM_DEVKIT_ROOT:?NAVSIM_DEVKIT_ROOT is not set}"
@@ -81,6 +81,9 @@ if [[ "$stage" == decoder-* ]]; then
 fi
 if [[ "$stage" == decoder-diagnose ]]; then
     runner=navsim/planning/script/run_drivemem_decoder_diagnose.py
+fi
+if [[ "$stage" == decoder-replay-* ]]; then
+    runner=navsim/planning/script/run_drivemem_decoder_replay_export.py
 fi
 if [[ "$stage" == data-* ]]; then
     runner=navsim/planning/script/run_drivemem_safety_data.py

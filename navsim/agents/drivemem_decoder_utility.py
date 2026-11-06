@@ -34,8 +34,14 @@ def load_decoder_inputs(prior, addition, decoder):
     data = list(load_inputs(prior, addition))
     bank, fitting, _, _, source, validation, _, bindings, _, _ = data
     identity = read(decoder / "identity.json")
-    if sha(REPO / "navsim/planning/script/run_drivemem_decoder_export.py") != identity["exporter_sha256"]:
+    exporter = identity.get("exporter_path", "navsim/planning/script/run_drivemem_decoder_export.py")
+    if exporter not in ("navsim/planning/script/run_drivemem_decoder_export.py",
+                        "navsim/planning/script/run_drivemem_decoder_replay_export.py"):
+        raise RuntimeError("Unknown decoder export protocol")
+    if sha(REPO / exporter) != identity["exporter_sha256"]:
         raise RuntimeError("Decoder exporter changed")
+    if exporter.endswith("_replay_export.py") and sha(REPO / "navsim/agents/drivemem_frozen_pool.py") != identity.get("pool_helper_sha256"):
+        raise RuntimeError("Frozen-pool replay helper changed")
     if identity["inputs"] != bindings:
         raise RuntimeError("Decoder sidecar belongs to different input snapshot")
     records = []

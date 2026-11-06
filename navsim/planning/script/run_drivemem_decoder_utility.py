@@ -140,6 +140,7 @@ def main():
             "navsim/agents/drivemem_component_utility.py", "navsim/planning/script/run_drivemem_component_utility.py",
             "navsim/agents/drivemem_decoder_utility.py", "navsim/planning/script/run_drivemem_decoder_utility.py",
             "navsim/planning/script/run_drivemem_decoder_export.py",
+            "navsim/planning/script/run_drivemem_decoder_replay_export.py", "navsim/agents/drivemem_frozen_pool.py",
             "navsim/planning/script/run_drivemem_expanded_utility.py", "scripts/drivesuprim/evaluation/audit_drivemem_action_support.py",
             "scripts/drivesuprim/evaluation/diagnose_drivemem_memory.py")},
         protocol="Additive decoder features; frozen bounded absolute outcome learner and policies; fixed policy checks; uniform F selection, challenge F harm check; M-only recall; no query labels for fitting.")
