@@ -30,18 +30,29 @@ def load_decoder_sample(root, record, index, decoder):
     return s
 
 
+def verify_decoder_protocol(identity):
+    exporter = identity.get("exporter_path", "navsim/planning/script/run_drivemem_decoder_export.py")
+    if exporter not in ("navsim/planning/script/run_drivemem_decoder_export.py",
+                        "navsim/planning/script/run_drivemem_decoder_replay_export.py",
+                        "navsim/planning/script/run_drivemem_decoder_deterministic_export.py"):
+        raise RuntimeError("Unknown decoder export protocol")
+    if sha(REPO / exporter) != identity["exporter_sha256"]:
+        raise RuntimeError("Decoder exporter changed")
+    if exporter != "navsim/planning/script/run_drivemem_decoder_export.py" and sha(REPO / "navsim/agents/drivemem_frozen_pool.py") != identity.get("pool_helper_sha256"):
+        raise RuntimeError("Frozen-pool replay helper changed")
+    if exporter.endswith("_deterministic_export.py"):
+        from navsim.agents.drivemem_determinism import PROFILE
+        if (identity.get("numerical_profile") != PROFILE or
+                identity.get("numerical_helper_sha256") != sha(REPO / "navsim/agents/drivemem_determinism.py")):
+            raise RuntimeError("Deterministic numerical protocol changed")
+    return exporter
+
+
 def load_decoder_inputs(prior, addition, decoder):
     data = list(load_inputs(prior, addition))
     bank, fitting, _, _, source, validation, _, bindings, _, _ = data
     identity = read(decoder / "identity.json")
-    exporter = identity.get("exporter_path", "navsim/planning/script/run_drivemem_decoder_export.py")
-    if exporter not in ("navsim/planning/script/run_drivemem_decoder_export.py",
-                        "navsim/planning/script/run_drivemem_decoder_replay_export.py"):
-        raise RuntimeError("Unknown decoder export protocol")
-    if sha(REPO / exporter) != identity["exporter_sha256"]:
-        raise RuntimeError("Decoder exporter changed")
-    if exporter.endswith("_replay_export.py") and sha(REPO / "navsim/agents/drivemem_frozen_pool.py") != identity.get("pool_helper_sha256"):
-        raise RuntimeError("Frozen-pool replay helper changed")
+    exporter = verify_decoder_protocol(identity)
     if identity["inputs"] != bindings:
         raise RuntimeError("Decoder sidecar belongs to different input snapshot")
     records = []
@@ -50,9 +61,13 @@ def load_decoder_inputs(prior, addition, decoder):
         if r["role"] not in ("memory", "fit", "development"):
             raise ValueError("Closed role in decoder export")
         records.append((Path(r["source"]), r))
-    _, report = status(decoder, records, identity)
+    index, report = status(decoder, records, identity)
     if len(records) != 152 or report["status"] != "complete":
         raise RuntimeError("Complete 152-scene decoder export required")
+    if exporter.endswith("_deterministic_export.py"):
+        from navsim.agents.drivemem_determinism import validate_runtime
+        validate_runtime(decoder, index, read, sha)
+        bindings[str(decoder / "runtime.json")] = sha(decoder / "runtime.json")
     # Verify the previous component experiment so this remains a feature-only
     # ablation, rather than silently changing the underlying learner/policies.
     reference = prior.parent / "component_utility_v1"
