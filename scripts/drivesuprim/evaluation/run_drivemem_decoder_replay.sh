@@ -26,9 +26,10 @@ case "$stage" in
     python -m unittest discover -s scripts/drivesuprim/evaluation -p 'test_drivemem_decoder*.py' -v
     python navsim/planning/script/run_drivemem_decoder_replay_export.py --cfg job --resolve >/dev/null
     ;;
-  plan|export-status)
+  plan|export-status|diagnose)
     target=decoder-replay-plan
     [[ "$stage" != export-status ]] || target=decoder-replay-status
+    [[ "$stage" != diagnose ]] || target=decoder-replay-diagnose
     bash scripts/drivesuprim/evaluation/run_drivemem_memory.sh "$target"
     ;;
   export-pilot|export)
@@ -41,5 +42,5 @@ case "$stage" in
       --prior "$DRIVEMEM_PRIOR_UTILITY_ROOT" --addition "$DRIVEMEM_NEW_MF_ROOT" \
       --decoder "$DRIVEMEM_DECODER_FEATURE_ROOT" --out "$DRIVEMEM_DECODER_MODEL_ROOT"
     ;;
-  *) echo "Usage: $0 check|plan|export-pilot|export|export-status|fit|evaluate|report|all" >&2; exit 2 ;;
+  *) echo "Usage: $0 check|plan|export-pilot|export|export-status|diagnose|fit|evaluate|report|all" >&2; exit 2 ;;
 esac

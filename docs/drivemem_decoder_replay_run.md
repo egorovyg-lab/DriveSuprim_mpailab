@@ -80,3 +80,34 @@ docker exec egorov_drivesuprim cat \
 experiment, включая paired memory-minus-no-memory и вред по сессиям. Нулевой
 harm при нулевом coverage не свидетельствует о пользе. Это последняя ограниченная
 абляция признаков, без автоматического расширения данных или поиска thresholds.
+
+## Если replay остановился на numeric parity
+
+Для ошибки `head_imi` на token `64f4a68010155184` добавлена отдельная диагностика:
+
+```bash
+docker exec \
+  -e OPENSCENE_DATA_ROOT=/workspace/exp_v2/drivemem_data \
+  -e DRIVEMEM_DECODER_DIAG_TOKEN=64f4a68010155184 \
+  -w /workspace/DriveSuprim egorov_drivesuprim \
+  bash scripts/drivesuprim/evaluation/run_drivemem_decoder_replay.sh diagnose
+```
+
+Она делает ровно одну пару forward для указанной разрешённой сцены, без
+повторных попыток. Проверяет исходную identity и весь реальный export index,
+затем временно выбирает одну сцену внутри процесса. Также можно проверить
+уже сохранённую сцену: её запись в настоящем index не удаляется. Экспортер,
+pool helper и сохранённые sidecars не изменяются; новый root не нужен.
+
+Три сравнения: frozen против hooked replay, unhooked против hooked replay,
+frozen против unhooked replay. Отдельно выводятся полный strict parity,
+совпадение baseline/траектории/top16 и ошибки каждого scores/head массива.
+`failed_elements`, `max_abs_diff`, `max_tolerance_ratio` и `worst_by_tolerance`
+показывают величину расхождения и допустимую ошибку конкретного кандидата.
+Диагностические centered/log-softmax differences IMI не заменяют исходные
+условия принятия. Ни identity/index/report, ни features не записываются.
+
+По одному traceback нельзя установить, является ли расхождение небольшим
+численным шумом или более существенным изменением. До анализа этого вывода
+не продолжать fit и не повышать допуски; успешный одиночный повтор диагностики
+не доказывает воспроизводимость всего экспорта.
