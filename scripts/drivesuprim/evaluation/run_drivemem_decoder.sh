@@ -23,6 +23,7 @@ case "$stage" in
     bash scripts/drivesuprim/evaluation/test_drivemem_decoder_launchers.sh
     python -m unittest discover -s scripts/drivesuprim/evaluation -p test_drivemem_decoder.py -v
     python navsim/planning/script/run_drivemem_decoder_export.py --cfg job --resolve >/dev/null
+    echo "Decoder checks and Hydra configuration: OK"
     ;;
   plan|export-status|diagnose)
     target=decoder-plan

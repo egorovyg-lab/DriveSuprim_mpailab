@@ -85,3 +85,73 @@ docker exec egorov_drivesuprim cat \
 CPU learner требует полный экспорт и проверяет hash нового контракта.
 Результаты остаются development, local PDM без extended comfort, не full EPDMS.
 Успешный численный аудит сам по себе не свидетельствует о пользе памяти.
+
+## Если check возвращался без вывода
+
+Исправлена ошибка вложенных launcher-тестов: они наследовали пути эксперимента
+от родительского wrapper, хотя должны проверять собственные временные defaults.
+Теперь тесты очищают DRIVEMEM_* только внутри своего дочернего процесса,
+а отказ assertion печатает stage/строку. Успешный check заканчивается сообщением
+`Decoder checks and Hydra configuration: OK`. Исходные настройки запуска
+эксперимента в родительском shell не меняются.
+
+Регрессионная проверка всех четырёх check с намеренно чужими roots/GPU settings:
+
+```bash
+bash scripts/drivesuprim/evaluation/test_drivemem_decoder_check_env.sh
+```
+
+Отсутствие вывода у старой цепочки `check && plan && export-pilot` не означало
+успешный pilot: при отказе check следующие команды не выполнялись. Наличие
+failure.json — отдельный факт предыдущего export; его содержимое надо изучить
+до продолжения. Исправление check не снимает запрет export и не меняет
+численный контракт, identity или сохранённые sidecars.
+
+## Полный аудит вместо дальнейшего изменения порога
+
+На e7832ec3cbcb5fe4 IMI-logit достиг 5.2452e-5 и превысил предел 5e-5;
+current repeat точный, baseline/top16 совпадают, normalized IMI и scores
+остаются в бюджете. Следующий этап — измерить отклонения ВСЕХ 152 сцен, а не
+повышать предел по очередному токену. Численный контракт пока не меняется.
+
+После обновления кода:
+
+```bash
+docker exec \
+  -e OPENSCENE_DATA_ROOT=/workspace/exp_v2/drivemem_data \
+  -w /workspace/DriveSuprim egorov_drivesuprim \
+  bash scripts/drivesuprim/evaluation/run_drivemem_decoder_numeric.sh check
+
+docker exec \
+  -e OPENSCENE_DATA_ROOT=/workspace/exp_v2/drivemem_data \
+  -w /workspace/DriveSuprim egorov_drivesuprim \
+  bash scripts/drivesuprim/evaluation/run_drivemem_decoder_numeric.sh audit
+
+docker exec egorov_drivesuprim cat \
+  /workspace/exp_v2/drivemem_memory/decoder_numeric_audit_v1/report.json
+```
+
+Audit не читает sidecar failure.json как запрет: это другой, диагностический
+этап. Он проверяет исходные identities и hashes, читает прежние входы и пишет
+только JSON в decoder_numeric_audit_v1. Новых features/моделей нет, fitting и
+scorer не вызываются. C/T отсутствуют в разрешённом наборе. GPU и численный
+профиль — те же, что в numeric exporter.
+
+Для каждой сцены снимаются оба forward, точный repeat, прежний strict parity,
+numeric contract, vocabulary, baseline/top16 и соответствие latent/heads.
+Нарушения этих критериев сохраняются и не останавливают сканирование. Ошибка
+загрузки, повреждённые входы, CUDA OOM или другой сбой forward останавливают
+аудит; ранее записанные строки сохраняются. При возобновлении пропускаются
+все проверенные сцены, включая не прошедшие критерии: успешные попытки не
+отбираются повторными запусками.
+
+В audit_index.json — hashes отдельных JSON в scenes/. При продолжении они и
+runtime проверяются. Путь аудита обязан быть отдельным от входов и всех
+каталогов принятых features. DRIVEMEM_DECODER_EXPORT_LIMIT не ограничивает audit.
+Повтор audit после 152 сцен печатает сохранённый отчёт без новых forward.
+
+`status=complete` означает завершение аудита, а не разрешение fit/export.
+Отчёт содержит максимум отклонений по каждому head, количество нарушений
+repeat/baseline/top16/vocabulary/alignment и все токены, не прошедшие контракт.
+Выбор дальнейшего протокола делается после анализа всего отчёта; никакого
+автоматического изменения допуска или снятия блокировки экспорта нет.

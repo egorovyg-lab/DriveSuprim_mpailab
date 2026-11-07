@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
+trap 'printf "Launcher test failed: %s stage=%s line=%s\n" "${BASH_SOURCE[0]}" "${stage:-setup}" "$LINENO" >&2' ERR
+# Test defaults in a child shell, independently of the caller's experiment.
+for task_env_name in "${!DRIVEMEM_@}"; do
+    unset "$task_env_name"
+done
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 scratch=$(mktemp -d)
 trap 'rm -f -- "$scratch/python" "$scratch/trace" "$scratch/checkpoint" "$scratch/output"; rmdir -- "$scratch"' EXIT

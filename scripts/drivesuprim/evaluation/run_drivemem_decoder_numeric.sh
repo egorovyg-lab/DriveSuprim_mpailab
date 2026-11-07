@@ -22,6 +22,9 @@ export CUBLAS_WORKSPACE_CONFIG=:4096:8 PYTHONHASHSEED=20261027
 export CUDA_VISIBLE_DEVICES=${DRIVEMEM_DECODER_GPU:-0}
 stage=${1:-plan}
 case "$stage" in
+  audit)
+    bash scripts/drivesuprim/evaluation/run_drivemem_memory.sh decoder-numeric-audit
+    ;;
   check)
     bash scripts/drivesuprim/evaluation/test_drivemem_decoder_launchers.sh
     bash scripts/drivesuprim/evaluation/test_drivemem_decoder_replay_launchers.sh
@@ -29,6 +32,7 @@ case "$stage" in
     bash scripts/drivesuprim/evaluation/test_drivemem_decoder_numeric_launchers.sh
     python -m unittest discover -s scripts/drivesuprim/evaluation -p 'test_drivemem_decoder*.py' -v
     python navsim/planning/script/run_drivemem_decoder_numeric_export.py --cfg job --resolve >/dev/null
+    echo "Decoder checks and Hydra configuration: OK"
     ;;
   plan|export-status)
     target=decoder-numeric-plan
@@ -45,5 +49,5 @@ case "$stage" in
       --prior "$DRIVEMEM_PRIOR_UTILITY_ROOT" --addition "$DRIVEMEM_NEW_MF_ROOT" \
       --decoder "$DRIVEMEM_DECODER_FEATURE_ROOT" --out "$DRIVEMEM_DECODER_MODEL_ROOT"
     ;;
-  *) echo "Usage: $0 check|plan|export-pilot|export|export-status|fit|evaluate|report|all" >&2; exit 2 ;;
+  *) echo "Usage: $0 check|plan|export-pilot|export|export-status|audit|fit|evaluate|report|all" >&2; exit 2 ;;
 esac

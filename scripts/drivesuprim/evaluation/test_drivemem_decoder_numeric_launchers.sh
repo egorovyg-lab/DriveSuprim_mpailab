@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
+trap 'printf "Launcher test failed: %s stage=%s line=%s\n" "${BASH_SOURCE[0]}" "${stage:-setup}" "$LINENO" >&2' ERR
+# Test defaults in a child shell, independently of the caller's experiment.
+for task_env_name in "${!DRIVEMEM_@}"; do
+    unset "$task_env_name"
+done
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 scratch=$(mktemp -d)
 trap 'rm -f -- "$scratch/python" "$scratch/trace" "$scratch/checkpoint" "$scratch/output"; rmdir -- "$scratch"' EXIT
@@ -9,7 +14,7 @@ printf 'ENV=%s,%s,%s LIMIT=%s %s\n' "$CUBLAS_WORKSPACE_CONFIG" "$PYTHONHASHSEED"
 STUB
 chmod +x "$scratch/python"
 touch "$scratch/checkpoint"
-for stage in plan export-pilot export export-status fit evaluate report all; do
+for stage in plan export-pilot export export-status audit fit evaluate report all; do
     env PATH="$scratch:$PATH" NAVSIM_DEVKIT_ROOT="$repo" NAVSIM_EXP_ROOT="$scratch" \
       OPENSCENE_DATA_ROOT="$scratch/data" NUPLAN_MAPS_ROOT="$scratch/maps" \
       DRIVEMEM_CHECKPOINT="$scratch/checkpoint" DRIVEMEM_TEST_TRACE="$scratch/trace" \
@@ -18,6 +23,7 @@ for stage in plan export-pilot export export-status fit evaluate report all; do
     trace=$(< "$scratch/trace")
     [[ "$trace" == "ENV=:4096:8,20261027,0 "* ]]
     case "$stage" in
+      audit) [[ "$trace" == *"run_drivemem_decoder_numeric_audit.py"* && "$trace" == *"drivemem.stage=decoder-numeric-audit"* ]] ;;
       plan) [[ "$trace" == *"run_drivemem_decoder_numeric_export.py"* && "$trace" == *"drivemem.stage=decoder-numeric-plan"* ]] ;;
       export-pilot|export) [[ "$trace" == *"run_drivemem_decoder_numeric_export.py"* && "$trace" == *"drivemem.stage=decoder-numeric-export"* ]] ;;
       export-status) [[ "$trace" == *"run_drivemem_decoder_numeric_export.py"* && "$trace" == *"drivemem.stage=decoder-numeric-status"* ]] ;;
@@ -29,4 +35,4 @@ for stage in plan export-pilot export export-status fit evaluate report all; do
         [[ "$trace" == *"drivemem.root=$scratch/drivemem_memory/budget20gb_v1"* ]]
     fi
 done
-echo "Numeric decoder launcher: all eight stages OK"
+echo "Numeric decoder launcher: all nine stages OK"
