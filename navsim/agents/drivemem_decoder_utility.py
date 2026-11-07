@@ -35,13 +35,14 @@ def verify_decoder_protocol(identity):
     if exporter not in ("navsim/planning/script/run_drivemem_decoder_export.py",
                         "navsim/planning/script/run_drivemem_decoder_replay_export.py",
                         "navsim/planning/script/run_drivemem_decoder_deterministic_export.py",
-                        "navsim/planning/script/run_drivemem_decoder_numeric_export.py"):
+                        "navsim/planning/script/run_drivemem_decoder_numeric_export.py",
+                        "navsim/planning/script/run_drivemem_decoder_functional_export.py"):
         raise RuntimeError("Unknown decoder export protocol")
     if sha(REPO / exporter) != identity["exporter_sha256"]:
         raise RuntimeError("Decoder exporter changed")
     if exporter != "navsim/planning/script/run_drivemem_decoder_export.py" and sha(REPO / "navsim/agents/drivemem_frozen_pool.py") != identity.get("pool_helper_sha256"):
         raise RuntimeError("Frozen-pool replay helper changed")
-    if exporter.endswith(("_deterministic_export.py", "_numeric_export.py")):
+    if exporter.endswith(("_deterministic_export.py", "_numeric_export.py", "_functional_export.py")):
         from navsim.agents.drivemem_determinism import PROFILE
         if (identity.get("numerical_profile") != PROFILE or
                 identity.get("numerical_helper_sha256") != sha(REPO / "navsim/agents/drivemem_determinism.py")):
@@ -51,6 +52,12 @@ def verify_decoder_protocol(identity):
         if (identity.get("numeric_contract") != CONTRACT or
                 identity.get("numeric_helper_sha256") != sha(REPO / "navsim/agents/drivemem_numeric_contract.py")):
             raise RuntimeError("Numeric budget protocol changed")
+    if exporter.endswith("_functional_export.py"):
+        from navsim.agents.drivemem_functional_contract import CONTRACT
+        if (identity.get("functional_contract") != CONTRACT or
+                identity.get("functional_helper_sha256") != sha(REPO / "navsim/agents/drivemem_functional_contract.py") or
+                identity.get("numeric_audit_helper_sha256") != sha(REPO / "navsim/agents/drivemem_numeric_contract.py")):
+            raise RuntimeError("Functional acceptance protocol changed")
     return exporter
 
 
@@ -70,7 +77,18 @@ def load_decoder_inputs(prior, addition, decoder):
     index, report = status(decoder, records, identity)
     if len(records) != 152 or report["status"] != "complete":
         raise RuntimeError("Complete 152-scene decoder export required")
-    if exporter.endswith(("_deterministic_export.py", "_numeric_export.py")):
+    if exporter.endswith("_functional_export.py"):
+        from pathlib import Path
+        from navsim.agents.drivemem_functional_contract import prior_audit_snapshot
+        prior_audit = identity["prior_audit"]
+        audit_root = Path(prior_audit["path"])
+        if prior_audit_snapshot(audit_root, bindings, records, REPO, read, sha) != prior_audit:
+            raise RuntimeError("Functional protocol prior audit changed")
+        if read(decoder / "runtime.json") != read(audit_root / "runtime.json"):
+            raise RuntimeError("Functional export runtime differs from prior audit")
+        for name, digest in prior_audit["files"].items():
+            bindings[str(audit_root / name)] = digest
+    if exporter.endswith(("_deterministic_export.py", "_numeric_export.py", "_functional_export.py")):
         from navsim.agents.drivemem_determinism import validate_runtime
         validate_runtime(decoder, index, read, sha)
         bindings[str(decoder / "runtime.json")] = sha(decoder / "runtime.json")

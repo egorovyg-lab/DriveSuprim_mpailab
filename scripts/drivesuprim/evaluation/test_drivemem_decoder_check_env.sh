@@ -8,7 +8,7 @@ cat > "$scratch/python" <<'STUB'
 exit 0
 STUB
 chmod +x "$scratch/python"
-for variant in decoder decoder_replay decoder_deterministic decoder_numeric; do
+for variant in decoder decoder_replay decoder_deterministic decoder_numeric decoder_functional; do
     if ! env PATH="$scratch:$PATH" NAVSIM_DEVKIT_ROOT="$repo" NAVSIM_EXP_ROOT="$scratch" \
         DRIVEMEM_DECODER_FEATURE_ROOT="$scratch/inherited-features" \
         DRIVEMEM_DECODER_MODEL_ROOT="$scratch/inherited-model" \
