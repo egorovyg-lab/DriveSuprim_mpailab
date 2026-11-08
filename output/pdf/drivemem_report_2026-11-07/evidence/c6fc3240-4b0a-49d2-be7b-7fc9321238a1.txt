@@ -1,0 +1,185 @@
+egorov@astra:/auto/ws/drivesuprim_workspace$ docker exec egorov_drivesuprim cat \
+  /workspace/exp_v2/drivemem_memory/experiments/pair_utility_expanded_v1/report.json
+{
+  "status": "complete",
+  "primary": "baseline",
+  "cohorts": {
+    "budget20gb_v1": {
+      "scenes": 24,
+      "sessions": 3,
+      "methods": {
+        "baseline": {
+          "score_mean": 0.887651020704365,
+          "gain_macro_pp": 0.0,
+          "gain_micro_pp": 0.0,
+          "sessions": 3,
+          "gain_ci95_sessions": [
+            0.0,
+            0.0
+          ],
+          "interventions": 0,
+          "coverage": 0.0,
+          "harm": 0,
+          "harm_among_interventions": null,
+          "quality_degraded": 0,
+          "improved": 0,
+          "absolute_violation": 0.08333333333333333,
+          "filtered_gain_pp": 0.0,
+          "oracle_reserve_fraction": 0.0,
+          "oracle_regret_mean_pp": 6.644948025042495
+        },
+        "direct_memory": {
+          "score_mean": 0.808081675926284,
+          "gain_macro_pp": -7.956934477808093,
+          "gain_micro_pp": -7.956934477808093,
+          "sessions": 3,
+          "gain_ci95_sessions": [
+            -15.91112904140598,
+            -0.16097498529539928
+          ],
+          "interventions": 22,
+          "coverage": 0.9166666666666666,
+          "harm": 3,
+          "harm_among_interventions": 0.13636363636363635,
+          "quality_degraded": 7,
+          "improved": 3,
+          "absolute_violation": 0.16666666666666666,
+          "filtered_gain_pp": -7.956934477808093,
+          "oracle_reserve_fraction": -1.1974411910854952,
+          "oracle_regret_mean_pp": 14.601882502850588
+        },
+        "direct_no_memory": {
+          "score_mean": 0.808081675926284,
+          "gain_macro_pp": -7.956934477808093,
+          "gain_micro_pp": -7.956934477808093,
+          "sessions": 3,
+          "gain_ci95_sessions": [
+            -15.91112904140598,
+            -0.16097498529539928
+          ],
+          "interventions": 22,
+          "coverage": 0.9166666666666666,
+          "harm": 3,
+          "harm_among_interventions": 0.13636363636363635,
+          "quality_degraded": 7,
+          "improved": 3,
+          "absolute_violation": 0.16666666666666666,
+          "filtered_gain_pp": -7.956934477808093,
+          "oracle_reserve_fraction": -1.1974411910854952,
+          "oracle_regret_mean_pp": 14.601882502850588
+        }
+      },
+      "paired_memory_minus_no_memory": {
+        "gain_macro_pp": 0.0,
+        "ci95_sessions": [
+          0.0,
+          0.0
+        ]
+      }
+    },
+    "validation_cached4_v1": {
+      "scenes": 16,
+      "sessions": 4,
+      "methods": {
+        "baseline": {
+          "score_mean": 0.856927430561976,
+          "gain_macro_pp": 0.0,
+          "gain_micro_pp": 0.0,
+          "sessions": 4,
+          "gain_ci95_sessions": [
+            0.0,
+            0.0
+          ],
+          "interventions": 0,
+          "coverage": 0.0,
+          "harm": 0,
+          "harm_among_interventions": null,
+          "quality_degraded": 0,
+          "improved": 0,
+          "absolute_violation": 0.125,
+          "filtered_gain_pp": 0.0,
+          "oracle_reserve_fraction": 0.0,
+          "oracle_regret_mean_pp": 7.246393786429989
+        },
+        "direct_memory": {
+          "score_mean": 0.7716632697690544,
+          "gain_macro_pp": -8.52641607929216,
+          "gain_micro_pp": -8.52641607929216,
+          "sessions": 4,
+          "gain_ci95_sessions": [
+            -19.88923267424864,
+            0.8445449575124346
+          ],
+          "interventions": 16,
+          "coverage": 1.0,
+          "harm": 3,
+          "harm_among_interventions": 0.1875,
+          "quality_degraded": 4,
+          "improved": 3,
+          "absolute_violation": 0.25,
+          "filtered_gain_pp": -8.52641607929216,
+          "oracle_reserve_fraction": -1.1766426626247133,
+          "oracle_regret_mean_pp": 15.772809865722149
+        },
+        "direct_no_memory": {
+          "score_mean": 0.7713727978266999,
+          "gain_macro_pp": -8.555463273527616,
+          "gain_micro_pp": -8.555463273527614,
+          "sessions": 4,
+          "gain_ci95_sessions": [
+            -19.88923267424864,
+            0.8445449575124346
+          ],
+          "interventions": 16,
+          "coverage": 1.0,
+          "harm": 3,
+          "harm_among_interventions": 0.1875,
+          "quality_degraded": 5,
+          "improved": 3,
+          "absolute_violation": 0.25,
+          "filtered_gain_pp": -8.555463273527614,
+          "oracle_reserve_fraction": -1.1806511660391772,
+          "oracle_regret_mean_pp": 15.801857059957605
+        }
+      },
+      "paired_memory_minus_no_memory": {
+        "gain_macro_pp": 0.029047194235455598,
+        "ci95_sessions": [
+          0.0,
+          0.0871415827063668
+        ]
+      }
+    }
+  },
+  "note": "Both query cohorts already inspected: exploratory development only. Matched M/F raw-utility supervision. Fixed simulator-enriched M, not continual evaluation. Local PDM, not full EPDMS. Empirical component harm, no risk guarantee.",
+  "training_counts": {
+    "memory_scenes": 64,
+    "fit_scenes": 48,
+    "memory_sessions": 8,
+    "fit_sessions": 6
+  },
+  "comparison_to_original": {
+    "budget20gb_v1": {
+      "direct_no_memory": {
+        "gain_change_pp": -7.862112627740498,
+        "harm_change": 1
+      },
+      "direct_memory": {
+        "gain_change_pp": -8.078269699418769,
+        "harm_change": 2
+      }
+    },
+    "validation_cached4_v1": {
+      "direct_no_memory": {
+        "gain_change_pp": -8.23577833486045,
+        "harm_change": 3
+      },
+      "direct_memory": {
+        "gain_change_pp": -8.61732444009115,
+        "harm_change": 3
+      }
+    }
+  },
+  "data_control_note": "Same algorithm refit on more M/F; h/lambda refitted by original procedure. New F includes uniform and challenge; CV keeps original pooled macro objectivefor this control. Not risk calibration or fresh validation."
+}
+egorov@astra:/auto/ws/drivesuprim_workspace$ 

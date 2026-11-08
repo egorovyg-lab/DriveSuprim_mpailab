@@ -1,0 +1,127 @@
+egorov@astra:/auto/ws/drivesuprim_workspace$ dm_new label && dm_new support-report
+Memory pilot stage=data-label root=/workspace/exp_v2/drivemem_memory/mf_new4_shard174_v1
+TOP16 9/32 token=041920075c215bab sampling=challenge_repair_drivable_area_compliance
+TOP16 10/32 token=184eacc3086b58f6 sampling=uniform
+TOP16 11/32 token=4fc633530236535d sampling=challenge_degrade_driving_direction_compliance
+TOP16 12/32 token=58ee96e75fa65658 sampling=uniform
+TOP16 13/32 token=6677826623005761 sampling=challenge_degrade_no_at_fault_collisions
+TOP16 14/32 token=66cb08a1c1c450da sampling=uniform
+TOP16 15/32 token=e5c08f8ac4435736 sampling=uniform
+TOP16 16/32 token=ed77c53e9c535cea sampling=challenge_repair_traffic_light_compliance
+TOP16 17/32 token=081b4bcef7a257ba sampling=challenge_degrade_drivable_area_compliance
+TOP16 18/32 token=10da11fe18fd5ba0 sampling=challenge_repair_driving_direction_compliance
+TOP16 19/32 token=2e32d7fdca765966 sampling=challenge_repair_no_at_fault_collisions
+TOP16 20/32 token=4f563ad4668f5991 sampling=challenge_degrade_time_to_collision_within_bound
+TOP16 21/32 token=56709875fe605bd8 sampling=uniform
+TOP16 22/32 token=66277028e31e5aec sampling=uniform
+TOP16 23/32 token=e095ece4e27e53b2 sampling=uniform
+TOP16 24/32 token=e1999b99461c5642 sampling=uniform
+TOP16 25/32 token=03a4d87fa15e5043 sampling=challenge_degrade_no_at_fault_collisions
+TOP16 26/32 token=05f01335f6e15d86 sampling=challenge_degrade_traffic_light_compliance
+TOP16 27/32 token=4f296098a0bc5318 sampling=uniform
+TOP16 28/32 token=51185ea6f10e5171 sampling=uniform
+TOP16 29/32 token=7aa62bdb13f251b7 sampling=challenge_repair_time_to_collision_within_bound
+TOP16 30/32 token=e9e8df15f7ea5c2f sampling=uniform
+TOP16 31/32 token=f196f319dfe85cd0 sampling=uniform
+TOP16 32/32 token=f804856a5c53578a sampling=challenge_repair_drivable_area_compliance
+{
+  "completed_scenes": 32,
+  "newly_completed_scenes": 24,
+  "seconds": 96.79253362864256
+}
+M/F BASELINE AND ACTION RESERVE (descriptive; uniform/challenge kept separate):
+                  scenes  baseline  oracle_gain_pp
+role   slice                                      
+fit    challenge       8  0.841896        1.100852
+       uniform         8  0.971943        0.501285
+memory challenge       8  0.935516        1.649806
+       uniform         8  0.936795        1.237973
+                                                 actions  below_one  degraded  improved
+role   slice     metric                                                                
+fit    challenge drivable_area_compliance            120          0         0         0
+                 driving_direction_compliance        120          0         0         0
+                 no_at_fault_collisions              120          5         5         0
+                 time_to_collision_within_bound      120          8         8         0
+                 traffic_light_compliance            120         15         0         0
+       uniform   drivable_area_compliance            120          0         0         0
+                 driving_direction_compliance        120          0         0         0
+                 no_at_fault_collisions              120          0         0         0
+                 time_to_collision_within_bound      120          0         0         0
+                 traffic_light_compliance            120          0         0         0
+memory challenge drivable_area_compliance            120         16        16         0
+                 driving_direction_compliance        120          0         0         0
+                 no_at_fault_collisions              120          1         1         0
+                 time_to_collision_within_bound      120          1         1         0
+                 traffic_light_compliance            120          0         0         0
+       uniform   drivable_area_compliance            120          0         0         0
+                 driving_direction_compliance        120          0         0         0
+                 no_at_fault_collisions              120          1         1         0
+                 time_to_collision_within_bound      120          1         1         0
+                 traffic_light_compliance            120          0         0         0
+
+SESSIONS WITH DEGRADATION:
+role    slice      metric                          session_id                
+fit     challenge  no_at_fault_collisions          2021.08.31.13.27.52_veh-40     5
+                   time_to_collision_within_bound  2021.08.31.13.27.52_veh-40     8
+memory  challenge  drivable_area_compliance        2021.08.17.16.48.45_veh-43     2
+                                                   2021.10.11.07.12.18_veh-50    14
+                   no_at_fault_collisions          2021.10.11.07.12.18_veh-50     1
+                   time_to_collision_within_bound  2021.10.11.07.12.18_veh-50     1
+        uniform    no_at_fault_collisions          2021.08.17.16.48.45_veh-43     1
+                   time_to_collision_within_bound  2021.08.17.16.48.45_veh-43     1
+{
+  "status": "complete",
+  "selected_scenes": 32,
+  "completed_scenes": 32,
+  "missing_tokens": [],
+  "note": "M/F collection only. No fresh holdout, calibrated risk or model success established."
+}
+Memory pilot stage=data-support-report root=/workspace/exp_v2/drivemem_memory/mf_new4_shard174_v1
+M/F BASELINE AND ACTION RESERVE (descriptive; uniform/challenge kept separate):
+                  scenes  baseline  oracle_gain_pp
+role   slice                                      
+fit    challenge       8  0.841896        1.100852
+       uniform         8  0.971943        0.501285
+memory challenge       8  0.935516        1.649806
+       uniform         8  0.936795        1.237973
+                                                 actions  below_one  degraded  improved
+role   slice     metric                                                                
+fit    challenge drivable_area_compliance            120          0         0         0
+                 driving_direction_compliance        120          0         0         0
+                 no_at_fault_collisions              120          5         5         0
+                 time_to_collision_within_bound      120          8         8         0
+                 traffic_light_compliance            120         15         0         0
+       uniform   drivable_area_compliance            120          0         0         0
+                 driving_direction_compliance        120          0         0         0
+                 no_at_fault_collisions              120          0         0         0
+                 time_to_collision_within_bound      120          0         0         0
+                 traffic_light_compliance            120          0         0         0
+memory challenge drivable_area_compliance            120         16        16         0
+                 driving_direction_compliance        120          0         0         0
+                 no_at_fault_collisions              120          1         1         0
+                 time_to_collision_within_bound      120          1         1         0
+                 traffic_light_compliance            120          0         0         0
+       uniform   drivable_area_compliance            120          0         0         0
+                 driving_direction_compliance        120          0         0         0
+                 no_at_fault_collisions              120          1         1         0
+                 time_to_collision_within_bound      120          1         1         0
+                 traffic_light_compliance            120          0         0         0
+
+SESSIONS WITH DEGRADATION:
+role    slice      metric                          session_id                
+fit     challenge  no_at_fault_collisions          2021.08.31.13.27.52_veh-40     5
+                   time_to_collision_within_bound  2021.08.31.13.27.52_veh-40     8
+memory  challenge  drivable_area_compliance        2021.08.17.16.48.45_veh-43     2
+                                                   2021.10.11.07.12.18_veh-50    14
+                   no_at_fault_collisions          2021.10.11.07.12.18_veh-50     1
+                   time_to_collision_within_bound  2021.10.11.07.12.18_veh-50     1
+        uniform    no_at_fault_collisions          2021.08.17.16.48.45_veh-43     1
+                   time_to_collision_within_bound  2021.08.17.16.48.45_veh-43     1
+{
+  "status": "complete",
+  "selected_scenes": 32,
+  "completed_scenes": 32,
+  "missing_tokens": [],
+  "note": "M/F collection only. No fresh holdout, calibrated risk or model success established."
+}
+egorov@astra:/auto/ws/drivesuprim_workspace$

@@ -1,0 +1,157 @@
+egorov@astra:/auto/ws/drivesuprim_workspace$ docker exec -w /workspace/DriveSuprim egorov_drivesuprim \
+  python -u scripts/drivesuprim/evaluation/audit_drivemem_completed_families.py \
+  /workspace/exp_v2/drivemem_memory/experiments/memory_top16_v1
+PROPOSALS budget20gb_v1 original_M_contrast: 4
+PROPOSALS budget20gb_v1 original_M_contrast: 8
+PROPOSALS budget20gb_v1 original_M_contrast: 12
+PROPOSALS budget20gb_v1 original_M_contrast: 16
+PROPOSALS budget20gb_v1 original_M_contrast: 20
+PROPOSALS budget20gb_v1 original_M_contrast: 24
+PROPOSALS budget20gb_v1 original_M_absolute: 4
+PROPOSALS budget20gb_v1 original_M_absolute: 8
+PROPOSALS budget20gb_v1 original_M_absolute: 12
+PROPOSALS budget20gb_v1 original_M_absolute: 16
+PROPOSALS budget20gb_v1 original_M_absolute: 20
+PROPOSALS budget20gb_v1 original_M_absolute: 24
+PROPOSALS budget20gb_v1 completed_M_contrast: 4
+PROPOSALS budget20gb_v1 completed_M_contrast: 8
+PROPOSALS budget20gb_v1 completed_M_contrast: 12
+PROPOSALS budget20gb_v1 completed_M_contrast: 16
+PROPOSALS budget20gb_v1 completed_M_contrast: 20
+PROPOSALS budget20gb_v1 completed_M_contrast: 24
+PROPOSALS budget20gb_v1 completed_M_absolute: 4
+PROPOSALS budget20gb_v1 completed_M_absolute: 8
+PROPOSALS budget20gb_v1 completed_M_absolute: 12
+PROPOSALS budget20gb_v1 completed_M_absolute: 16
+PROPOSALS budget20gb_v1 completed_M_absolute: 20
+PROPOSALS budget20gb_v1 completed_M_absolute: 24
+PROPOSALS validation_cached4_v1 original_M_contrast: 4
+PROPOSALS validation_cached4_v1 original_M_contrast: 8
+PROPOSALS validation_cached4_v1 original_M_contrast: 12
+PROPOSALS validation_cached4_v1 original_M_contrast: 16
+PROPOSALS validation_cached4_v1 original_M_absolute: 4
+PROPOSALS validation_cached4_v1 original_M_absolute: 8
+PROPOSALS validation_cached4_v1 original_M_absolute: 12
+PROPOSALS validation_cached4_v1 original_M_absolute: 16
+PROPOSALS validation_cached4_v1 completed_M_contrast: 4
+PROPOSALS validation_cached4_v1 completed_M_contrast: 8
+PROPOSALS validation_cached4_v1 completed_M_contrast: 12
+PROPOSALS validation_cached4_v1 completed_M_contrast: 16
+PROPOSALS validation_cached4_v1 completed_M_absolute: 4
+PROPOSALS validation_cached4_v1 completed_M_absolute: 8
+PROPOSALS validation_cached4_v1 completed_M_absolute: 12
+PROPOSALS validation_cached4_v1 completed_M_absolute: 16
+
+CAPACITY SUMMARY — ORACLES, NOT TRAINED SELECTORS:
+               cohort              variant  chosen_on_F  scenes  sessions  frozen_gain_pp  gate_oracle_gain_pp  retrieved_family_oracle_gain_pp  all_family_oracle_gain_pp  safe_all_family_oracle_gain_pp  action_oracle_gain_pp  family_improved_scenes
+        budget20gb_v1  original_M_contrast         True      24         3        4.235611             4.235611                         4.843391                   4.859772                        4.859772               6.644948                       7
+        budget20gb_v1  original_M_absolute        False      24         3        4.552360             4.552360                         4.870027                   4.929757                        4.929757               6.644948                       8
+        budget20gb_v1 completed_M_contrast        False      24         3        4.552360             4.552360                         6.170068                   6.198609                        6.198609               6.644948                       7
+        budget20gb_v1 completed_M_absolute        False      24         3        4.552360             4.552360                         4.698150                   4.741528                        4.741528               6.644948                       7
+validation_cached4_v1  original_M_contrast         True      16         4       -0.957941             0.000000                         0.058564                   0.588699                        0.588699               7.246394                       4
+validation_cached4_v1  original_M_absolute        False      16         4       -0.065084             0.000000                         0.088361                   0.671615                        0.671615               7.246394                       5
+validation_cached4_v1 completed_M_contrast        False      16         4       -0.065084             0.000000                         0.058564                   0.588699                        0.588699               7.246394                       4
+validation_cached4_v1 completed_M_absolute        False      16         4       -0.065084             0.000000                         0.088361                   0.732674                        0.732674               7.246394                       6
+
+BY SESSION: budget20gb_v1 original_M_contrast
+                            frozen_gain_pp  gate_oracle_gain_pp  retrieved_family_oracle_gain_pp  all_family_oracle_gain_pp  safe_all_family_oracle_gain_pp  action_oracle_gain_pp
+session_id                                                                                                                                                                        
+2021.06.09.12.39.51_veh-26        0.000000             0.000000                         0.484257                   0.484257                        0.484257               4.979212
+2021.07.16.16.08.35_veh-35        0.000000             0.000000                         0.125488                   0.174631                        0.174631               0.413093
+2021.10.11.07.47.13_veh-50       12.706832            12.706832                        13.920429                  13.920429                       13.920429              14.542538
+LARGEST ACTION-ORACLE GAPS:
+           token                 session_id  frozen_gain_pp  gate_oracle_gain_pp  retrieved_family_oracle_gain_pp  all_family_oracle_gain_pp  safe_all_family_oracle_gain_pp  action_oracle_gain_pp  policy_count  distinct_proposed_actions  degraded_proposed_actions  unsafe_proposed_actions  best_proposed_rank
+c77e7e3d0ff458e4 2021.06.09.12.39.51_veh-26             0.0                  0.0                         0.000000                   0.000000                        0.000000              35.714286            22                          1                          0                        0                   1
+dbfedc756de85252 2021.10.11.07.47.13_veh-50             0.0                  0.0                         0.000000                   0.000000                        0.000000               2.254302            48                          4                          3                        0                   1
+fb6ee63f31fd56ce 2021.10.11.07.47.13_veh-50             0.0                  0.0                         1.898277                   1.898277                        1.898277               4.017570            48                          2                          0                        0                   2
+
+BY SESSION: budget20gb_v1 original_M_absolute
+                            frozen_gain_pp  gate_oracle_gain_pp  retrieved_family_oracle_gain_pp  all_family_oracle_gain_pp  safe_all_family_oracle_gain_pp  action_oracle_gain_pp
+session_id                                                                                                                                                                        
+2021.06.09.12.39.51_veh-26         0.00000              0.00000                         0.484257                   0.484257                        0.484257               4.979212
+2021.07.16.16.08.35_veh-35         0.00000              0.00000                         0.125488                   0.304679                        0.304679               0.413093
+2021.10.11.07.47.13_veh-50        13.65708             13.65708                        14.000336                  14.000336                       14.000336              14.542538
+LARGEST ACTION-ORACLE GAPS:
+           token                 session_id  frozen_gain_pp  gate_oracle_gain_pp  retrieved_family_oracle_gain_pp  all_family_oracle_gain_pp  safe_all_family_oracle_gain_pp  action_oracle_gain_pp  policy_count  distinct_proposed_actions  degraded_proposed_actions  unsafe_proposed_actions  best_proposed_rank
+c77e7e3d0ff458e4 2021.06.09.12.39.51_veh-26             0.0                  0.0                         0.000000                   0.000000                        0.000000              35.714286            22                          2                          0                        0                   1
+fb6ee63f31fd56ce 2021.10.11.07.47.13_veh-50             0.0                  0.0                         1.898277                   1.898277                        1.898277               4.017570            48                          3                          1                        0                   2
+dbfedc756de85252 2021.10.11.07.47.13_veh-50             0.0                  0.0                         0.639254                   0.639254                        0.639254               2.254302            48                          4                          2                        0                   3
+
+BY SESSION: budget20gb_v1 completed_M_contrast
+                            frozen_gain_pp  gate_oracle_gain_pp  retrieved_family_oracle_gain_pp  all_family_oracle_gain_pp  safe_all_family_oracle_gain_pp  action_oracle_gain_pp
+session_id                                                                                                                                                                        
+2021.06.09.12.39.51_veh-26         0.00000              0.00000                         4.464286                   4.464286                        4.464286               4.979212
+2021.07.16.16.08.35_veh-35         0.00000              0.00000                         0.125488                   0.211113                        0.211113               0.413093
+2021.10.11.07.47.13_veh-50        13.65708             13.65708                        13.920429                  13.920429                       13.920429              14.542538
+LARGEST ACTION-ORACLE GAPS:
+           token                 session_id  frozen_gain_pp  gate_oracle_gain_pp  retrieved_family_oracle_gain_pp  all_family_oracle_gain_pp  safe_all_family_oracle_gain_pp  action_oracle_gain_pp  policy_count  distinct_proposed_actions  degraded_proposed_actions  unsafe_proposed_actions  best_proposed_rank
+8dc0c10eb60f51ac 2021.06.09.12.39.51_veh-26             0.0                  0.0                         0.000000                   0.000000                        0.000000               4.119414            22                          1                          0                        0                   1
+dbfedc756de85252 2021.10.11.07.47.13_veh-50             0.0                  0.0                         0.000000                   0.000000                        0.000000               2.254302            48                          4                          3                        0                   1
+fb6ee63f31fd56ce 2021.10.11.07.47.13_veh-50             0.0                  0.0                         1.898277                   1.898277                        1.898277               4.017570            48                          2                          0                        0                   2
+
+BY SESSION: budget20gb_v1 completed_M_absolute
+                            frozen_gain_pp  gate_oracle_gain_pp  retrieved_family_oracle_gain_pp  all_family_oracle_gain_pp  safe_all_family_oracle_gain_pp  action_oracle_gain_pp
+session_id                                                                                                                                                                        
+2021.06.09.12.39.51_veh-26         0.00000              0.00000                         0.048532                   0.048532                        0.048532               4.979212
+2021.07.16.16.08.35_veh-35         0.00000              0.00000                         0.125488                   0.255622                        0.255622               0.413093
+2021.10.11.07.47.13_veh-50        13.65708             13.65708                        13.920429                  13.920429                       13.920429              14.542538
+LARGEST ACTION-ORACLE GAPS:
+           token                 session_id  frozen_gain_pp  gate_oracle_gain_pp  retrieved_family_oracle_gain_pp  all_family_oracle_gain_pp  safe_all_family_oracle_gain_pp  action_oracle_gain_pp  policy_count  distinct_proposed_actions  degraded_proposed_actions  unsafe_proposed_actions  best_proposed_rank
+c77e7e3d0ff458e4 2021.06.09.12.39.51_veh-26             0.0                  0.0                         0.000000                   0.000000                        0.000000              35.714286            22                          2                          0                        0                   1
+8dc0c10eb60f51ac 2021.06.09.12.39.51_veh-26             0.0                  0.0                         0.388258                   0.388258                        0.388258               4.119414            22                          2                          0                        0                   6
+dbfedc756de85252 2021.10.11.07.47.13_veh-50             0.0                  0.0                         0.000000                   0.000000                        0.000000               2.254302            48                          3                          2                        0                   1
+
+BY SESSION: validation_cached4_v1 original_M_contrast
+                            frozen_gain_pp  gate_oracle_gain_pp  retrieved_family_oracle_gain_pp  all_family_oracle_gain_pp  safe_all_family_oracle_gain_pp  action_oracle_gain_pp
+session_id                                                                                                                                                                        
+2021.06.14.18.33.41_veh-35        0.000000                  0.0                         0.000000                   1.334668                        1.334668               1.677419
+2021.07.16.21.17.55_veh-26       -3.571429                  0.0                         0.000000                   0.095961                        0.095961               0.619135
+2021.08.17.13.15.12_veh-45       -0.260337                  0.0                         0.234258                   0.924166                        0.924166               0.924166
+2021.10.05.07.10.04_veh-52        0.000000                  0.0                         0.000000                   0.000000                        0.000000              25.764855
+LARGEST ACTION-ORACLE GAPS:
+           token                 session_id  frozen_gain_pp  gate_oracle_gain_pp  retrieved_family_oracle_gain_pp  all_family_oracle_gain_pp  safe_all_family_oracle_gain_pp  action_oracle_gain_pp  policy_count  distinct_proposed_actions  degraded_proposed_actions  unsafe_proposed_actions  best_proposed_rank
+a5e429799b6753f5 2021.10.05.07.10.04_veh-52             0.0                  0.0                              0.0                        0.0                             0.0              99.807953            22                          3                          0                        0                   1
+767b5a578408531d 2021.10.05.07.10.04_veh-52             0.0                  0.0                              0.0                        0.0                             0.0               1.924812            22                          1                          0                        0                   1
+4ba1b1466e3355a4 2021.07.16.21.17.55_veh-26             0.0                  0.0                              0.0                        0.0                             0.0               1.599017            22                          1                          0                        0                   1
+
+BY SESSION: validation_cached4_v1 original_M_absolute
+                            frozen_gain_pp  gate_oracle_gain_pp  retrieved_family_oracle_gain_pp  all_family_oracle_gain_pp  safe_all_family_oracle_gain_pp  action_oracle_gain_pp
+session_id                                                                                                                                                                        
+2021.06.14.18.33.41_veh-35        0.000000                  0.0                         0.000000                   1.334668                        1.334668               1.677419
+2021.07.16.21.17.55_veh-26        0.000000                  0.0                         0.000000                   0.095961                        0.095961               0.619135
+2021.08.17.13.15.12_veh-45       -0.260337                  0.0                         0.234258                   0.924166                        0.924166               0.924166
+2021.10.05.07.10.04_veh-52        0.000000                  0.0                         0.119187                   0.331663                        0.331663              25.764855
+LARGEST ACTION-ORACLE GAPS:
+           token                 session_id  frozen_gain_pp  gate_oracle_gain_pp  retrieved_family_oracle_gain_pp  all_family_oracle_gain_pp  safe_all_family_oracle_gain_pp  action_oracle_gain_pp  policy_count  distinct_proposed_actions  degraded_proposed_actions  unsafe_proposed_actions  best_proposed_rank
+a5e429799b6753f5 2021.10.05.07.10.04_veh-52             0.0                  0.0                              0.0                        0.0                             0.0              99.807953            22                          3                          0                        0                   1
+767b5a578408531d 2021.10.05.07.10.04_veh-52             0.0                  0.0                              0.0                        0.0                             0.0               1.924812            22                          2                          1                        1                   1
+4ba1b1466e3355a4 2021.07.16.21.17.55_veh-26             0.0                  0.0                              0.0                        0.0                             0.0               1.599017            22                          1                          0                        0                   1
+
+BY SESSION: validation_cached4_v1 completed_M_contrast
+                            frozen_gain_pp  gate_oracle_gain_pp  retrieved_family_oracle_gain_pp  all_family_oracle_gain_pp  safe_all_family_oracle_gain_pp  action_oracle_gain_pp
+session_id                                                                                                                                                                        
+2021.06.14.18.33.41_veh-35        0.000000                  0.0                         0.000000                   1.334668                        1.334668               1.677419
+2021.07.16.21.17.55_veh-26        0.000000                  0.0                         0.000000                   0.095961                        0.095961               0.619135
+2021.08.17.13.15.12_veh-45       -0.260337                  0.0                         0.234258                   0.924166                        0.924166               0.924166
+2021.10.05.07.10.04_veh-52        0.000000                  0.0                         0.000000                   0.000000                        0.000000              25.764855
+LARGEST ACTION-ORACLE GAPS:
+           token                 session_id  frozen_gain_pp  gate_oracle_gain_pp  retrieved_family_oracle_gain_pp  all_family_oracle_gain_pp  safe_all_family_oracle_gain_pp  action_oracle_gain_pp  policy_count  distinct_proposed_actions  degraded_proposed_actions  unsafe_proposed_actions  best_proposed_rank
+a5e429799b6753f5 2021.10.05.07.10.04_veh-52             0.0                  0.0                              0.0                        0.0                             0.0              99.807953            22                          2                          0                        0                   1
+767b5a578408531d 2021.10.05.07.10.04_veh-52             0.0                  0.0                              0.0                        0.0                             0.0               1.924812            22                          1                          0                        0                   1
+4ba1b1466e3355a4 2021.07.16.21.17.55_veh-26             0.0                  0.0                              0.0                        0.0                             0.0               1.599017            22                          1                          0                        0                   1
+
+BY SESSION: validation_cached4_v1 completed_M_absolute
+                            frozen_gain_pp  gate_oracle_gain_pp  retrieved_family_oracle_gain_pp  all_family_oracle_gain_pp  safe_all_family_oracle_gain_pp  action_oracle_gain_pp
+session_id                                                                                                                                                                        
+2021.06.14.18.33.41_veh-35        0.000000                  0.0                         0.000000                   1.334668                        1.334668               1.677419
+2021.07.16.21.17.55_veh-26        0.000000                  0.0                         0.000000                   0.095961                        0.095961               0.619135
+2021.08.17.13.15.12_veh-45       -0.260337                  0.0                         0.234258                   0.924166                        0.924166               0.924166
+2021.10.05.07.10.04_veh-52        0.000000                  0.0                         0.119187                   0.575900                        0.575900              25.764855
+LARGEST ACTION-ORACLE GAPS:
+           token                 session_id  frozen_gain_pp  gate_oracle_gain_pp  retrieved_family_oracle_gain_pp  all_family_oracle_gain_pp  safe_all_family_oracle_gain_pp  action_oracle_gain_pp  policy_count  distinct_proposed_actions  degraded_proposed_actions  unsafe_proposed_actions  best_proposed_rank
+a5e429799b6753f5 2021.10.05.07.10.04_veh-52             0.0                  0.0                              0.0                   0.000000                        0.000000              99.807953            22                          3                          0                        0                   1
+4ba1b1466e3355a4 2021.07.16.21.17.55_veh-26             0.0                  0.0                              0.0                   0.000000                        0.000000               1.599017            22                          1                          0                        0                   1
+7b4eb5e29d4b5a23 2021.06.14.18.33.41_veh-35             0.0                  0.0                              0.0                   1.288029                        1.288029               2.659035            48                          5                          2                        0                   4
+
+Read-only diagnostic on inspected data. No parameter selection/training. Families do not exhaust all donor combinations; oracle improvements are not deployable results. If enriched absolute families still offer little useful action diversity, stop tuning this residual-transfer family.
+egorov@astra:/auto/ws/drivesuprim_workspace$ 

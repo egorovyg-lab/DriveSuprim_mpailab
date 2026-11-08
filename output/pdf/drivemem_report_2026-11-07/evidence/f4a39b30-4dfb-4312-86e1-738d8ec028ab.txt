@@ -1,0 +1,92 @@
+egorov@astra:/auto/ws/drivesuprim_workspace$ docker exec -w /workspace/DriveSuprim egorov_drivesuprim \
+  python scripts/drivesuprim/evaluation/summarize_drivemem_decoder_result.py \
+  /workspace/exp_v2/drivemem_memory/experiments/component_decoder_functional_v1
+FROZEN F-CV SELECTION:
+{
+  "primary": "baseline",
+  "selected": {
+    "no_memory": {
+      "regularization": 1000.0,
+      "uniform_gain_macro_pp": 0.0,
+      "harm": 0,
+      "interventions": 3
+    },
+    "memory": {
+      "regularization": 100.0,
+      "uniform_gain_macro_pp": 0.0,
+      "harm": 0,
+      "interventions": 2
+    },
+    "random": {
+      "regularization": 1000.0,
+      "uniform_gain_macro_pp": 0.0,
+      "harm": 0,
+      "interventions": 2
+    },
+    "shuffled": {
+      "regularization": 1000.0,
+      "uniform_gain_macro_pp": 0.0,
+      "harm": 0,
+      "interventions": 4
+    }
+  }
+}
+
+COHORT: budget20gb_v1
+GAIN PP BY SESSION:
+method                      memory_component  memory_guarded  no_memory_component  no_memory_guarded  random_component  shuffled_component
+session_id                                                                                                                                
+2021.06.09.12.39.51_veh-26          0.000000        0.000000             0.000000           0.000000          0.000000            0.000000
+2021.07.16.16.08.35_veh-35          0.000000        0.000000             0.133780          -0.115676         -0.115676           -0.115676
+2021.10.11.07.47.13_veh-50         12.196011       12.196011            -0.773892          -0.359048         11.753762           -0.773892
+
+INTERVENTIONS: memory_guarded
+           token                 session_id  candidate_id  baseline_score  raw_score  raw_gain_pp  raw_harm  raw_quality_degraded  raw_delta_no_at_fault_collisions  raw_delta_drivable_area_compliance  raw_delta_driving_direction_compliance  raw_delta_traffic_light_compliance  raw_delta_ego_progress  raw_delta_time_to_collision_within_bound  raw_delta_lane_keeping  raw_delta_history_comfort
+f27a618a5c7458ee 2021.10.11.07.47.13_veh-50          6143         0.00000   1.000000    100.00000     False                 False                               0.0                                 1.0                                     0.0                                 0.0                0.000000                                       0.0                     0.0                        0.0
+dbfedc756de85252 2021.10.11.07.47.13_veh-50           249         0.91945   0.895131     -2.43191     False                  True                               0.0                                 0.0                                     0.0                                 0.0               -0.068093                                       0.0                     0.0                        0.0
+LEAVE-ONE-SESSION-OUT (diagnostic; no refitting):
+2021.06.09.12.39.51_veh-26 excluded -> 6.098006 pp
+2021.07.16.16.08.35_veh-35 excluded -> 6.098006 pp
+2021.10.11.07.47.13_veh-50 excluded -> 0.000000 pp
+
+INTERVENTIONS: memory_component
+           token                 session_id  candidate_id  baseline_score  raw_score  raw_gain_pp  raw_harm  raw_quality_degraded  raw_delta_no_at_fault_collisions  raw_delta_drivable_area_compliance  raw_delta_driving_direction_compliance  raw_delta_traffic_light_compliance  raw_delta_ego_progress  raw_delta_time_to_collision_within_bound  raw_delta_lane_keeping  raw_delta_history_comfort
+539eba3476c952fa 2021.06.09.12.39.51_veh-26          4109         1.00000   1.000000      0.00000     False                 False                               0.0                                 0.0                                     0.0                                 0.0                0.000000                                       0.0                     0.0                        0.0
+f221518470775b5f 2021.06.09.12.39.51_veh-26          4767         1.00000   1.000000      0.00000     False                 False                               0.0                                 0.0                                     0.0                                 0.0                0.000000                                       0.0                     0.0                        0.0
+fabca9b9e2805a4e 2021.07.16.16.08.35_veh-35          6463         1.00000   1.000000      0.00000     False                 False                               0.0                                 0.0                                     0.0                                 0.0                0.000000                                       0.0                     0.0                        0.0
+f27a618a5c7458ee 2021.10.11.07.47.13_veh-50          6143         0.00000   1.000000    100.00000     False                 False                               0.0                                 1.0                                     0.0                                 0.0                0.000000                                       0.0                     0.0                        0.0
+dbfedc756de85252 2021.10.11.07.47.13_veh-50           249         0.91945   0.895131     -2.43191     False                  True                               0.0                                 0.0                                     0.0                                 0.0               -0.068093                                       0.0                     0.0                        0.0
+LEAVE-ONE-SESSION-OUT (diagnostic; no refitting):
+2021.06.09.12.39.51_veh-26 excluded -> 6.098006 pp
+2021.07.16.16.08.35_veh-35 excluded -> 6.098006 pp
+2021.10.11.07.47.13_veh-50 excluded -> 0.000000 pp
+
+COHORT: validation_cached4_v1
+GAIN PP BY SESSION:
+method                      memory_component  memory_guarded  no_memory_component  no_memory_guarded  random_component  shuffled_component
+session_id                                                                                                                                
+2021.06.14.18.33.41_veh-35          0.000000             0.0             0.000000                0.0         -0.276891            0.000000
+2021.07.16.21.17.55_veh-26          0.014417             0.0            -0.057108                0.0         -0.057108           -0.057108
+2021.08.17.13.15.12_veh-45          0.000000             0.0             0.000000                0.0          0.000000            0.000000
+2021.10.05.07.10.04_veh-52          0.331663             0.0             0.481203                0.0         -0.722162            0.000000
+
+INTERVENTIONS: memory_guarded
+Empty DataFrame
+Columns: [token, session_id, candidate_id, baseline_score, raw_score, raw_gain_pp, raw_harm, raw_quality_degraded, raw_delta_no_at_fault_collisions, raw_delta_drivable_area_compliance, raw_delta_driving_direction_compliance, raw_delta_traffic_light_compliance, raw_delta_ego_progress, raw_delta_time_to_collision_within_bound, raw_delta_lane_keeping, raw_delta_history_comfort]
+Index: []
+LEAVE-ONE-SESSION-OUT (diagnostic; no refitting):
+2021.06.14.18.33.41_veh-35 excluded -> 0.000000 pp
+2021.07.16.21.17.55_veh-26 excluded -> 0.000000 pp
+2021.08.17.13.15.12_veh-45 excluded -> 0.000000 pp
+2021.10.05.07.10.04_veh-52 excluded -> 0.000000 pp
+
+INTERVENTIONS: memory_component
+           token                 session_id  candidate_id  baseline_score  raw_score  raw_gain_pp  raw_harm  raw_quality_degraded  raw_delta_no_at_fault_collisions  raw_delta_drivable_area_compliance  raw_delta_driving_direction_compliance  raw_delta_traffic_light_compliance  raw_delta_ego_progress  raw_delta_time_to_collision_within_bound  raw_delta_lane_keeping  raw_delta_history_comfort
+c2f8efa8358050de 2021.07.16.21.17.55_veh-26          6536        0.990574   0.991150     0.057670     False                 False                               0.0                                 0.0                                     0.0                                 0.0                0.001615                                       0.0                     0.0                        0.0
+3f526a6123c157e4 2021.10.05.07.10.04_veh-52          7074        0.984732   0.997999     1.326653     False                 False                               0.0                                 0.0                                     0.0                                 0.0                0.037146                                       0.0                     0.0                        0.0
+LEAVE-ONE-SESSION-OUT (diagnostic; no refitting):
+2021.06.14.18.33.41_veh-35 excluded -> 0.115360 pp
+2021.07.16.21.17.55_veh-26 excluded -> 0.110554 pp
+2021.08.17.13.15.12_veh-45 excluded -> 0.115360 pp
+2021.10.05.07.10.04_veh-52 excluded -> 0.004806 pp
+egorov@astra:/auto/ws/drivesuprim_workspace$ 

@@ -1,0 +1,64 @@
+egorov@astra:/auto/ws/drivesuprim_workspace$ docker exec -w /workspace/DriveSuprim egorov_drivesuprim \
+  python -u scripts/drivesuprim/evaluation/audit_drivemem_score_ceiling.py \
+  /workspace/exp_v2/drivemem_memory/experiments/action_transfer_v2 \
+  /workspace/exp_v2/drivemem_memory/validation_cached4_v1
+DIAGNOSTIC ONLY; no training or new labels. Frozen primary: B3
+
+COHORT: /workspace/exp_v2/drivemem_memory/budget20gb_v1 SCENES: 24 SESSIONS: 3
+MEAN DIAGNOSTIC GAINS:
+action_oracle_gain_pp                   6.644948
+anchored_ceiling_gain_pp                6.644948
+oracle_heads_absolute_beta05_gain_pp    6.518474
+oracle_heads_absolute_beta10_gain_pp    6.585768
+oracle_heads_contrast_beta05_gain_pp    6.518474
+oracle_heads_contrast_beta10_gain_pp    5.097673
+BY SESSION:
+                            action_oracle_gain_pp  anchored_ceiling_gain_pp  oracle_heads_absolute_beta05_gain_pp  oracle_heads_absolute_beta10_gain_pp  oracle_heads_contrast_beta05_gain_pp  oracle_heads_contrast_beta10_gain_pp
+session_id                        
+2021.06.09.12.39.51_veh-26               4.979212                  4.979212                              4.948542                              4.948542                              4.948542                0.484257
+2021.07.16.16.08.35_veh-35               0.413093                  0.413093                              0.404925                              0.404925                              0.404925                0.404925
+2021.10.11.07.47.13_veh-50              14.542538                 14.542538                             14.201956                             14.403837                             14.201956               14.403837
+ORACLE-POSITIVE CASES:
+           token                 session_id  action_oracle_gain_pp  oracle_rank  anchored_ceiling_gain_pp  reachable_candidates  any_optimal_reachable  optimal_ceiling_margin  baseline_metric_slack  oracle_heads_absolute_beta05_gain_pp  oracle_heads_absolute_beta10_gain_pp  oracle_heads_contrast_beta05_gain_pp  oracle_heads_contrast_beta10_gain_pp
+c77e7e3d0ff458e4 2021.06.09.12.39.51_veh-26              35.714286            2                 35.714286                    13                   True                0.080764               0.143116                       35.714286                             35.714286                             35.714286                              0.000000
+8dc0c10eb60f51ac 2021.06.09.12.39.51_veh-26               4.119414           16                  4.119414                    16                   True                0.932311               0.949011                        3.874052                              3.874052                              3.874052                              3.874052
+bb1dc3a17211547e 2021.07.16.16.08.35_veh-35               1.295762            8                  1.295762                    16                   True                0.133197               0.183582                        1.295762                              1.295762                              1.295762                              1.295762
+4f2fedff10035d63 2021.07.16.16.08.35_veh-35               0.575462            9                  0.575462                    16                   True                0.068106               0.084791                        0.575462                              0.575462                              0.575462                              0.575462
+48bdc41174c55f59 2021.07.16.16.08.35_veh-35               1.433523           16                  1.433523                    16                   True                0.202034               0.245016                        1.368178                              1.368178                              1.368178                              1.368178
+f27a618a5c7458ee 2021.10.11.07.47.13_veh-50             100.000000            2                100.000000                    16                   True                0.661809               0.641580                      100.000000                            100.000000                            100.000000                            100.000000
+d0539ff2c79f5bde 2021.10.11.07.47.13_veh-50               0.583214            7                  0.583214                    16                   True                0.996046               1.324129                        0.000000                              0.000000                              0.000000                              0.000000
+8597dd83e37b5e5b 2021.10.11.07.47.13_veh-50               1.212535            8                  1.212535                    16                   True                0.454631               0.512827                        0.983955                              0.983955                              0.983955                              0.983955
+fb6ee63f31fd56ce 2021.10.11.07.47.13_veh-50               4.017570            8                  4.017570                    16                   True                1.454706               1.446826                        3.719754                              3.719754                              3.719754                              3.719754
+dbfedc756de85252 2021.10.11.07.47.13_veh-50               2.254302           14                  2.254302                    16                   True                0.939183               1.035503                        0.639254                              2.254302                              0.639254                              2.254302
+7233f453d6425baf 2021.10.11.07.47.13_veh-50               8.272686            7                  8.272686                    16                   True                2.300975               2.148211                        8.272686                              8.272686                              8.272686                              8.272686
+Oracle-positive cases with NO optimal action reachable under anchoring: 0 / 11
+
+COHORT: /workspace/exp_v2/drivemem_memory/validation_cached4_v1 SCENES: 16 SESSIONS: 4
+MEAN DIAGNOSTIC GAINS:
+action_oracle_gain_pp                   7.246394
+anchored_ceiling_gain_pp                7.246394
+oracle_heads_absolute_beta05_gain_pp    7.058886
+oracle_heads_absolute_beta10_gain_pp    7.066825
+oracle_heads_contrast_beta05_gain_pp    0.820889
+oracle_heads_contrast_beta10_gain_pp    0.828828
+BY SESSION:
+                            action_oracle_gain_pp  anchored_ceiling_gain_pp  oracle_heads_absolute_beta05_gain_pp  oracle_heads_absolute_beta10_gain_pp  oracle_heads_contrast_beta05_gain_pp  oracle_heads_contrast_beta10_gain_pp
+session_id                        
+2021.06.14.18.33.41_veh-35               1.677419                  1.677419                              1.658805                              1.658805                              1.658805                1.658805
+2021.07.16.21.17.55_veh-26               0.619135                  0.619135                              0.219381                              0.251138                              0.219381                0.251138
+2021.08.17.13.15.12_veh-45               0.924166                  0.924166                              0.924166                              0.924166                              0.924166                0.924166
+2021.10.05.07.10.04_veh-52              25.764855                 25.764855                             25.433191                             25.433191                              0.481203                0.481203
+ORACLE-POSITIVE CASES:
+           token                 session_id  action_oracle_gain_pp  oracle_rank  anchored_ceiling_gain_pp  reachable_candidates  any_optimal_reachable  optimal_ceiling_margin  baseline_metric_slack  oracle_heads_absolute_beta05_gain_pp  oracle_heads_absolute_beta10_gain_pp  oracle_heads_contrast_beta05_gain_pp  oracle_heads_contrast_beta10_gain_pp
+c537bbd564185334 2021.06.14.18.33.41_veh-35               4.050641            3                  4.050641                    16                   True                0.957713               0.885787                        4.050641                              4.050641                              4.050641                              4.050641
+7b4eb5e29d4b5a23 2021.06.14.18.33.41_veh-35               2.659035           12                  2.659035                    16                   True                0.314272               0.328808                        2.659035                              2.659035                              2.659035                              2.659035
+4ba1b1466e3355a4 2021.07.16.21.17.55_veh-26               1.599017           12                  1.599017                    16                   True                0.489754               0.608051                        0.000000                              0.866374                              0.000000                              0.866374
+c2f8efa8358050de 2021.07.16.21.17.55_veh-26               0.877524            5                  0.877524                    16                   True                0.276781               0.278085                        0.877524                              0.877524                              0.877524                              0.877524
+aa0fd97b62e55a20 2021.08.17.13.15.12_veh-45               3.696665            6                  3.696665                    16                   True                0.704994               0.748723                        3.696665                              3.696665                              3.696665                              3.696665
+767b5a578408531d 2021.10.05.07.10.04_veh-52               1.924812            5                  1.924812                    16                   True                1.140036               1.229590                        1.924812                              1.924812                              1.924812                              1.924812
+a5e429799b6753f5 2021.10.05.07.10.04_veh-52              99.807953           16                 99.807953                    16                   True                0.828725               0.981931                       99.807953                             99.807953                              0.000000                              0.000000
+3f526a6123c157e4 2021.10.05.07.10.04_veh-52               1.326653            2                  1.326653                    16                   True                0.219909               0.311669                        0.000000                              0.000000                              0.000000                              0.000000
+Oracle-positive cases with NO optimal action reachable under anchoring: 0 / 8
+
+Anchored ceiling is an optimistic necessary-condition bound, not an achievable method. It applies when baseline head correction is zero, head values are clipped to [0,1], and the original non-metric score term is preserved. Oracle-head probes expose score/aggregation limitations but use current query outcomes and cannot be deployed.
+egorov@astra:/auto/ws/drivesuprim_workspace$ 

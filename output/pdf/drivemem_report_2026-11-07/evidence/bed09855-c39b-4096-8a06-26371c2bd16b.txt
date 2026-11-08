@@ -1,0 +1,170 @@
+egorov@astra:/auto/ws/drivesuprim_workspace$ docker exec \
+  -e OPENSCENE_DATA_ROOT=/workspace/exp_v2/drivemem_data \
+  -w /workspace/DriveSuprim egorov_drivesuprim \
+  bash scripts/drivesuprim/evaluation/run_drivemem_budget.sh report
+Memory pilot stage=report root=/workspace/exp_v2/drivemem_memory/budget20gb_v1
+{
+  "status": "planned",
+  "spec": {
+    "source_identity_sha256": "db5a09ddbbd72d82ea48679219a669c38d8cf9349ec400b5093b9fefdbdb00a0",
+    "source_split_identity": {
+      "splits": "00b88133cd5f3b15e691835bd0699fc34d66a071798c8999458b8d0dfb520e34",
+      "inventory": "fec94fd47a7f2a58cf2e1f29e8ed2139e4c4a80cfccdbe732aed014a73298b8a"
+    },
+    "budget_bytes": 20000000000,
+    "sessions": {
+      "memory": 6,
+      "fit": 4,
+      "development": 3,
+      "calibration": 2,
+      "test": 2
+    },
+    "scenes_per_session": 8,
+    "seed": 20261027,
+    "mapping_sha256": "52ee3d5eb7c4b7e3681bea6fe410458d3b30a2c8d480ac9882d6c6f5a6039bf2"
+  },
+  "root": "/workspace/exp_v2/drivemem_memory/budget20gb_v1",
+  "archive_count": 4,
+  "compressed_GB": 17.148088228,
+  "limit_GB": 20.0,
+  "largest_archive_GB": 5.675002023,
+  "selected_scenes": 136,
+  "selected_sessions": 17,
+  "required_images": 4352,
+  "roles": {
+    "memory": {
+      "sessions": 6,
+      "scenes": 48
+    },
+    "fit": {
+      "sessions": 4,
+      "scenes": 32
+    },
+    "development": {
+      "sessions": 3,
+      "scenes": 24
+    },
+    "calibration": {
+      "sessions": 2,
+      "scenes": 16
+    },
+    "test": {
+      "sessions": 2,
+      "scenes": 16
+    }
+  },
+  "archive_plan_sha256": "0d2e8c68e2ef97299c8ce94d285d75d53de1fe47d6319c67d8fd09cee87779e9",
+  "preparer_sha256": "2d196be5a716b1734a685dbe5262a17b1ea5524d55371de6eff971e12fa393e9",
+  "note": "No image archive downloaded. Budget covers unique compressed archives, not protocol overhead/retries. Selection favors archive availability/cost; this is a technical pilot, not representative benchmark evidence."
+}
+{
+  "status": "complete",
+  "role": "development",
+  "scenes": 24,
+  "sessions": 3,
+  "methods": {
+    "baseline": {
+      "raw_score": 0.887651020704365,
+      "raw_gain_pp": 0.0,
+      "filtered_score": 0.887651020704365,
+      "filtered_gain_pp": 0.0,
+      "gain_ci95_sessions": [
+        0.0,
+        0.0
+      ],
+      "coverage": 0.0,
+      "interventions": 0,
+      "harm_events": 0,
+      "quality_degradation_events": 0,
+      "improved_scenes": 0,
+      "harm_all_scenes": 0.0,
+      "harm_among_interventions": null,
+      "filtered_harm_among_interventions": null,
+      "quality_degradation_among_interventions": null,
+      "absolute_violation": 0.08333333333333333
+    },
+    "no_memory_ridge": {
+      "raw_score": 0.8850370664396601,
+      "raw_gain_pp": -0.2613954264704903,
+      "filtered_score": 0.8850370664396601,
+      "filtered_gain_pp": -0.2613954264704903,
+      "gain_ci95_sessions": [
+        -0.6688174569662184,
+        0.2593675837665996
+      ],
+      "coverage": 0.6666666666666666,
+      "interventions": 16,
+      "harm_events": 1,
+      "quality_degradation_events": 5,
+      "improved_scenes": 3,
+      "harm_all_scenes": 0.041666666666666664,
+      "harm_among_interventions": 0.0625,
+      "filtered_harm_among_interventions": 0.0625,
+      "quality_degradation_among_interventions": 0.3125,
+      "absolute_violation": 0.08333333333333333
+    },
+    "random_memory": {
+      "raw_score": 0.8879368334445387,
+      "raw_gain_pp": 0.028581274017378904,
+      "filtered_score": 0.8879368334445387,
+      "filtered_gain_pp": 0.028581274017378904,
+      "gain_ci95_sessions": [
+        0.0,
+        0.08574382205213671
+      ],
+      "coverage": 0.125,
+      "interventions": 3,
+      "harm_events": 0,
+      "quality_degradation_events": 0,
+      "improved_scenes": 1,
+      "harm_all_scenes": 0.0,
+      "harm_among_interventions": 0.0,
+      "filtered_harm_among_interventions": 0.0,
+      "quality_degradation_among_interventions": 0.0,
+      "absolute_violation": 0.08333333333333333
+    },
+    "similarity_memory": {
+      "raw_score": 0.887651020704365,
+      "raw_gain_pp": 0.0,
+      "filtered_score": 0.887651020704365,
+      "filtered_gain_pp": 0.0,
+      "gain_ci95_sessions": [
+        0.0,
+        0.0
+      ],
+      "coverage": 0.08333333333333333,
+      "interventions": 2,
+      "harm_events": 0,
+      "quality_degradation_events": 0,
+      "improved_scenes": 0,
+      "harm_all_scenes": 0.0,
+      "harm_among_interventions": 0.0,
+      "filtered_harm_among_interventions": 0.0,
+      "quality_degradation_among_interventions": 0.0,
+      "absolute_violation": 0.08333333333333333
+    },
+    "similarity_threshold": {
+      "raw_score": 0.887651020704365,
+      "raw_gain_pp": 0.0,
+      "filtered_score": 0.887651020704365,
+      "filtered_gain_pp": 0.0,
+      "gain_ci95_sessions": [
+        0.0,
+        0.0
+      ],
+      "coverage": 0.08333333333333333,
+      "interventions": 2,
+      "harm_events": 0,
+      "quality_degradation_events": 0,
+      "improved_scenes": 0,
+      "harm_all_scenes": 0.0,
+      "harm_among_interventions": 0.0,
+      "filtered_harm_among_interventions": 0.0,
+      "quality_degradation_among_interventions": 0.0,
+      "absolute_violation": 0.08333333333333333
+    }
+  },
+  "memory_mode": "enriched",
+  "note": "Local simulated metric; empirical harm only, no calibrated guarantee; all donor outcomes come from simulation."
+}
+egorov@astra:/auto/ws/drivesuprim_workspace$ 

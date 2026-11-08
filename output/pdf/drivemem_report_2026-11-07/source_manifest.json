@@ -1,0 +1,149 @@
+{
+  "date": "2026-11-07",
+  "git_head": "9d3ef022445a0e7cc2de9298a45b3e41dce265d2",
+  "evidence_scope": "User-supplied server excerpts, local code/docs, original PDF; no direct server access or independent reruns of server metrics.",
+  "sources": [
+    {
+      "path": "C:\\Users\\Colorful\\Downloads\\Telegram Desktop\\DriveMem_план_статьи_6_месяцев.pdf",
+      "sha256": "225c5a7f567620ec281c456496f55d6276ced9866606fe5dbb7ba7df0a151a8a"
+    },
+    {
+      "path": "docs\\navsim_v1_reproduction_findings.md",
+      "sha256": "c42e7d9f292b4581897a83d128e3e530db41430c52dd8fce7acfc287bb999699"
+    },
+    {
+      "path": "docs\\drivemem_revised_research_plan.md",
+      "sha256": "52c1ab4699b79f567948ccd6a1d719283a737e191484b062655d7f4793002eb5"
+    },
+    {
+      "path": "docs\\drivemem_component_utility_run.md",
+      "sha256": "3f9df6934f2994fdffc2ff8121b7826ff06388501e81dba35c65850b1d5eaa5f"
+    },
+    {
+      "path": "docs\\drivemem_decoder_functional_run.md",
+      "sha256": "35234de9b14498963fa724934d6c1c24aa9db5b613edbaf8fe9c68dce3644323"
+    },
+    {
+      "path": "C:\\Users\\Colorful\\.codex\\attachments\\bed09855-c39b-4096-8a06-26371c2bd16b\\Вставленный текст.txt",
+      "sha256": "bda50a42dfd4c672e986bd218160265ba965b0cb6098f21c63266626e968f6a5",
+      "included_copy": "evidence/bed09855-c39b-4096-8a06-26371c2bd16b.txt"
+    },
+    {
+      "path": "C:\\Users\\Colorful\\.codex\\attachments\\e024e701-9adb-4b96-93b2-bf5c27be5d00\\Вставленный текст.txt",
+      "sha256": "b1583cdcc24918e8c14847310aeefaba3f45e9c87750a22c63fb1baf899b57fc",
+      "included_copy": "evidence/e024e701-9adb-4b96-93b2-bf5c27be5d00.txt"
+    },
+    {
+      "path": "C:\\Users\\Colorful\\.codex\\attachments\\d5f3f03f-65ce-493a-ba25-8ca587fd92b1\\Вставленный текст.txt",
+      "sha256": "047b515aaa6d8b0dcce794e9a82cba8ebd00d3e6250d7ce8ca4cdaf7633b7eae",
+      "included_copy": "evidence/d5f3f03f-65ce-493a-ba25-8ca587fd92b1.txt"
+    },
+    {
+      "path": "C:\\Users\\Colorful\\.codex\\attachments\\5ad39327-57a3-4e42-8728-40d1345e5f13\\Вставленный текст.txt",
+      "sha256": "429a85b024ed57d345fd4c6dc9b5ecd1a379b3b3e1d1739bbc7ca1f34cbe6abf",
+      "included_copy": "evidence/5ad39327-57a3-4e42-8728-40d1345e5f13.txt"
+    },
+    {
+      "path": "C:\\Users\\Colorful\\.codex\\attachments\\23e027fa-75c3-4ebc-af3b-b088fbe72e63\\Вставленный текст.txt",
+      "sha256": "7ce31610fb8b1ae372305c0fec4af1e3605f6f3af97615ed9741a3efb652678d",
+      "included_copy": "evidence/23e027fa-75c3-4ebc-af3b-b088fbe72e63.txt"
+    },
+    {
+      "path": "C:\\Users\\Colorful\\.codex\\attachments\\09d892eb-790a-4713-9731-343e38e9116d\\Вставленный текст.txt",
+      "sha256": "d8e70e90a0738fa7b8c92a5d2da95cc9cb644ae3528d6426d6bb49881c91412b",
+      "included_copy": "evidence/09d892eb-790a-4713-9731-343e38e9116d.txt"
+    },
+    {
+      "path": "C:\\Users\\Colorful\\.codex\\attachments\\042c1568-25bc-4c9a-9ef7-917a92f72f7e\\Вставленный текст.txt",
+      "sha256": "77a4dbd138cff40cdd4d3aa1b080dbbeca6a06508953f42aa48802a31d5f54b2",
+      "included_copy": "evidence/042c1568-25bc-4c9a-9ef7-917a92f72f7e.txt"
+    },
+    {
+      "path": "C:\\Users\\Colorful\\.codex\\attachments\\36692838-3025-4e35-a423-c34b4c64644a\\Вставленный текст.txt",
+      "sha256": "25b68bc968e1cb548291e983e529b6975b26d230ddbde9afe6c7ec5282764bf3",
+      "included_copy": "evidence/36692838-3025-4e35-a423-c34b4c64644a.txt"
+    },
+    {
+      "path": "C:\\Users\\Colorful\\.codex\\attachments\\92f65e97-eea0-4b50-9ed3-e2dc5618733d\\Вставленный текст.txt",
+      "sha256": "18dcfee0509325ffea0787ecb6cbbe77a47756706d12d796e9e61f2af673c3a1",
+      "included_copy": "evidence/92f65e97-eea0-4b50-9ed3-e2dc5618733d.txt"
+    },
+    {
+      "path": "C:\\Users\\Colorful\\.codex\\attachments\\b6b4448e-182e-4f93-9431-6fef3d87c57f\\Вставленный текст.txt",
+      "sha256": "6a583e09a2c07561d3191835835bfc8b9f080c0cb20668f43595f8f5f8328f37",
+      "included_copy": "evidence/b6b4448e-182e-4f93-9431-6fef3d87c57f.txt"
+    },
+    {
+      "path": "C:\\Users\\Colorful\\.codex\\attachments\\8a88a7e5-8aa6-47ce-8c4e-e2dfd973962b\\Вставленный текст.txt",
+      "sha256": "cf62f1e3e91183557d83fd5400569324f3e7e92c387ecbcf3bbe2f6ed2bd84be",
+      "included_copy": "evidence/8a88a7e5-8aa6-47ce-8c4e-e2dfd973962b.txt"
+    },
+    {
+      "path": "C:\\Users\\Colorful\\.codex\\attachments\\9386cac6-bff0-4073-ae50-f922f3345f58\\Вставленный текст.txt",
+      "sha256": "7c9c03dd587458f591ce69d635fd3442c145b789eca7bce98b1335e4f987209b",
+      "included_copy": "evidence/9386cac6-bff0-4073-ae50-f922f3345f58.txt"
+    },
+    {
+      "path": "C:\\Users\\Colorful\\.codex\\attachments\\09bea6aa-6874-40ef-b20b-9bd4a2f8c372\\Вставленный текст.txt",
+      "sha256": "465cf949d10070d57e62e8dcbb5d6953aac9910a5c255c9d4834191459b40434",
+      "included_copy": "evidence/09bea6aa-6874-40ef-b20b-9bd4a2f8c372.txt"
+    },
+    {
+      "path": "C:\\Users\\Colorful\\.codex\\attachments\\c6fc3240-4b0a-49d2-be7b-7fc9321238a1\\Вставленный текст.txt",
+      "sha256": "3db3612f95428d377d44c1079e6bf7f0f8822a257e50c77780740362114b14fc",
+      "included_copy": "evidence/c6fc3240-4b0a-49d2-be7b-7fc9321238a1.txt"
+    },
+    {
+      "path": "C:\\Users\\Colorful\\.codex\\attachments\\b17abf93-c7d2-4cae-9de7-1cb86f5c9a54\\Вставленный текст.txt",
+      "sha256": "e95502a714efba9bd5f56b9d9082d0ec239c572a50d3ec134bd55f501a19ad9b",
+      "included_copy": "evidence/b17abf93-c7d2-4cae-9de7-1cb86f5c9a54.txt"
+    },
+    {
+      "path": "C:\\Users\\Colorful\\.codex\\attachments\\f38b7c94-f0d8-428b-b4a0-4067a5f4f722\\Вставленный текст.txt",
+      "sha256": "562cb0ba101558f2897f265af3d490e408896115bbdcd829e2fadc68d630ffd6",
+      "included_copy": "evidence/f38b7c94-f0d8-428b-b4a0-4067a5f4f722.txt"
+    },
+    {
+      "path": "C:\\Users\\Colorful\\.codex\\attachments\\f4a39b30-4dfb-4312-86e1-738d8ec028ab\\Вставленный текст.txt",
+      "sha256": "86a65d08deea87e91ba2b0d82593be76d7d6b741b9bb543281b417d133362a9e",
+      "included_copy": "evidence/f4a39b30-4dfb-4312-86e1-738d8ec028ab.txt"
+    },
+    {
+      "path": "navsim\\agents\\drivemem.py",
+      "sha256": "b1f720c65b25baac35a5654c2eeaf4ee8451ce9cf786f79a366bb10c80818f42"
+    },
+    {
+      "path": "navsim\\agents\\drivemem_action_transfer.py",
+      "sha256": "f64db416c824a1df9c72fd04fa12b95c544bb03fe2045e6b7bb596702b9f3bf2"
+    },
+    {
+      "path": "navsim\\agents\\drivemem_pair_utility.py",
+      "sha256": "2eb99d129af94dc33a451a8b887f7e8a041025fcc5c9c0dce4e6414e437eeeb7"
+    },
+    {
+      "path": "navsim\\agents\\drivemem_component_utility.py",
+      "sha256": "cc16aca33b077f3c622d88d888746c7156db5c3d36fb63dac32ac993b12167ad"
+    },
+    {
+      "path": "navsim\\agents\\drivemem_decoder_utility.py",
+      "sha256": "47e6eb29ab539789e529d30e01b029394f98ad2943e0c9106f26aaff178a2497"
+    },
+    {
+      "path": "navsim\\agents\\drivemem_determinism.py",
+      "sha256": "70163507b0b89fb6ed65c1ad77af8b1ce2d3b5321aa750b98934beb29a1e5408"
+    },
+    {
+      "path": "navsim\\agents\\drivemem_numeric_contract.py",
+      "sha256": "a0ee04d215aa8b955277aeb1e0ba3c3a8e786d56af6de783741c3befd6876b72"
+    },
+    {
+      "path": "navsim\\agents\\drivemem_functional_contract.py",
+      "sha256": "e383f73bacbce7bc664fc646eb6dce9d7868ec9fccd6ea365c3fc9c0db9530df"
+    },
+    {
+      "path": "C:\\Users\\Colorful\\.codex\\attachments\\1987459a-8056-47c9-8fbe-2d3bb1550133\\Вставленный текст.txt",
+      "sha256": "cc086eb510c0122ba6f189357ea57b2e0e48daaf2fe13b077d3b3986195896a5",
+      "included_copy": "evidence/1987459a-8056-47c9-8fbe-2d3bb1550133.txt"
+    }
+  ]
+}

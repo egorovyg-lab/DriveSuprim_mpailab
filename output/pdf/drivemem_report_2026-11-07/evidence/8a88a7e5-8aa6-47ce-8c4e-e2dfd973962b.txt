@@ -1,0 +1,163 @@
+egorov@astra:/auto/ws/drivesuprim_workspace$ docker exec -i egorov_drivesuprim python - <<'PY'
+from pathlib import Path
+import json
+import pandas as pd
+
+root = Path(
+    "/workspace/exp_v2/drivemem_memory/experiments/pair_utility_v1"
+)
+fit = json.loads((root / "fit.json").read_text())
+print("FROZEN FIT:")
+print(json.dumps({
+    k: fit[k] for k in ("primary", "h", "selected", "cv")
+}, indent=2))
+
+for cohort in ("budget20gb_v1", "validation_cached4_v1"):
+    df = pd.read_csv(
+        root / f"{cohort}_per_scene.csv", dtype={"token": str}
+    )
+    gains = df.pivot_table(
+        index="session_id", columns="method",
+        values="raw_gain_pp", aggfunc="mean",
+    )
+    gains["memory_minus_no_memory"] = (
+        gains["direct_memory"] - gains["direct_no_memory"]
+    )
+    print(f"\nGAIN BY SESSION: {cohort}")
+    print(gains.to_string())
+
+    print("\nLEAVE-ONE-SESSION-OUT:")
+    for sid in gains.index:
+        rest = gains.drop(index=sid)
+        print(
+            sid,
+            "memory_vs_baseline=", round(rest.direct_memory.mean(), 6),
+            "memory_vs_control=",
+            round(rest.memory_minus_no_memory.mean(), 6),
+        )
+
+    q = df[df.method == "direct_memory"]
+    columns = [
+        "token", "session_id", "candidate_id",
+        "raw_gain_pp", "raw_harm", "raw_quality_degraded",
+    ] + [c for c in df if c.startswith("raw_delta_")]
+    print("\nNON-NEUTRAL MEMORY DECISIONS:")
+    print(q.loc[
+        (q.raw_gain_pp.abs() > 1e-6) | q.raw_harm,
+        columns,
+    ].to_string(index=False))
+PY
+FROZEN FIT:
+{
+  "primary": "direct_memory",
+  "h": 0.00016024817783193238,
+  "selected": {
+    "direct_no_memory": {
+      "regularization": 100.0,
+      "gain_macro_pp": 1.4542764901888647,
+      "harm": 0
+    },
+    "direct_memory": {
+      "regularization": 1000.0,
+      "gain_macro_pp": 1.593241143219813,
+      "harm": 0
+    }
+  },
+  "cv": {
+    "direct_no_memory": [
+      {
+        "regularization": 1.0,
+        "gain_macro_pp": 0.7454499367780748,
+        "harm": 0
+      },
+      {
+        "regularization": 10.0,
+        "gain_macro_pp": 1.338184602926371,
+        "harm": 0
+      },
+      {
+        "regularization": 100.0,
+        "gain_macro_pp": 1.4542764901888647,
+        "harm": 0
+      },
+      {
+        "regularization": 1000.0,
+        "gain_macro_pp": -0.7628179656609346,
+        "harm": 1
+      }
+    ],
+    "direct_memory": [
+      {
+        "regularization": 1.0,
+        "gain_macro_pp": 1.238783378719873,
+        "harm": 0
+      },
+      {
+        "regularization": 10.0,
+        "gain_macro_pp": 1.1909053929980895,
+        "harm": 0
+      },
+      {
+        "regularization": 100.0,
+        "gain_macro_pp": 1.423060596339885,
+        "harm": 0
+      },
+      {
+        "regularization": 1000.0,
+        "gain_macro_pp": 1.593241143219813,
+        "harm": 0
+      }
+    ]
+  }
+}
+
+GAIN BY SESSION: budget20gb_v1
+method                      baseline  direct_memory  direct_no_memory  memory_minus_no_memory
+session_id                                                                                   
+2021.06.09.12.39.51_veh-26       0.0       4.948542          4.310182                0.638360
+2021.07.16.16.08.35_veh-35       0.0      -0.321150         -0.344070                0.022920
+2021.10.11.07.47.13_veh-50       0.0      -4.263387         -4.250578               -0.012809
+
+LEAVE-ONE-SESSION-OUT:
+2021.06.09.12.39.51_veh-26 memory_vs_baseline= -2.292268 memory_vs_control= 0.005055
+2021.07.16.16.08.35_veh-35 memory_vs_baseline= 0.342578 memory_vs_control= 0.312776
+2021.10.11.07.47.13_veh-50 memory_vs_baseline= 2.313696 memory_vs_control= 0.33064
+
+NON-NEUTRAL MEMORY DECISIONS:
+           token                 session_id  candidate_id  raw_gain_pp  raw_harm  raw_quality_degraded  raw_delta_no_at_fault_collisions  raw_delta_drivable_area_compliance  raw_delta_driving_direction_compliance  raw_delta_traffic_light_compliance  raw_delta_ego_progress  raw_delta_time_to_collision_within_bound  raw_delta_lane_keeping  raw_delta_history_comfort
+c77e7e3d0ff458e4 2021.06.09.12.39.51_veh-26          2165    35.714286     False                 False                               0.0                                 0.0                                     0.0                                 0.0                0.000000                                       1.0                     0.0                        0.0
+8dc0c10eb60f51ac 2021.06.09.12.39.51_veh-26           395     3.874052     False                 False                               0.0                                 0.0                                     0.0                                 0.0                0.108473                                       0.0                     0.0                        0.0
+bb1dc3a17211547e 2021.07.16.16.08.35_veh-35          4209    -1.096652     False                  True                               0.0                                 0.0                                     0.0                                 0.0               -0.030706                                       0.0                     0.0                        0.0
+4f2fedff10035d63 2021.07.16.16.08.35_veh-35          8168    -0.124325     False                  True                               0.0                                 0.0                                     0.0                                 0.0               -0.003481                                       0.0                     0.0                        0.0
+48bdc41174c55f59 2021.07.16.16.08.35_veh-35          2965    -1.348223     False                  True                               0.0                                 0.0                                     0.0                                 0.0               -0.037750                                       0.0                     0.0                        0.0
+d0539ff2c79f5bde 2021.10.11.07.47.13_veh-50          6404    -0.966422     False                  True                               0.0                                 0.0                                     0.0                                 0.0               -0.027060                                       0.0                     0.0                        0.0
+8597dd83e37b5e5b 2021.10.11.07.47.13_veh-50          6942     1.192469     False                 False                               0.0                                 0.0                                     0.0                                 0.0                0.033389                                       0.0                     0.0                        0.0
+fb6ee63f31fd56ce 2021.10.11.07.47.13_veh-50            81     3.520545     False                 False                               0.0                                 0.0                                     0.0                                 0.0                0.098575                                       0.0                     0.0                        0.0
+dbfedc756de85252 2021.10.11.07.47.13_veh-50          6963     2.254302     False                 False                               0.0                                 0.0                                     0.0                                 0.0                0.063120                                       0.0                     0.0                        0.0
+31f2320ece515ff7 2021.10.11.07.47.13_veh-50          1425   -48.380674      True                  True                               0.0                                 0.0                                    -0.5                                 0.0               -0.063970                                       0.0                     0.0                        0.0
+7233f453d6425baf 2021.10.11.07.47.13_veh-50          6070     8.272686     False                 False                               0.0                                 0.0                                     0.0                                 0.0                0.231635                                       0.0                     0.0                        0.0
+
+GAIN BY SESSION: validation_cached4_v1
+method                      baseline  direct_memory  direct_no_memory  memory_minus_no_memory
+session_id                                                                                   
+2021.06.14.18.33.41_veh-35       0.0      -0.223276         -0.245776                0.022500
+2021.07.16.21.17.55_veh-26       0.0       0.435974          0.335486                0.100488
+2021.08.17.13.15.12_veh-45       0.0       0.924166         -0.595219                1.519386
+2021.10.05.07.10.04_veh-52       0.0      -0.773231         -0.773231                0.000000
+
+LEAVE-ONE-SESSION-OUT:
+2021.06.14.18.33.41_veh-35 memory_vs_baseline= 0.195636 memory_vs_control= 0.539958
+2021.07.16.21.17.55_veh-26 memory_vs_baseline= -0.024114 memory_vs_control= 0.513962
+2021.08.17.13.15.12_veh-45 memory_vs_baseline= -0.186844 memory_vs_control= 0.040996
+2021.10.05.07.10.04_veh-52 memory_vs_baseline= 0.378955 memory_vs_control= 0.547458
+
+NON-NEUTRAL MEMORY DECISIONS:
+           token                 session_id  candidate_id  raw_gain_pp  raw_harm  raw_quality_degraded  raw_delta_no_at_fault_collisions  raw_delta_drivable_area_compliance  raw_delta_driving_direction_compliance  raw_delta_traffic_light_compliance  raw_delta_ego_progress  raw_delta_time_to_collision_within_bound  raw_delta_lane_keeping  raw_delta_history_comfort
+c537bbd564185334 2021.06.14.18.33.41_veh-35          6945    -3.552139     False                  True                               0.0                                 0.0                                     0.0                                 0.0               -0.099460                                       0.0                     0.0                        0.0
+7b4eb5e29d4b5a23 2021.06.14.18.33.41_veh-35          4488     2.659035     False                 False                               0.0                                 0.0                                     0.0                                 0.0                0.074453                                       0.0                     0.0                        0.0
+4ba1b1466e3355a4 2021.07.16.21.17.55_veh-26          2008     0.866374     False                 False                               0.0                                 0.0                                     0.0                                 0.0                0.024258                                       0.0                     0.0                        0.0
+c2f8efa8358050de 2021.07.16.21.17.55_veh-26          5162     0.877524     False                 False                               0.0                                 0.0                                     0.0                                 0.0                0.024571                                       0.0                     0.0                        0.0
+aa0fd97b62e55a20 2021.08.17.13.15.12_veh-45          1665     3.696665     False                 False                               0.0                                 0.0                                     0.0                                 0.0                0.103507                                       0.0                     0.0                        0.0
+767b5a578408531d 2021.10.05.07.10.04_veh-52          5904     0.090695     False                 False                               0.0                                 0.0                                     0.0                                 0.0                0.002539                                       0.0                     0.0                        0.0
+3f526a6123c157e4 2021.10.05.07.10.04_veh-52          1578    -3.183620     False                  True                               0.0                                 0.0                                     0.0                                 0.0               -0.089141                                       0.0                     0.0                        0.0
+egorov@astra:/auto/ws/drivesuprim_workspace

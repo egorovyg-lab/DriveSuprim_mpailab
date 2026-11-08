@@ -1,0 +1,88 @@
+egorov@astra:/auto/ws/drivesuprim_workspace$ docker exec -w /workspace/DriveSuprim egorov_drivesuprim \
+  python -u scripts/drivesuprim/evaluation/audit_drivemem_action_support.py \
+  /workspace/exp_v2/drivemem_memory/experiments/action_transfer_v2 \
+  /workspace/exp_v2/drivemem_memory/validation_cached4_v1
+MEMORY LABEL COVERAGE BY DONOR MODEL RANK:
+rank_band  labels  scenes_with_labels  candidate_slots  labelled_fraction  below_one_no_at_fault_collisions  below_one_drivable_area_compliance  below_one_driving_direction_compliance  below_one_traffic_light_compliance  below_one_ego_progress  below_one_time_to_collision_within_bound  below_one_lane_keeping  below_one_history_comfort
+      1-8     384                  48              384 1.000000                                 0              1                                      16                          8                     188                            0                      88               8
+     9-16      15                  14              384 0.039062                                 0              0                                       1                          1                       6                            0                       3               0
+   17-256     369                  48            11520 0.032031                                 3              7                                      16                          6                     244                            8                      94               8
+{
+  "memory_scenes": 48,
+  "missing_M_top16_actions": 369,
+  "scorer_calls_if_M_top16_completed": 834,
+  "note": "Cost estimate only. No scoring or label changes performed."
+}
+
+COHORT: /workspace/exp_v2/drivemem_memory/budget20gb_v1
+MEAN RESERVE: {'gain8_pp': 6.511067118617331, 'gain16_pp': 6.644948025042495, 'increment9_16_pp': 0.1338809064251633}
+BY SESSION:
+                             gain8_pp  gain16_pp  increment9_16_pp
+session_id  
+2021.06.09.12.39.51_veh-26   4.948542   4.979212          0.030670
+2021.07.16.16.08.35_veh-35   0.244002   0.413093          0.169091
+2021.10.11.07.47.13_veh-50  14.340657  14.542538          0.201881
+ORACLE-POSITIVE CASES, SUPPORT IN THE RETRIEVED FIVE DONORS:
+           token                 session_id   gain8_pp  gain16_pp  increment9_16_pp  oracle_rank  oracle_vocab  oracle_min_distance_over_h  oracle_mean_nearest_distance_over_h  oracle_exact_supporting_donors  oracle_global_min_distance_over_h  oracle_global_exact_supporting_episodes
+c77e7e3d0ff458e4 2021.06.09.12.39.51_veh-26  35.714286  35.714286          0.000000            2            98  4.434490                            30.628635              0                           4.434490                          0
+8dc0c10eb60f51ac 2021.06.09.12.39.51_veh-26   3.874052   4.119414          0.245361           16          2869  7.920999                           110.726699              0                           7.920999                          0
+bb1dc3a17211547e 2021.07.16.16.08.35_veh-35   1.295762   1.295762          0.000000            8          2677  0.339597                             3.535303              0                           0.339597                          0
+4f2fedff10035d63 2021.07.16.16.08.35_veh-35   0.002549   0.575462          0.572913            9          5947 72.196409                           118.313775              0                          72.196409                          0
+48bdc41174c55f59 2021.07.16.16.08.35_veh-35   0.653704   1.433523          0.779819           16          8046  1.059055                             4.521501              0                           0.640899                          0
+f27a618a5c7458ee 2021.10.11.07.47.13_veh-50 100.000000 100.000000          0.000000            2           147  1.642639                             4.997047              0                           1.642639                          0
+d0539ff2c79f5bde 2021.10.11.07.47.13_veh-50   0.583214   0.583214          0.000000            7          4700  2.660062                            12.794506              0                           0.741832                          0
+8597dd83e37b5e5b 2021.10.11.07.47.13_veh-50   1.212535   1.212535          0.000000            8          3499  0.243550                             5.183736              0                           0.243550                          0
+fb6ee63f31fd56ce 2021.10.11.07.47.13_veh-50   4.017570   4.017570          0.000000            8           150  0.243040                            20.211635              0                           0.243040                          0
+dbfedc756de85252 2021.10.11.07.47.13_veh-50   0.639254   2.254302          1.615049           14          6963  0.000000                            10.852538              1                           0.000000                          1
+7233f453d6425baf 2021.10.11.07.47.13_veh-50   8.272686   8.272686          0.000000            7          6070  8.352055                            56.810718              0                           8.352055                          0
+GEOMETRY SUPPORT MEANS (all / oracle-positive):
+                                       all_queries  oracle_positive
+baseline_scene_distance                   0.145759         0.203413
+baseline_min_distance_over_h              4.850424         7.863767
+baseline_mean_nearest_distance_over_h    15.401303        24.941898
+baseline_exact_supporting_donors          0.208333         0.181818
+baseline_kernel_ess                       2.599740         2.183306
+baseline_global_min_distance_over_h       3.627046         7.415095
+oracle_scene_distance                     0.145759         0.203413
+oracle_min_distance_over_h                5.375026         9.008354
+oracle_mean_nearest_distance_over_h      19.743604        34.416009
+oracle_exact_supporting_donors            0.166667         0.090909
+oracle_kernel_ess                         2.609729         2.205100
+oracle_global_min_distance_over_h         4.259940         8.795955
+
+COHORT: /workspace/exp_v2/drivemem_memory/validation_cached4_v1
+MEAN RESERVE: {'gain8_pp': 0.8450697191425653, 'gain16_pp': 7.246393786429989, 'increment9_16_pp': 6.401324067287423}
+BY SESSION:
+                            gain8_pp  gain16_pp  increment9_16_pp
+session_id 
+2021.06.14.18.33.41_veh-35  1.405555   1.677419          0.271864
+2021.07.16.21.17.55_veh-26  0.237691   0.619135          0.381444
+2021.08.17.13.15.12_veh-45  0.924166   0.924166          0.000000
+2021.10.05.07.10.04_veh-52  0.812866  25.764855         24.951988
+ORACLE-POSITIVE CASES, SUPPORT IN THE RETRIEVED FIVE DONORS:
+           token                 session_id  gain8_pp  gain16_pp  increment9_16_pp  oracle_rank  oracle_vocab  oracle_min_distance_over_h  oracle_mean_nearest_distance_over_h  oracle_exact_supporting_donors  oracle_global_min_distance_over_h  oracle_global_exact_supporting_episodes
+c537bbd564185334 2021.06.14.18.33.41_veh-35  4.050641   4.050641          0.000000            3          2894 2.888670                             6.174395             0                           0.344737                         0
+7b4eb5e29d4b5a23 2021.06.14.18.33.41_veh-35  1.571580   2.659035          1.087455           12          4488 0.129724                             0.922144             0                           0.129724                         0
+4ba1b1466e3355a4 2021.07.16.21.17.55_veh-26  0.073240   1.599017          1.525777           12          2511 3.444792                            13.046669             0                           3.444792                         0
+c2f8efa8358050de 2021.07.16.21.17.55_veh-26  0.877524   0.877524          0.000000            5          5162 0.484397                             6.976808             0                           0.117974                         0
+aa0fd97b62e55a20 2021.08.17.13.15.12_veh-45  3.696665   3.696665          0.000000            6          1665 5.906143                            26.835281             0                           5.906143                         0
+767b5a578408531d 2021.10.05.07.10.04_veh-52  1.924812   1.924812          0.000000            5          121431.810712                           120.541257             0                          31.810712                         0
+a5e429799b6753f5 2021.10.05.07.10.04_veh-52  0.000000  99.807953         99.807953           16          7915 0.698076                            10.719827             0                           0.589203                         0
+3f526a6123c157e4 2021.10.05.07.10.04_veh-52  1.326653   1.326653          0.000000            2          7074 4.345710                            56.081487             0                           0.921453                         0
+GEOMETRY SUPPORT MEANS (all / oracle-positive):
+                                       all_queries  oracle_positive
+baseline_scene_distance                   0.134873         0.137670
+baseline_min_distance_over_h              5.963623         3.364212
+baseline_mean_nearest_distance_over_h    23.195743        22.860337
+baseline_exact_supporting_donors          0.375000         0.000000
+baseline_kernel_ess                       2.833007         2.422782
+baseline_global_min_distance_over_h       3.332965         3.344720
+oracle_scene_distance                     0.134873         0.137670
+oracle_min_distance_over_h                7.388281         6.213528
+oracle_mean_nearest_distance_over_h      26.846691        30.162234
+oracle_exact_supporting_donors            0.375000         0.000000
+oracle_kernel_ess                         2.809854         2.376477
+oracle_global_min_distance_over_h         4.364651         5.408092
+
+Ranks are scene-relative. Geometric support is not evidence of outcome transferability. Oracle data used for diagnosis only; all inspected cohorts remain development data.
+egorov@astra:/auto/ws/drivesuprim_workspace$ 

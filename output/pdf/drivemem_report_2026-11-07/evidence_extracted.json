@@ -1,0 +1,3185 @@
+[
+  {
+    "attachment": "e024e701-9adb-4b96-93b2-bf5c27be5d00",
+    "objects": [
+      {
+        "status": "complete",
+        "primary": "B3",
+        "scenes": 24,
+        "sessions": 3,
+        "topk": 16,
+        "methods": {
+          "B0": {
+            "score_mean": 0.887651020704365,
+            "gain_macro_pp": 0.0,
+            "gain_micro_pp": 0.0,
+            "sessions": 3,
+            "gain_ci95_sessions": [
+              0.0,
+              0.0
+            ],
+            "interventions": 2,
+            "coverage": 0.08333333333333333,
+            "harm": 0,
+            "harm_among_interventions": 0.0,
+            "quality_degraded": 0,
+            "improved": 0,
+            "absolute_violation": 0.08333333333333333,
+            "filtered_gain_pp": 0.0,
+            "oracle_reserve_fraction": 0.0,
+            "oracle_regret_mean_pp": 6.644948025042495
+          },
+          "B1": {
+            "score_mean": 0.9331746208607733,
+            "gain_macro_pp": 4.552360015640837,
+            "gain_micro_pp": 4.552360015640837,
+            "sessions": 3,
+            "gain_ci95_sessions": [
+              0.0,
+              13.65708004692251
+            ],
+            "interventions": 7,
+            "coverage": 0.2916666666666667,
+            "harm": 0,
+            "harm_among_interventions": 0.0,
+            "quality_degraded": 0,
+            "improved": 3,
+            "absolute_violation": 0.041666666666666664,
+            "filtered_gain_pp": 4.552360015640837,
+            "oracle_reserve_fraction": 0.6850858725282091,
+            "oracle_regret_mean_pp": 2.092588009401657
+          },
+          "B2": {
+            "score_mean": 0.887651020704365,
+            "gain_macro_pp": 0.0,
+            "gain_micro_pp": 0.0,
+            "sessions": 3,
+            "gain_ci95_sessions": [
+              0.0,
+              0.0
+            ],
+            "interventions": 0,
+            "coverage": 0.0,
+            "harm": 0,
+            "harm_among_interventions": null,
+            "quality_degraded": 0,
+            "improved": 0,
+            "absolute_violation": 0.08333333333333333,
+            "filtered_gain_pp": 0.0,
+            "oracle_reserve_fraction": 0.0,
+            "oracle_regret_mean_pp": 6.644948025042495
+          },
+          "B3": {
+            "score_mean": 0.9300071260775881,
+            "gain_macro_pp": 4.23561053732231,
+            "gain_micro_pp": 4.235610537322309,
+            "sessions": 3,
+            "gain_ci95_sessions": [
+              0.0,
+              12.706831611966928
+            ],
+            "interventions": 4,
+            "coverage": 0.16666666666666666,
+            "harm": 0,
+            "harm_among_interventions": 0.0,
+            "quality_degraded": 0,
+            "improved": 3,
+            "absolute_violation": 0.041666666666666664,
+            "filtered_gain_pp": 4.235610537322309,
+            "oracle_reserve_fraction": 0.6374181590826246,
+            "oracle_regret_mean_pp": 2.409337487720185
+          },
+          "baseline": {
+            "score_mean": 0.887651020704365,
+            "gain_macro_pp": 0.0,
+            "gain_micro_pp": 0.0,
+            "sessions": 3,
+            "gain_ci95_sessions": [
+              0.0,
+              0.0
+            ],
+            "interventions": 0,
+            "coverage": 0.0,
+            "harm": 0,
+            "harm_among_interventions": null,
+            "quality_degraded": 0,
+            "improved": 0,
+            "absolute_violation": 0.08333333333333333,
+            "filtered_gain_pp": 0.0,
+            "oracle_reserve_fraction": 0.0,
+            "oracle_regret_mean_pp": 6.644948025042495
+          },
+          "no_memory_ridge_full": {
+            "score_mean": 0.900885175843173,
+            "gain_macro_pp": 1.3234155138808033,
+            "gain_micro_pp": 1.3234155138808033,
+            "sessions": 3,
+            "gain_ci95_sessions": [
+              -0.3784958021336813,
+              4.225417574212073
+            ],
+            "interventions": 17,
+            "coverage": 0.7083333333333334,
+            "harm": 0,
+            "harm_among_interventions": 0.0,
+            "quality_degraded": 3,
+            "improved": 7,
+            "absolute_violation": 0.041666666666666664,
+            "filtered_gain_pp": 1.3234155138808033,
+            "oracle_reserve_fraction": 0.19916115353999927,
+            "oracle_regret_mean_pp": 5.321532511161691
+          },
+          "random_0": {
+            "score_mean": 0.9281574015440569,
+            "gain_macro_pp": 4.050638083969206,
+            "gain_micro_pp": 4.050638083969206,
+            "sessions": 3,
+            "gain_ci95_sessions": [
+              -0.23886814007364063,
+              12.390782391981256
+            ],
+            "interventions": 5,
+            "coverage": 0.20833333333333334,
+            "harm": 0,
+            "harm_among_interventions": 0.0,
+            "quality_degraded": 2,
+            "improved": 2,
+            "absolute_violation": 0.041666666666666664,
+            "filtered_gain_pp": 4.050638083969206,
+            "oracle_reserve_fraction": 0.6095816052591777,
+            "oracle_regret_mean_pp": 2.594309941073288
+          },
+          "random_1": {
+            "score_mean": 0.8875442322773427,
+            "gain_macro_pp": -0.010678842702237698,
+            "gain_micro_pp": -0.010678842702237698,
+            "sessions": 3,
+            "gain_ci95_sessions": [
+              -0.23886814007364063,
+              0.20683161196692748
+            ],
+            "interventions": 6,
+            "coverage": 0.25,
+            "harm": 0,
+            "harm_among_interventions": 0.0,
+            "quality_degraded": 1,
+            "improved": 2,
+            "absolute_violation": 0.08333333333333333,
+            "filtered_gain_pp": -0.010678842702237698,
+            "oracle_reserve_fraction": -0.001607061885509542,
+            "oracle_regret_mean_pp": 6.655626867744732
+          },
+          "random_2": {
+            "score_mean": 0.9285436475474592,
+            "gain_macro_pp": 4.089262684309433,
+            "gain_micro_pp": 4.089262684309433,
+            "sessions": 3,
+            "gain_ci95_sessions": [
+              0.0,
+              12.267788052928298
+            ],
+            "interventions": 4,
+            "coverage": 0.16666666666666666,
+            "harm": 0,
+            "harm_among_interventions": 0.0,
+            "quality_degraded": 1,
+            "improved": 1,
+            "absolute_violation": 0.041666666666666664,
+            "filtered_gain_pp": 4.089262684309433,
+            "oracle_reserve_fraction": 0.6153942316626746,
+            "oracle_regret_mean_pp": 2.5556853407330613
+          },
+          "scene_only": {
+            "score_mean": 0.887651020704365,
+            "gain_macro_pp": 0.0,
+            "gain_micro_pp": 0.0,
+            "sessions": 3,
+            "gain_ci95_sessions": [
+              0.0,
+              0.0
+            ],
+            "interventions": 2,
+            "coverage": 0.08333333333333333,
+            "harm": 0,
+            "harm_among_interventions": 0.0,
+            "quality_degraded": 0,
+            "improved": 0,
+            "absolute_violation": 0.08333333333333333,
+            "filtered_gain_pp": 0.0,
+            "oracle_reserve_fraction": 0.0,
+            "oracle_regret_mean_pp": 6.644948025042495
+          }
+        },
+        "oracle_inputs": {
+          "539eba3476c952fa": "0268088f3316d20a20ac5623ef0f4f78693f76cff50fd1065315cf60c6242bbf",
+          "6d224a369e6d559d": "ec267d056eb6903fa20d9abc1452179bec7419950bcb99b6ff6f06227722e00d",
+          "c77e7e3d0ff458e4": "a6889bcf39859f977126ebc0c431d11a7531916c6a9210890a935d1767956533",
+          "9669e25d37d55fda": "650e01996602d09263ba7b5ce2d26fa258b228a9e3ed51be30840f7f5e9bfc01",
+          "908982b7b76d55b8": "24ac0c48d5ad91f15fd13cab7501d44b88f13dff646c8f17b6a01cf9b86ad57a",
+          "aba8aa62bb3b5de1": "90132f6ff03f43411e047b38fbd28066f8193950cb8a3059bca642af5f8f4e22",
+          "8dc0c10eb60f51ac": "ad1ff86d1c6d9aedbc96d80b1715bbd1e7dfd819c51ac752aa05bd4cb6c7537f",
+          "f221518470775b5f": "26813c67a6311acd537e078d355a2c55432342606e7e52cdf0258535c47fa7fb",
+          "2bd82ef18f655498": "71dbae055d0f3845de3b42dabb6f09d0cd24299bcb7d51da4fb467fe475c13b1",
+          "fabca9b9e2805a4e": "d479d1f1096a64c8e729756d876eee5ef5696531ee588e3756e06457b83cd3d4",
+          "ac7370c5c37957fe": "4d83780d588e100262c3238c12cc5cfb1647487328e53ed427a8acf774d37a1a",
+          "bb1dc3a17211547e": "154a6e4d50c18c131257b30c53a8a44cfb6e179d8f6ecdec019324a568e0e6b5",
+          "c003a3e1c2cd51f0": "6bbe71ce0a58c25880a6707cc57277611348fbe3d546a4cc4ae123606b8cb0db",
+          "4f2fedff10035d63": "4b000273feae41b0be7cecf44807ad9a62d6a88ffe557a4a3bab526524eb26e4",
+          "af4844e88a6a5009": "0d854389118b244478f39afc99c33ef312d5b3da47f367cd691ec475b1cc3bc7",
+          "48bdc41174c55f59": "20697c058ab85fd368bf185b3973696d4145132e70bc8728d3362d3fbd4e97c4",
+          "f27a618a5c7458ee": "6b844fa9b8fc21c8399405c5d186de53516000c4d400989b61f5d6379ae26b9d",
+          "cfd2ce4e362e5abd": "258c18b11f0c4aec35c5267a3f136293eb9d7e1842052277863006586f67f16a",
+          "d0539ff2c79f5bde": "ab8281091fa1bdf4a658b92aeb125b937e5a1c3d3b09c895e9d7d20cf7263ca3",
+          "8597dd83e37b5e5b": "bdb6099191b0369f60a7c9368a89374a75a31b5b05860a2447859d01782b1a2a",
+          "fb6ee63f31fd56ce": "382ea5d75386c5f273ed1632328b0edbdd79c257cd4cee0485fe1ed4caf25ebb",
+          "dbfedc756de85252": "f31e95202192bf18e9375f469860ace7becce7532699a58ab0c7bca2e20de592",
+          "31f2320ece515ff7": "b1550eb59c0d2b31469136fc15b5a49f580297cd1d476643cdef7278fd9e041c",
+          "7233f453d6425baf": "9b18bbff766b5939232086e1caaba7797396d774f6b00086910ae801378d2b90"
+        },
+        "note": "Exploratory development; local PDM, not full EPDMS. Enriched bank; no calibrated guarantee. Random seeds reported individually; no selection by development outcomes.",
+        "paired_primary_minus_ridge": {
+          "gain_macro_pp": 2.9121950234415066,
+          "ci95_sessions": [
+            -4.225417574212073,
+            13.08532741410061
+          ]
+        },
+        "random_seed_summary": {
+          "mean_gain_pp": 2.709740641858801,
+          "std_gain_pp": 1.9236916928867733
+        }
+      }
+    ]
+  },
+  {
+    "attachment": "d5f3f03f-65ce-493a-ba25-8ca587fd92b1",
+    "objects": [
+      {
+        "primary": "B3",
+        "token": "f27a618a5c7458ee",
+        "session_id": "2021.10.11.07.47.13_veh-50",
+        "baseline_local": 55,
+        "selected_local": 22,
+        "selected_vocab": 147,
+        "total_gain_sum_pp": 101.65465289573541,
+        "largest_gain_pp": 100.0,
+        "largest_share_of_net_gain": 0.983722802167919,
+        "gain_without_largest_micro_pp": 0.07194143024936608,
+        "gain_without_largest_macro_pp": 0.07879299503502
+      },
+      {
+        "status": "metadata_only",
+        "source": "/workspace/exp_v2/drivemem_memory/budget20gb_v1",
+        "inventory_run": "/workspace/exp_v2/drivemem_memory/pilot_v1",
+        "missing_metadata_log_files": 0,
+        "excluded_current_sessions": 17,
+        "also_preserving_original_calibration_test_sessions": 16,
+        "target_sessions": 12,
+        "scenes_per_session": 4,
+        "min_gap_s": 10.0,
+        "archives": [
+          {
+            "shard": 87,
+            "archive": "/workspace/exp_v2/drivemem_data/.downloads/drivemem_camera/openscene_sensor_trainval_camera_87.tgz",
+            "size_GB": 4.865398065,
+            "cached_size_matches": true,
+            "new_sessions": 2
+          },
+          {
+            "shard": 122,
+            "archive": "/workspace/exp_v2/drivemem_data/.downloads/drivemem_camera/openscene_sensor_trainval_camera_122.tgz",
+            "size_GB": 5.675002023,
+            "cached_size_matches": true,
+            "new_sessions": 0
+          },
+          {
+            "shard": 142,
+            "archive": "/workspace/exp_v2/drivemem_data/.downloads/drivemem_camera/openscene_sensor_trainval_camera_142.tgz",
+            "size_GB": 3.125691047,
+            "cached_size_matches": true,
+            "new_sessions": 1
+          },
+          {
+            "shard": 158,
+            "archive": "/workspace/exp_v2/drivemem_data/.downloads/drivemem_camera/openscene_sensor_trainval_camera_158.tgz",
+            "size_GB": 3.481997093,
+            "cached_size_matches": true,
+            "new_sessions": 1
+          }
+        ],
+        "available_new_sessions_without_image_transfer": 4,
+        "new_session_ids": [
+          "2021.06.14.18.33.41_veh-35",
+          "2021.07.16.21.17.55_veh-26",
+          "2021.08.17.13.15.12_veh-45",
+          "2021.10.05.07.10.04_veh-52"
+        ],
+        "new_sessions_in_original_four_shards": 4,
+        "target_shortfall": 8,
+        "eligible_logs_in_cache": {
+          "2021.06.14.18.33.41_veh-35": [
+            "2021.06.14.18.33.41_veh-35_03679_03787"
+          ],
+          "2021.07.16.21.17.55_veh-26": [
+            "2021.07.16.21.17.55_veh-26_03254_03336"
+          ],
+          "2021.08.17.13.15.12_veh-45": [
+            "2021.08.17.13.15.12_veh-45_00691_00794"
+          ],
+          "2021.10.05.07.10.04_veh-52": [
+            "2021.10.05.07.10.04_veh-52_00418_00563"
+          ]
+        },
+        "note": "No image archive downloaded; no split created; B3 remains frozen. Archive presence checked by size only; SHA256 verification is required before extraction. Existing C/T remain reserved. Pass--exclude-run for any other session set whose outcomes were already used. New sessions within the same archives do not remove archive-selection bias.",
+        "additional_archive_options_not_downloaded": [
+          {
+            "shard": 144,
+            "archive_path": "openscene-v1.1/openscene_sensor_trainval_camera/openscene_sensor_trainval_camera_144.tgz",
+            "additional_GB_upper_bound": 2.18913685,
+            "new_sessions": 4,
+            "session_ids": [
+              "2021.06.14.18.13.35_veh-26",
+              "2021.07.09.01.37.16_veh-26",
+              "2021.09.15.12.32.43_veh-28",
+              "2021.10.11.02.57.41_veh-50"
+            ],
+            "cached_size_matches": false
+          },
+          {
+            "shard": 18,
+            "archive_path": "openscene-v1.1/openscene_sensor_trainval_camera/openscene_sensor_trainval_camera_18.tgz",
+            "additional_GB_upper_bound": 3.368316082,
+            "new_sessions": 5,
+            "session_ids": [
+              "2021.06.08.17.25.03_veh-35",
+              "2021.06.23.17.31.36_veh-16",
+              "2021.07.24.16.48.51_veh-17",
+              "2021.08.24.14.35.46_veh-45",
+              "2021.09.14.15.03.51_veh-45"
+            ],
+            "cached_size_matches": false
+          },
+          {
+            "shard": 21,
+            "archive_path": "openscene-v1.1/openscene_sensor_trainval_camera/openscene_sensor_trainval_camera_21.tgz",
+            "additional_GB_upper_bound": 3.394483123,
+            "new_sessions": 5,
+            "session_ids": [
+              "2021.06.09.14.03.17_veh-12",
+              "2021.06.14.17.26.26_veh-38",
+              "2021.08.17.18.13.38_veh-45",
+              "2021.08.31.12.21.30_veh-40",
+              "2021.09.15.16.51.15_veh-28"
+            ],
+            "cached_size_matches": false
+          },
+          {
+            "shard": 190,
+            "archive_path": "openscene-v1.1/openscene_sensor_trainval_camera/openscene_sensor_trainval_camera_190.tgz",
+            "additional_GB_upper_bound": 3.7319607,
+            "new_sessions": 5,
+            "session_ids": [
+              "2021.06.09.14.58.55_veh-35",
+              "2021.06.09.17.37.09_veh-12",
+              "2021.06.09.20.26.11_veh-35",
+              "2021.06.14.17.26.26_veh-38",
+              "2021.08.31.14.01.15_veh-40"
+            ],
+            "cached_size_matches": false
+          },
+          {
+            "shard": 145,
+            "archive_path": "openscene-v1.1/openscene_sensor_trainval_camera/openscene_sensor_trainval_camera_145.tgz",
+            "additional_GB_upper_bound": 3.768687977,
+            "new_sessions": 5,
+            "session_ids": [
+              "2021.06.09.17.37.09_veh-12",
+              "2021.06.14.14.25.15_veh-26",
+              "2021.06.23.16.52.00_veh-26",
+              "2021.08.31.11.47.30_veh-40",
+              "2021.10.06.13.21.47_veh-28"
+            ],
+            "cached_size_matches": false
+          }
+        ],
+        "options_note": "Single-archive options can overlap in sessions; do not add counts blindly. No download is started."
+      }
+    ]
+  },
+  {
+    "attachment": "5ad39327-57a3-4e42-8728-40d1345e5f13",
+    "objects": [
+      {
+        "status": "complete",
+        "primary": "B3",
+        "scenes": 16,
+        "sessions": 4,
+        "methods": {
+          "B0": {
+            "score_mean": 0.856927430561976,
+            "gain_macro_pp": 0.0,
+            "gain_micro_pp": 0.0,
+            "sessions": 4,
+            "gain_ci95_sessions": [
+              0.0,
+              0.0
+            ],
+            "interventions": 1,
+            "coverage": 0.0625,
+            "harm": 0,
+            "harm_among_interventions": 0.0,
+            "quality_degraded": 0,
+            "improved": 0,
+            "absolute_violation": 0.125,
+            "filtered_gain_pp": 0.0
+          },
+          "B1": {
+            "score_mean": 0.856927430561976,
+            "gain_macro_pp": 0.0,
+            "gain_micro_pp": 0.0,
+            "sessions": 4,
+            "gain_ci95_sessions": [
+              0.0,
+              0.0
+            ],
+            "interventions": 1,
+            "coverage": 0.0625,
+            "harm": 0,
+            "harm_among_interventions": 0.0,
+            "quality_degraded": 0,
+            "improved": 0,
+            "absolute_violation": 0.125,
+            "filtered_gain_pp": 0.0
+          },
+          "B2": {
+            "score_mean": 0.856927430561976,
+            "gain_macro_pp": 0.0,
+            "gain_micro_pp": 0.0,
+            "sessions": 4,
+            "gain_ci95_sessions": [
+              0.0,
+              0.0
+            ],
+            "interventions": 0,
+            "coverage": 0.0,
+            "harm": 0,
+            "harm_among_interventions": null,
+            "quality_degraded": 0,
+            "improved": 0,
+            "absolute_violation": 0.125,
+            "filtered_gain_pp": 0.0
+          },
+          "B3": {
+            "score_mean": 0.8473480158894149,
+            "gain_macro_pp": -0.957941467256105,
+            "gain_micro_pp": -0.957941467256105,
+            "sessions": 4,
+            "gain_ci95_sessions": [
+              -2.6785714285714293,
+              0.0
+            ],
+            "interventions": 4,
+            "coverage": 0.25,
+            "harm": 0,
+            "harm_among_interventions": 0.0,
+            "quality_degraded": 2,
+            "improved": 0,
+            "absolute_violation": 0.125,
+            "filtered_gain_pp": -0.957941467256105
+          },
+          "baseline": {
+            "score_mean": 0.856927430561976,
+            "gain_macro_pp": 0.0,
+            "gain_micro_pp": 0.0,
+            "sessions": 4,
+            "gain_ci95_sessions": [
+              0.0,
+              0.0
+            ],
+            "interventions": 0,
+            "coverage": 0.0,
+            "harm": 0,
+            "harm_among_interventions": null,
+            "quality_degraded": 0,
+            "improved": 0,
+            "absolute_violation": 0.125,
+            "filtered_gain_pp": 0.0
+          },
+          "no_memory_ridge_full": {
+            "score_mean": 0.8481850660087178,
+            "gain_macro_pp": -0.8742364553258288,
+            "gain_micro_pp": -0.8742364553258289,
+            "sessions": 4,
+            "gain_ci95_sessions": [
+              -2.7218701622589965,
+              0.2736550954429137
+            ],
+            "interventions": 11,
+            "coverage": 0.6875,
+            "harm": 0,
+            "harm_among_interventions": 0.0,
+            "quality_degraded": 4,
+            "improved": 3,
+            "absolute_violation": 0.125,
+            "filtered_gain_pp": -0.8742364553258289
+          },
+          "random_0": {
+            "score_mean": 0.8479988591334044,
+            "gain_macro_pp": -0.8928571428571431,
+            "gain_micro_pp": -0.8928571428571431,
+            "sessions": 4,
+            "gain_ci95_sessions": [
+              -2.6785714285714293,
+              0.0
+            ],
+            "interventions": 2,
+            "coverage": 0.125,
+            "harm": 0,
+            "harm_among_interventions": 0.0,
+            "quality_degraded": 1,
+            "improved": 0,
+            "absolute_violation": 0.125,
+            "filtered_gain_pp": -0.8928571428571431
+          },
+          "random_1": {
+            "score_mean": 0.8577324488614613,
+            "gain_macro_pp": 0.08050182994853855,
+            "gain_micro_pp": 0.08050182994853855,
+            "sessions": 4,
+            "gain_ci95_sessions": [
+              0.0,
+              0.24150548984561565
+            ],
+            "interventions": 3,
+            "coverage": 0.1875,
+            "harm": 0,
+            "harm_among_interventions": 0.0,
+            "quality_degraded": 0,
+            "improved": 1,
+            "absolute_violation": 0.125,
+            "filtered_gain_pp": 0.08050182994853855
+          },
+          "random_2": {
+            "score_mean": 0.8473480158894149,
+            "gain_macro_pp": -0.957941467256105,
+            "gain_micro_pp": -0.957941467256105,
+            "sessions": 4,
+            "gain_ci95_sessions": [
+              -2.6785714285714293,
+              0.0
+            ],
+            "interventions": 2,
+            "coverage": 0.125,
+            "harm": 0,
+            "harm_among_interventions": 0.0,
+            "quality_degraded": 2,
+            "improved": 0,
+            "absolute_violation": 0.125,
+            "filtered_gain_pp": -0.957941467256105
+          },
+          "scene_only": {
+            "score_mean": 0.856927430561976,
+            "gain_macro_pp": 0.0,
+            "gain_micro_pp": 0.0,
+            "sessions": 4,
+            "gain_ci95_sessions": [
+              0.0,
+              0.0
+            ],
+            "interventions": 1,
+            "coverage": 0.0625,
+            "harm": 0,
+            "harm_among_interventions": 0.0,
+            "quality_degraded": 0,
+            "improved": 0,
+            "absolute_violation": 0.125,
+            "filtered_gain_pp": 0.0
+          }
+        },
+        "paired_primary_minus_ridge": {
+          "gain_macro_pp": -0.0837050119302761,
+          "ci95_sessions": [
+            -0.37077014548033416,
+            0.20336012161978195
+          ]
+        },
+        "note": "Frozen-model new-session check in cached archives. No refit, no oracle, local PDM not full EPDMS. Four sessions are preliminary and archive selection bias remains; no calibrated safety guarantee."
+      }
+    ]
+  },
+  {
+    "attachment": "23e027fa-75c3-4ebc-af3b-b088fbe72e63",
+    "objects": []
+  },
+  {
+    "attachment": "09d892eb-790a-4713-9731-343e38e9116d",
+    "objects": []
+  },
+  {
+    "attachment": "042c1568-25bc-4c9a-9ef7-917a92f72f7e",
+    "objects": []
+  },
+  {
+    "attachment": "36692838-3025-4e35-a423-c34b4c64644a",
+    "objects": [
+      {
+        "status": "complete",
+        "primary": "original_M_contrast",
+        "h": 0.0010552772409836734,
+        "beta": 0.5,
+        "ridge_lambda": 10.0,
+        "cohorts": {
+          "budget20gb_v1": {
+            "scenes": 24,
+            "sessions": 3,
+            "methods": {
+              "baseline": {
+                "score_mean": 0.887651020704365,
+                "gain_macro_pp": 0.0,
+                "gain_micro_pp": 0.0,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  0.0,
+                  0.0
+                ],
+                "interventions": 0,
+                "coverage": 0.0,
+                "harm": 0,
+                "harm_among_interventions": null,
+                "quality_degraded": 0,
+                "improved": 0,
+                "absolute_violation": 0.08333333333333333,
+                "filtered_gain_pp": 0.0,
+                "oracle_reserve_fraction": 0.0,
+                "oracle_regret_mean_pp": 6.644948025042495
+              },
+              "completed_M_absolute": {
+                "score_mean": 0.9331746208607733,
+                "gain_macro_pp": 4.552360015640837,
+                "gain_micro_pp": 4.552360015640837,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  0.0,
+                  13.65708004692251
+                ],
+                "interventions": 6,
+                "coverage": 0.25,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 0,
+                "improved": 3,
+                "absolute_violation": 0.041666666666666664,
+                "filtered_gain_pp": 4.552360015640837,
+                "oracle_reserve_fraction": 0.6850858725282091,
+                "oracle_regret_mean_pp": 2.092588009401657
+              },
+              "completed_M_contrast": {
+                "score_mean": 0.9331746208607733,
+                "gain_macro_pp": 4.552360015640837,
+                "gain_micro_pp": 4.552360015640837,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  0.0,
+                  13.65708004692251
+                ],
+                "interventions": 4,
+                "coverage": 0.16666666666666666,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 0,
+                "improved": 3,
+                "absolute_violation": 0.041666666666666664,
+                "filtered_gain_pp": 4.552360015640837,
+                "oracle_reserve_fraction": 0.6850858725282091,
+                "oracle_regret_mean_pp": 2.092588009401657
+              },
+              "original_M_absolute": {
+                "score_mean": 0.9331746208607733,
+                "gain_macro_pp": 4.552360015640837,
+                "gain_micro_pp": 4.552360015640837,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  0.0,
+                  13.65708004692251
+                ],
+                "interventions": 5,
+                "coverage": 0.20833333333333334,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 0,
+                "improved": 3,
+                "absolute_violation": 0.041666666666666664,
+                "filtered_gain_pp": 4.552360015640837,
+                "oracle_reserve_fraction": 0.6850858725282091,
+                "oracle_regret_mean_pp": 2.092588009401657
+              },
+              "original_M_contrast": {
+                "score_mean": 0.9300071260775881,
+                "gain_macro_pp": 4.23561053732231,
+                "gain_micro_pp": 4.235610537322309,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  0.0,
+                  12.706831611966928
+                ],
+                "interventions": 4,
+                "coverage": 0.16666666666666666,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 0,
+                "improved": 3,
+                "absolute_violation": 0.041666666666666664,
+                "filtered_gain_pp": 4.235610537322309,
+                "oracle_reserve_fraction": 0.6374181590826246,
+                "oracle_regret_mean_pp": 2.409337487720185
+              },
+              "random_0": {
+                "score_mean": 0.9281574015440569,
+                "gain_macro_pp": 4.050638083969206,
+                "gain_micro_pp": 4.050638083969206,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  -0.23886814007364063,
+                  12.390782391981256
+                ],
+                "interventions": 5,
+                "coverage": 0.20833333333333334,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 2,
+                "improved": 2,
+                "absolute_violation": 0.041666666666666664,
+                "filtered_gain_pp": 4.050638083969206,
+                "oracle_reserve_fraction": 0.6095816052591777,
+                "oracle_regret_mean_pp": 2.594309941073288
+              },
+              "random_1": {
+                "score_mean": 0.8875442322773427,
+                "gain_macro_pp": -0.010678842702237698,
+                "gain_micro_pp": -0.010678842702237698,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  -0.23886814007364063,
+                  0.20683161196692748
+                ],
+                "interventions": 6,
+                "coverage": 0.25,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 1,
+                "improved": 2,
+                "absolute_violation": 0.08333333333333333,
+                "filtered_gain_pp": -0.010678842702237698,
+                "oracle_reserve_fraction": -0.001607061885509542,
+                "oracle_regret_mean_pp": 6.655626867744732
+              },
+              "random_2": {
+                "score_mean": 0.9285436475474592,
+                "gain_macro_pp": 4.089262684309433,
+                "gain_micro_pp": 4.089262684309433,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  0.0,
+                  12.267788052928298
+                ],
+                "interventions": 4,
+                "coverage": 0.16666666666666666,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 1,
+                "improved": 1,
+                "absolute_violation": 0.041666666666666664,
+                "filtered_gain_pp": 4.089262684309433,
+                "oracle_reserve_fraction": 0.6153942316626746,
+                "oracle_regret_mean_pp": 2.5556853407330613
+              },
+              "ridge_completed_M": {
+                "score_mean": 0.8859969679891343,
+                "gain_macro_pp": -0.16540527152305076,
+                "gain_micro_pp": -0.1654052715230508,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  -0.3784958021336813,
+                  0.12114812763816957
+                ],
+                "interventions": 16,
+                "coverage": 0.6666666666666666,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 3,
+                "improved": 6,
+                "absolute_violation": 0.08333333333333333,
+                "filtered_gain_pp": -0.1654052715230508,
+                "oracle_reserve_fraction": -0.024891883412736404,
+                "oracle_regret_mean_pp": 6.810353296565545
+              },
+              "ridge_original": {
+                "score_mean": 0.900885175843173,
+                "gain_macro_pp": 1.3234155138808033,
+                "gain_micro_pp": 1.3234155138808033,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  -0.3784958021336813,
+                  4.225417574212073
+                ],
+                "interventions": 17,
+                "coverage": 0.7083333333333334,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 3,
+                "improved": 7,
+                "absolute_violation": 0.041666666666666664,
+                "filtered_gain_pp": 1.3234155138808033,
+                "oracle_reserve_fraction": 0.19916115353999927,
+                "oracle_regret_mean_pp": 5.321532511161691
+              }
+            },
+            "paired_primary_minus_completed_ridge": {
+              "gain_macro_pp": 4.401015808845361,
+              "ci95_sessions": [
+                -0.12114812763816957,
+                13.08532741410061
+              ]
+            }
+          },
+          "validation_cached4_v1": {
+            "scenes": 16,
+            "sessions": 4,
+            "methods": {
+              "baseline": {
+                "score_mean": 0.856927430561976,
+                "gain_macro_pp": 0.0,
+                "gain_micro_pp": 0.0,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  0.0,
+                  0.0
+                ],
+                "interventions": 0,
+                "coverage": 0.0,
+                "harm": 0,
+                "harm_among_interventions": null,
+                "quality_degraded": 0,
+                "improved": 0,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": 0.0,
+                "oracle_reserve_fraction": 0.0,
+                "oracle_regret_mean_pp": 7.246393786429989
+              },
+              "completed_M_absolute": {
+                "score_mean": 0.8562765873179863,
+                "gain_macro_pp": -0.06508432439896183,
+                "gain_micro_pp": -0.06508432439896183,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  -0.1952529731968855,
+                  0.0
+                ],
+                "interventions": 4,
+                "coverage": 0.25,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 1,
+                "improved": 0,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": -0.06508432439896183,
+                "oracle_reserve_fraction": -0.008981615727376348,
+                "oracle_regret_mean_pp": 7.311478110828951
+              },
+              "completed_M_contrast": {
+                "score_mean": 0.8562765873179863,
+                "gain_macro_pp": -0.06508432439896183,
+                "gain_micro_pp": -0.06508432439896183,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  -0.1952529731968855,
+                  0.0
+                ],
+                "interventions": 4,
+                "coverage": 0.25,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 1,
+                "improved": 0,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": -0.06508432439896183,
+                "oracle_reserve_fraction": -0.008981615727376348,
+                "oracle_regret_mean_pp": 7.311478110828951
+              },
+              "original_M_absolute": {
+                "score_mean": 0.8562765873179863,
+                "gain_macro_pp": -0.06508432439896183,
+                "gain_micro_pp": -0.06508432439896183,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  -0.1952529731968855,
+                  0.0
+                ],
+                "interventions": 3,
+                "coverage": 0.1875,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 1,
+                "improved": 0,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": -0.06508432439896183,
+                "oracle_reserve_fraction": -0.008981615727376348,
+                "oracle_regret_mean_pp": 7.311478110828951
+              },
+              "original_M_contrast": {
+                "score_mean": 0.8473480158894149,
+                "gain_macro_pp": -0.957941467256105,
+                "gain_micro_pp": -0.957941467256105,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  -2.6785714285714293,
+                  0.0
+                ],
+                "interventions": 4,
+                "coverage": 0.25,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 2,
+                "improved": 0,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": -0.957941467256105,
+                "oracle_reserve_fraction": -0.13219561280950545,
+                "oracle_regret_mean_pp": 8.204335253686095
+              },
+              "random_0": {
+                "score_mean": 0.8479988591334044,
+                "gain_macro_pp": -0.8928571428571431,
+                "gain_micro_pp": -0.8928571428571431,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  -2.6785714285714293,
+                  0.0
+                ],
+                "interventions": 2,
+                "coverage": 0.125,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 1,
+                "improved": 0,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": -0.8928571428571431,
+                "oracle_reserve_fraction": -0.1232139970821291,
+                "oracle_regret_mean_pp": 8.139250929287131
+              },
+              "random_1": {
+                "score_mean": 0.8577324488614613,
+                "gain_macro_pp": 0.08050182994853855,
+                "gain_micro_pp": 0.08050182994853855,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  0.0,
+                  0.24150548984561565
+                ],
+                "interventions": 3,
+                "coverage": 0.1875,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 0,
+                "improved": 1,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": 0.08050182994853855,
+                "oracle_reserve_fraction": 0.011109226509231513,
+                "oracle_regret_mean_pp": 7.165891956481451
+              },
+              "random_2": {
+                "score_mean": 0.8473480158894149,
+                "gain_macro_pp": -0.957941467256105,
+                "gain_micro_pp": -0.957941467256105,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  -2.6785714285714293,
+                  0.0
+                ],
+                "interventions": 2,
+                "coverage": 0.125,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 2,
+                "improved": 0,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": -0.957941467256105,
+                "oracle_reserve_fraction": -0.13219561280950545,
+                "oracle_regret_mean_pp": 8.204335253686095
+              },
+              "ridge_completed_M": {
+                "score_mean": 0.8481850660087178,
+                "gain_macro_pp": -0.8742364553258288,
+                "gain_micro_pp": -0.8742364553258289,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  -2.7218701622589965,
+                  0.2736550954429137
+                ],
+                "interventions": 12,
+                "coverage": 0.75,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 4,
+                "improved": 3,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": -0.8742364553258289,
+                "oracle_reserve_fraction": -0.12064434822228046,
+                "oracle_regret_mean_pp": 8.120630241755817
+              },
+              "ridge_original": {
+                "score_mean": 0.8481850660087178,
+                "gain_macro_pp": -0.8742364553258288,
+                "gain_micro_pp": -0.8742364553258289,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  -2.7218701622589965,
+                  0.2736550954429137
+                ],
+                "interventions": 11,
+                "coverage": 0.6875,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 4,
+                "improved": 3,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": -0.8742364553258289,
+                "oracle_reserve_fraction": -0.12064434822228046,
+                "oracle_regret_mean_pp": 8.120630241755817
+              }
+            },
+            "paired_primary_minus_completed_ridge": {
+              "gain_macro_pp": -0.0837050119302761,
+              "ci95_sessions": [
+                -0.37077014548033416,
+                0.20336012161978195
+              ]
+            }
+          }
+        },
+        "oracle_inputs": {
+          "budget20gb_v1": {
+            "539eba3476c952fa": "0268088f3316d20a20ac5623ef0f4f78693f76cff50fd1065315cf60c6242bbf",
+            "6d224a369e6d559d": "ec267d056eb6903fa20d9abc1452179bec7419950bcb99b6ff6f06227722e00d",
+            "c77e7e3d0ff458e4": "a6889bcf39859f977126ebc0c431d11a7531916c6a9210890a935d1767956533",
+            "9669e25d37d55fda": "650e01996602d09263ba7b5ce2d26fa258b228a9e3ed51be30840f7f5e9bfc01",
+            "908982b7b76d55b8": "24ac0c48d5ad91f15fd13cab7501d44b88f13dff646c8f17b6a01cf9b86ad57a",
+            "aba8aa62bb3b5de1": "90132f6ff03f43411e047b38fbd28066f8193950cb8a3059bca642af5f8f4e22",
+            "8dc0c10eb60f51ac": "ad1ff86d1c6d9aedbc96d80b1715bbd1e7dfd819c51ac752aa05bd4cb6c7537f",
+            "f221518470775b5f": "26813c67a6311acd537e078d355a2c55432342606e7e52cdf0258535c47fa7fb",
+            "2bd82ef18f655498": "71dbae055d0f3845de3b42dabb6f09d0cd24299bcb7d51da4fb467fe475c13b1",
+            "fabca9b9e2805a4e": "d479d1f1096a64c8e729756d876eee5ef5696531ee588e3756e06457b83cd3d4",
+            "ac7370c5c37957fe": "4d83780d588e100262c3238c12cc5cfb1647487328e53ed427a8acf774d37a1a",
+            "bb1dc3a17211547e": "154a6e4d50c18c131257b30c53a8a44cfb6e179d8f6ecdec019324a568e0e6b5",
+            "c003a3e1c2cd51f0": "6bbe71ce0a58c25880a6707cc57277611348fbe3d546a4cc4ae123606b8cb0db",
+            "4f2fedff10035d63": "4b000273feae41b0be7cecf44807ad9a62d6a88ffe557a4a3bab526524eb26e4",
+            "af4844e88a6a5009": "0d854389118b244478f39afc99c33ef312d5b3da47f367cd691ec475b1cc3bc7",
+            "48bdc41174c55f59": "20697c058ab85fd368bf185b3973696d4145132e70bc8728d3362d3fbd4e97c4",
+            "f27a618a5c7458ee": "6b844fa9b8fc21c8399405c5d186de53516000c4d400989b61f5d6379ae26b9d",
+            "cfd2ce4e362e5abd": "258c18b11f0c4aec35c5267a3f136293eb9d7e1842052277863006586f67f16a",
+            "d0539ff2c79f5bde": "ab8281091fa1bdf4a658b92aeb125b937e5a1c3d3b09c895e9d7d20cf7263ca3",
+            "8597dd83e37b5e5b": "bdb6099191b0369f60a7c9368a89374a75a31b5b05860a2447859d01782b1a2a",
+            "fb6ee63f31fd56ce": "382ea5d75386c5f273ed1632328b0edbdd79c257cd4cee0485fe1ed4caf25ebb",
+            "dbfedc756de85252": "f31e95202192bf18e9375f469860ace7becce7532699a58ab0c7bca2e20de592",
+            "31f2320ece515ff7": "b1550eb59c0d2b31469136fc15b5a49f580297cd1d476643cdef7278fd9e041c",
+            "7233f453d6425baf": "9b18bbff766b5939232086e1caaba7797396d774f6b00086910ae801378d2b90"
+          },
+          "validation_cached4_v1": {
+            "f739c929cf6d5144": "3e77bae0de6a43f94a735359d502db7de97c19bc3f2beb78d20eaaa3108109aa",
+            "c537bbd564185334": "fa971bd257f849ac6e79475a843f19b7b073aed82ca2ae9bf293d54c2c382aee",
+            "02cbf1d711075533": "d0f8ef41186738bec42b430738d13913abe61b04f1d00471cc5b724fc43577e4",
+            "7b4eb5e29d4b5a23": "2c016a25af57c6762ee8e4dbe70a6b84a058bb70cf5c01e0681c6f977639e8b8",
+            "4ba1b1466e3355a4": "858a9fc8a3e8b0a4c89183a5480cb5b75419dabd4da20b6eaffc715a17fb88ae",
+            "9205b3ee61685f07": "86c9631376de21259a2627ade2a31d9bc8b116e6675d9c61655832b7b3211e4a",
+            "d5c84c70e2915fa3": "962c261b573f7cb2101e37c228bbb54c3a942bcdd84bbacb2d19e0f32603b889",
+            "c2f8efa8358050de": "ae33a59b6ac70005b3880a5dfb278fbaa76c3171da7b9dd8ac7459443f5965da",
+            "f895bc253a215fc4": "f294f9a2fc6a4df4d9ca6e797c4ef9b8e464905a93f50d3a4d53a35977e39ffa",
+            "05573e9cebc55b5c": "8bb292bd3fab97803c48afdc3189c1da3c30e7c6fdc14d501fb515bba8f21787",
+            "aa0fd97b62e55a20": "53035a10871313d54310f9cf09d13451f4ae1a2842eef95261761e88db744397",
+            "83397570882e57ef": "f427d66ef2fa8c946ebaf6f38f5594306b1d607d25c24af66cdb0155baa8d8af",
+            "c4ac2d2c2c525579": "a964966ebd88d5aa3b7fbc4785655306b557af0ba640238de88560a17786bea0",
+            "767b5a578408531d": "171dea64d8678d217ec121e5d4247ea6a4de01e7814fbcb22b93c76543afba7e",
+            "a5e429799b6753f5": "0b76e3c7f58c5a03ff0da40e5b340eec36e6f8396ceda1cfcf4ea1a96f329880",
+            "3f526a6123c157e4": "0ed6945601228d900362d5a941aee13a21df5229c67d0c97de88f08da98275f8"
+          }
+        },
+        "note": "Exploratory analysis of BOTH already inspected query cohorts. No fresh holdout. No query outcomes used for fitting/parameter selection. Local PDM, not EPDMS; empirical harm only."
+      }
+    ]
+  },
+  {
+    "attachment": "92f65e97-eea0-4b50-9ed3-e2dc5618733d",
+    "objects": []
+  },
+  {
+    "attachment": "b6b4448e-182e-4f93-9431-6fef3d87c57f",
+    "objects": [
+      {
+        "status": "complete",
+        "primary": "direct_memory",
+        "cohorts": {
+          "budget20gb_v1": {
+            "scenes": 24,
+            "sessions": 3,
+            "methods": {
+              "baseline": {
+                "score_mean": 0.887651020704365,
+                "gain_macro_pp": 0.0,
+                "gain_micro_pp": 0.0,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  0.0,
+                  0.0
+                ],
+                "interventions": 0,
+                "coverage": 0.0,
+                "harm": 0,
+                "harm_among_interventions": null,
+                "quality_degraded": 0,
+                "improved": 0,
+                "absolute_violation": 0.08333333333333333,
+                "filtered_gain_pp": 0.0,
+                "oracle_reserve_fraction": 0.0,
+                "oracle_regret_mean_pp": 6.644948025042495
+              },
+              "direct_memory": {
+                "score_mean": 0.8888643729204718,
+                "gain_macro_pp": 0.12133522161067549,
+                "gain_micro_pp": 0.12133522161067578,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  -4.263386668554988,
+                  4.948542267258116
+                ],
+                "interventions": 24,
+                "coverage": 1.0,
+                "harm": 1,
+                "harm_among_interventions": 0.041666666666666664,
+                "quality_degraded": 5,
+                "improved": 6,
+                "absolute_violation": 0.08333333333333333,
+                "filtered_gain_pp": 0.12133522161067578,
+                "oracle_reserve_fraction": 0.018259769851232184,
+                "oracle_regret_mean_pp": 6.523612803431818
+              },
+              "direct_no_memory": {
+                "score_mean": 0.8867028022036889,
+                "gain_macro_pp": -0.09482185006759547,
+                "gain_micro_pp": -0.09482185006759576,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  -4.250577713346733,
+                  4.31018182254253
+                ],
+                "interventions": 24,
+                "coverage": 1.0,
+                "harm": 2,
+                "harm_among_interventions": 0.08333333333333333,
+                "quality_degraded": 7,
+                "improved": 6,
+                "absolute_violation": 0.08333333333333333,
+                "filtered_gain_pp": -0.09482185006759576,
+                "oracle_reserve_fraction": -0.014269765498578054,
+                "oracle_regret_mean_pp": 6.739769875110089
+              }
+            },
+            "paired_memory_minus_no_memory": {
+              "gain_macro_pp": 0.21615707167827133,
+              "ci95_sessions": [
+                -0.012808955208254424,
+                0.6383604447155855
+              ]
+            }
+          },
+          "validation_cached4_v1": {
+            "scenes": 16,
+            "sessions": 4,
+            "methods": {
+              "baseline": {
+                "score_mean": 0.856927430561976,
+                "gain_macro_pp": 0.0,
+                "gain_micro_pp": 0.0,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  0.0,
+                  0.0
+                ],
+                "interventions": 0,
+                "coverage": 0.0,
+                "harm": 0,
+                "harm_among_interventions": null,
+                "quality_degraded": 0,
+                "improved": 0,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": 0.0,
+                "oracle_reserve_fraction": 0.0,
+                "oracle_regret_mean_pp": 7.246393786429989
+              },
+              "direct_memory": {
+                "score_mean": 0.857836514169966,
+                "gain_macro_pp": 0.09090836079898998,
+                "gain_micro_pp": 0.09090836079898995,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  -0.4982536061806292,
+                  0.6800703277786091
+                ],
+                "interventions": 16,
+                "coverage": 1.0,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 2,
+                "improved": 5,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": 0.09090836079898995,
+                "oracle_reserve_fraction": 0.01254532440249523,
+                "oracle_regret_mean_pp": 7.1554854256309985
+              },
+              "direct_no_memory": {
+                "score_mean": 0.8537305811753043,
+                "gain_macro_pp": -0.3196849386671662,
+                "gain_micro_pp": -0.3196849386671662,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  -0.6842253002155768,
+                  0.1028099609865829
+                ],
+                "interventions": 16,
+                "coverage": 1.0,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 4,
+                "improved": 5,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": -0.3196849386671662,
+                "oracle_reserve_fraction": -0.04411641819215324,
+                "oracle_regret_mean_pp": 7.566078725097154
+              }
+            },
+            "paired_memory_minus_no_memory": {
+              "gain_macro_pp": 0.41059329946615614,
+              "ci95_sessions": [
+                0.01124976928484761,
+                1.1451641809795938
+              ]
+            }
+          }
+        },
+        "note": "Both query cohorts already inspected: exploratory development only. Matched M/F raw-utility supervision. Fixed simulator-enriched M, not continual evaluation. Local PDM, not full EPDMS. Empirical component harm, no risk guarantee."
+      }
+    ]
+  },
+  {
+    "attachment": "8a88a7e5-8aa6-47ce-8c4e-e2dfd973962b",
+    "objects": [
+      {
+        "primary": "direct_memory",
+        "h": 0.00016024817783193238,
+        "selected": {
+          "direct_no_memory": {
+            "regularization": 100.0,
+            "gain_macro_pp": 1.4542764901888647,
+            "harm": 0
+          },
+          "direct_memory": {
+            "regularization": 1000.0,
+            "gain_macro_pp": 1.593241143219813,
+            "harm": 0
+          }
+        },
+        "cv": {
+          "direct_no_memory": [
+            {
+              "regularization": 1.0,
+              "gain_macro_pp": 0.7454499367780748,
+              "harm": 0
+            },
+            {
+              "regularization": 10.0,
+              "gain_macro_pp": 1.338184602926371,
+              "harm": 0
+            },
+            {
+              "regularization": 100.0,
+              "gain_macro_pp": 1.4542764901888647,
+              "harm": 0
+            },
+            {
+              "regularization": 1000.0,
+              "gain_macro_pp": -0.7628179656609346,
+              "harm": 1
+            }
+          ],
+          "direct_memory": [
+            {
+              "regularization": 1.0,
+              "gain_macro_pp": 1.238783378719873,
+              "harm": 0
+            },
+            {
+              "regularization": 10.0,
+              "gain_macro_pp": 1.1909053929980895,
+              "harm": 0
+            },
+            {
+              "regularization": 100.0,
+              "gain_macro_pp": 1.423060596339885,
+              "harm": 0
+            },
+            {
+              "regularization": 1000.0,
+              "gain_macro_pp": 1.593241143219813,
+              "harm": 0
+            }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "attachment": "9386cac6-bff0-4073-ae50-f922f3345f58",
+    "objects": []
+  },
+  {
+    "attachment": "42918a00-e653-43c2-9786-a0e2f55fe29b",
+    "objects": [
+      {
+        "status": "shortfall",
+        "sessions": [
+          {
+            "session_id": "2021.06.07.17.48.02_veh-38",
+            "role": "memory",
+            "eligible_scenes": 0,
+            "requested": 16,
+            "selected": 0
+          },
+          {
+            "session_id": "2021.06.09.12.51.31_veh-35",
+            "role": "fit",
+            "eligible_scenes": 21,
+            "requested": 16,
+            "selected": 0
+          },
+          {
+            "session_id": "2021.06.14.16.32.09_veh-35",
+            "role": "fit",
+            "eligible_scenes": 3,
+            "requested": 16,
+            "selected": 0
+          },
+          {
+            "session_id": "2021.06.14.18.42.45_veh-12",
+            "role": "memory",
+            "eligible_scenes": 9,
+            "requested": 16,
+            "selected": 0
+          },
+          {
+            "session_id": "2021.08.17.14.45.12_veh-42",
+            "role": "memory",
+            "eligible_scenes": 107,
+            "requested": 16,
+            "selected": 0
+          },
+          {
+            "session_id": "2021.08.31.16.37.21_veh-40",
+            "role": "fit",
+            "eligible_scenes": 4,
+            "requested": 16,
+            "selected": 0
+          },
+          {
+            "session_id": "2021.09.15.14.00.15_veh-28",
+            "role": "fit",
+            "eligible_scenes": 37,
+            "requested": 16,
+            "selected": 0
+          },
+          {
+            "session_id": "2021.10.05.04.03.05_veh-50",
+            "role": "memory",
+            "eligible_scenes": 0,
+            "requested": 16,
+            "selected": 0
+          },
+          {
+            "session_id": "2021.10.11.05.34.05_veh-50",
+            "role": "memory",
+            "eligible_scenes": 111,
+            "requested": 16,
+            "selected": 0
+          },
+          {
+            "session_id": "2021.10.11.08.31.07_veh-50",
+            "role": "memory",
+            "eligible_scenes": 19,
+            "requested": 16,
+            "selected": 0
+          }
+        ],
+        "screening_scenes": 0,
+        "label_scenes": 80,
+        "candidate_evaluations": 1280,
+        "raw_filtered_calls": 2560,
+        "network_image_GB": 0,
+        "metadata_download_only": true,
+        "historical_role_conflicts": [],
+        "note": "Original budget M/F roles are authoritative; history disclosed. No fresh holdout or labels created."
+      }
+    ]
+  },
+  {
+    "attachment": "50e57120-1067-475e-8e4c-effe02cc121e",
+    "objects": [
+      {
+        "status": "capacity_only",
+        "no_outputs_created": true,
+        "image_download_GB": 0,
+        "gap_s": 10,
+        "requested_per_session": 16,
+        "cached_shards": [
+          87,
+          122,
+          142,
+          158
+        ],
+        "cache_validation": "Size only for planning; require SHA256 verification before any extraction",
+        "sessions": [
+          {
+            "session_id": "2021.06.07.17.48.02_veh-38",
+            "role": "memory",
+            "cached_capacity": 0,
+            "all_installed_logs_capacity": 0,
+            "capped_shortfall": 16
+          },
+          {
+            "session_id": "2021.06.09.12.51.31_veh-35",
+            "role": "fit",
+            "cached_capacity": 3,
+            "all_installed_logs_capacity": 120,
+            "capped_shortfall": 13
+          },
+          {
+            "session_id": "2021.06.14.16.32.09_veh-35",
+            "role": "fit",
+            "cached_capacity": 1,
+            "all_installed_logs_capacity": 128,
+            "capped_shortfall": 15
+          },
+          {
+            "session_id": "2021.06.14.18.42.45_veh-12",
+            "role": "memory",
+            "cached_capacity": 3,
+            "all_installed_logs_capacity": 129,
+            "capped_shortfall": 13
+          },
+          {
+            "session_id": "2021.08.17.14.45.12_veh-42",
+            "role": "memory",
+            "cached_capacity": 13,
+            "all_installed_logs_capacity": 64,
+            "capped_shortfall": 3
+          },
+          {
+            "session_id": "2021.08.31.16.37.21_veh-40",
+            "role": "fit",
+            "cached_capacity": 1,
+            "all_installed_logs_capacity": 53,
+            "capped_shortfall": 15
+          },
+          {
+            "session_id": "2021.09.15.14.00.15_veh-28",
+            "role": "fit",
+            "cached_capacity": 7,
+            "all_installed_logs_capacity": 46,
+            "capped_shortfall": 9
+          },
+          {
+            "session_id": "2021.10.05.04.03.05_veh-50",
+            "role": "memory",
+            "cached_capacity": 0,
+            "all_installed_logs_capacity": 62,
+            "capped_shortfall": 16
+          },
+          {
+            "session_id": "2021.10.11.05.34.05_veh-50",
+            "role": "memory",
+            "cached_capacity": 10,
+            "all_installed_logs_capacity": 97,
+            "capped_shortfall": 6
+          },
+          {
+            "session_id": "2021.10.11.08.31.07_veh-50",
+            "role": "memory",
+            "cached_capacity": 3,
+            "all_installed_logs_capacity": 111,
+            "capped_shortfall": 13
+          }
+        ],
+        "total_cached_screening_slots": 41,
+        "impossible_even_with_more_archives": [
+          "2021.06.07.17.48.02_veh-38"
+        ],
+        "single_archive_options": [
+          {
+            "shard": 188,
+            "additional_GB": 4.033973679,
+            "added_screening_slots": 17,
+            "newly_complete_sessions": [],
+            "capacity": {
+              "2021.06.07.17.48.02_veh-38": 0,
+              "2021.06.14.18.42.45_veh-12": 3,
+              "2021.08.17.14.45.12_veh-42": 13,
+              "2021.10.05.04.03.05_veh-50": 0,
+              "2021.10.11.05.34.05_veh-50": 10,
+              "2021.10.11.08.31.07_veh-50": 3,
+              "2021.06.09.12.51.31_veh-35": 7,
+              "2021.06.14.16.32.09_veh-35": 1,
+              "2021.08.31.16.37.21_veh-40": 14,
+              "2021.09.15.14.00.15_veh-28": 7
+            }
+          },
+          {
+            "shard": 33,
+            "additional_GB": 6.342970078,
+            "added_screening_slots": 26,
+            "newly_complete_sessions": [],
+            "capacity": {
+              "2021.06.07.17.48.02_veh-38": 0,
+              "2021.06.14.18.42.45_veh-12": 3,
+              "2021.08.17.14.45.12_veh-42": 13,
+              "2021.10.05.04.03.05_veh-50": 15,
+              "2021.10.11.05.34.05_veh-50": 10,
+              "2021.10.11.08.31.07_veh-50": 3,
+              "2021.06.09.12.51.31_veh-35": 12,
+              "2021.06.14.16.32.09_veh-35": 1,
+              "2021.08.31.16.37.21_veh-40": 3,
+              "2021.09.15.14.00.15_veh-28": 7
+            }
+          },
+          {
+            "shard": 32,
+            "additional_GB": 5.250745108,
+            "added_screening_slots": 21,
+            "newly_complete_sessions": [
+              "2021.10.11.05.34.05_veh-50",
+              "2021.06.14.16.32.09_veh-35"
+            ],
+            "capacity": {
+              "2021.06.07.17.48.02_veh-38": 0,
+              "2021.06.14.18.42.45_veh-12": 3,
+              "2021.08.17.14.45.12_veh-42": 13,
+              "2021.10.05.04.03.05_veh-50": 0,
+              "2021.10.11.05.34.05_veh-50": 18,
+              "2021.10.11.08.31.07_veh-50": 3,
+              "2021.06.09.12.51.31_veh-35": 3,
+              "2021.06.14.16.32.09_veh-35": 19,
+              "2021.08.31.16.37.21_veh-40": 1,
+              "2021.09.15.14.00.15_veh-28": 7
+            }
+          },
+          {
+            "shard": 23,
+            "additional_GB": 3.508775313,
+            "added_screening_slots": 14,
+            "newly_complete_sessions": [],
+            "capacity": {
+              "2021.06.07.17.48.02_veh-38": 0,
+              "2021.06.14.18.42.45_veh-12": 3,
+              "2021.08.17.14.45.12_veh-42": 13,
+              "2021.10.05.04.03.05_veh-50": 0,
+              "2021.10.11.05.34.05_veh-50": 10,
+              "2021.10.11.08.31.07_veh-50": 3,
+              "2021.06.09.12.51.31_veh-35": 3,
+              "2021.06.14.16.32.09_veh-35": 15,
+              "2021.08.31.16.37.21_veh-40": 1,
+              "2021.09.15.14.00.15_veh-28": 7
+            }
+          },
+          {
+            "shard": 137,
+            "additional_GB": 6.570682871,
+            "added_screening_slots": 26,
+            "newly_complete_sessions": [
+              "2021.10.11.08.31.07_veh-50",
+              "2021.06.09.12.51.31_veh-35"
+            ],
+            "capacity": {
+              "2021.06.07.17.48.02_veh-38": 0,
+              "2021.06.14.18.42.45_veh-12": 3,
+              "2021.08.17.14.45.12_veh-42": 13,
+              "2021.10.05.04.03.05_veh-50": 0,
+              "2021.10.11.05.34.05_veh-50": 10,
+              "2021.10.11.08.31.07_veh-50": 17,
+              "2021.06.09.12.51.31_veh-35": 26,
+              "2021.06.14.16.32.09_veh-35": 1,
+              "2021.08.31.16.37.21_veh-40": 1,
+              "2021.09.15.14.00.15_veh-28": 7
+            }
+          },
+          {
+            "shard": 19,
+            "additional_GB": 4.397351699,
+            "added_screening_slots": 17,
+            "newly_complete_sessions": [
+              "2021.10.11.08.31.07_veh-50"
+            ],
+            "capacity": {
+              "2021.06.07.17.48.02_veh-38": 0,
+              "2021.06.14.18.42.45_veh-12": 3,
+              "2021.08.17.14.45.12_veh-42": 13,
+              "2021.10.05.04.03.05_veh-50": 0,
+              "2021.10.11.05.34.05_veh-50": 10,
+              "2021.10.11.08.31.07_veh-50": 23,
+              "2021.06.09.12.51.31_veh-35": 3,
+              "2021.06.14.16.32.09_veh-35": 5,
+              "2021.08.31.16.37.21_veh-40": 1,
+              "2021.09.15.14.00.15_veh-28": 7
+            }
+          },
+          {
+            "shard": 126,
+            "additional_GB": 2.591614847,
+            "added_screening_slots": 10,
+            "newly_complete_sessions": [],
+            "capacity": {
+              "2021.06.07.17.48.02_veh-38": 0,
+              "2021.06.14.18.42.45_veh-12": 3,
+              "2021.08.17.14.45.12_veh-42": 13,
+              "2021.10.05.04.03.05_veh-50": 0,
+              "2021.10.11.05.34.05_veh-50": 10,
+              "2021.10.11.08.31.07_veh-50": 3,
+              "2021.06.09.12.51.31_veh-35": 3,
+              "2021.06.14.16.32.09_veh-35": 1,
+              "2021.08.31.16.37.21_veh-40": 11,
+              "2021.09.15.14.00.15_veh-28": 7
+            }
+          },
+          {
+            "shard": 145,
+            "additional_GB": 3.768687977,
+            "added_screening_slots": 13,
+            "newly_complete_sessions": [
+              "2021.10.11.08.31.07_veh-50"
+            ],
+            "capacity": {
+              "2021.06.07.17.48.02_veh-38": 0,
+              "2021.06.14.18.42.45_veh-12": 3,
+              "2021.08.17.14.45.12_veh-42": 13,
+              "2021.10.05.04.03.05_veh-50": 0,
+              "2021.10.11.05.34.05_veh-50": 10,
+              "2021.10.11.08.31.07_veh-50": 16,
+              "2021.06.09.12.51.31_veh-35": 3,
+              "2021.06.14.16.32.09_veh-35": 1,
+              "2021.08.31.16.37.21_veh-40": 1,
+              "2021.09.15.14.00.15_veh-28": 7
+            }
+          }
+        ],
+        "bounded_greedy_plan": {
+          "planning_budget_GB": 5.0,
+          "shards": [
+            188
+          ],
+          "compressed_GB": 4.033973679,
+          "capacity": {
+            "2021.06.07.17.48.02_veh-38": 0,
+            "2021.06.14.18.42.45_veh-12": 3,
+            "2021.08.17.14.45.12_veh-42": 13,
+            "2021.10.05.04.03.05_veh-50": 0,
+            "2021.10.11.05.34.05_veh-50": 10,
+            "2021.10.11.08.31.07_veh-50": 3,
+            "2021.06.09.12.51.31_veh-35": 7,
+            "2021.06.14.16.32.09_veh-35": 1,
+            "2021.08.31.16.37.21_veh-40": 14,
+            "2021.09.15.14.00.15_veh-28": 7
+          },
+          "fulfills_original_quota": false
+        },
+        "note": "No images fetched and no protocol changed. Options concern existing M/F sessions, not fresh validation. Greedy plan is not globally optimal. Do not sum single-option gains: sessions/logs overlap."
+      }
+    ]
+  },
+  {
+    "attachment": "09bea6aa-6874-40ef-b20b-9bd4a2f8c372",
+    "objects": [
+      {
+        "status": "complete",
+        "selected_scenes": 32,
+        "completed_scenes": 32,
+        "missing_tokens": [],
+        "note": "M/F collection only. No fresh holdout, calibrated risk or model success established."
+      },
+      {
+        "status": "complete",
+        "selected_scenes": 32,
+        "completed_scenes": 32,
+        "missing_tokens": [],
+        "note": "M/F collection only. No fresh holdout, calibrated risk or model success established."
+      }
+    ]
+  },
+  {
+    "attachment": "c6fc3240-4b0a-49d2-be7b-7fc9321238a1",
+    "objects": [
+      {
+        "status": "complete",
+        "primary": "baseline",
+        "cohorts": {
+          "budget20gb_v1": {
+            "scenes": 24,
+            "sessions": 3,
+            "methods": {
+              "baseline": {
+                "score_mean": 0.887651020704365,
+                "gain_macro_pp": 0.0,
+                "gain_micro_pp": 0.0,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  0.0,
+                  0.0
+                ],
+                "interventions": 0,
+                "coverage": 0.0,
+                "harm": 0,
+                "harm_among_interventions": null,
+                "quality_degraded": 0,
+                "improved": 0,
+                "absolute_violation": 0.08333333333333333,
+                "filtered_gain_pp": 0.0,
+                "oracle_reserve_fraction": 0.0,
+                "oracle_regret_mean_pp": 6.644948025042495
+              },
+              "direct_memory": {
+                "score_mean": 0.808081675926284,
+                "gain_macro_pp": -7.956934477808093,
+                "gain_micro_pp": -7.956934477808093,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  -15.91112904140598,
+                  -0.16097498529539928
+                ],
+                "interventions": 22,
+                "coverage": 0.9166666666666666,
+                "harm": 3,
+                "harm_among_interventions": 0.13636363636363635,
+                "quality_degraded": 7,
+                "improved": 3,
+                "absolute_violation": 0.16666666666666666,
+                "filtered_gain_pp": -7.956934477808093,
+                "oracle_reserve_fraction": -1.1974411910854952,
+                "oracle_regret_mean_pp": 14.601882502850588
+              },
+              "direct_no_memory": {
+                "score_mean": 0.808081675926284,
+                "gain_macro_pp": -7.956934477808093,
+                "gain_micro_pp": -7.956934477808093,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  -15.91112904140598,
+                  -0.16097498529539928
+                ],
+                "interventions": 22,
+                "coverage": 0.9166666666666666,
+                "harm": 3,
+                "harm_among_interventions": 0.13636363636363635,
+                "quality_degraded": 7,
+                "improved": 3,
+                "absolute_violation": 0.16666666666666666,
+                "filtered_gain_pp": -7.956934477808093,
+                "oracle_reserve_fraction": -1.1974411910854952,
+                "oracle_regret_mean_pp": 14.601882502850588
+              }
+            },
+            "paired_memory_minus_no_memory": {
+              "gain_macro_pp": 0.0,
+              "ci95_sessions": [
+                0.0,
+                0.0
+              ]
+            }
+          },
+          "validation_cached4_v1": {
+            "scenes": 16,
+            "sessions": 4,
+            "methods": {
+              "baseline": {
+                "score_mean": 0.856927430561976,
+                "gain_macro_pp": 0.0,
+                "gain_micro_pp": 0.0,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  0.0,
+                  0.0
+                ],
+                "interventions": 0,
+                "coverage": 0.0,
+                "harm": 0,
+                "harm_among_interventions": null,
+                "quality_degraded": 0,
+                "improved": 0,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": 0.0,
+                "oracle_reserve_fraction": 0.0,
+                "oracle_regret_mean_pp": 7.246393786429989
+              },
+              "direct_memory": {
+                "score_mean": 0.7716632697690544,
+                "gain_macro_pp": -8.52641607929216,
+                "gain_micro_pp": -8.52641607929216,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  -19.88923267424864,
+                  0.8445449575124346
+                ],
+                "interventions": 16,
+                "coverage": 1.0,
+                "harm": 3,
+                "harm_among_interventions": 0.1875,
+                "quality_degraded": 4,
+                "improved": 3,
+                "absolute_violation": 0.25,
+                "filtered_gain_pp": -8.52641607929216,
+                "oracle_reserve_fraction": -1.1766426626247133,
+                "oracle_regret_mean_pp": 15.772809865722149
+              },
+              "direct_no_memory": {
+                "score_mean": 0.7713727978266999,
+                "gain_macro_pp": -8.555463273527616,
+                "gain_micro_pp": -8.555463273527614,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  -19.88923267424864,
+                  0.8445449575124346
+                ],
+                "interventions": 16,
+                "coverage": 1.0,
+                "harm": 3,
+                "harm_among_interventions": 0.1875,
+                "quality_degraded": 5,
+                "improved": 3,
+                "absolute_violation": 0.25,
+                "filtered_gain_pp": -8.555463273527614,
+                "oracle_reserve_fraction": -1.1806511660391772,
+                "oracle_regret_mean_pp": 15.801857059957605
+              }
+            },
+            "paired_memory_minus_no_memory": {
+              "gain_macro_pp": 0.029047194235455598,
+              "ci95_sessions": [
+                0.0,
+                0.0871415827063668
+              ]
+            }
+          }
+        },
+        "note": "Both query cohorts already inspected: exploratory development only. Matched M/F raw-utility supervision. Fixed simulator-enriched M, not continual evaluation. Local PDM, not full EPDMS. Empirical component harm, no risk guarantee.",
+        "training_counts": {
+          "memory_scenes": 64,
+          "fit_scenes": 48,
+          "memory_sessions": 8,
+          "fit_sessions": 6
+        },
+        "comparison_to_original": {
+          "budget20gb_v1": {
+            "direct_no_memory": {
+              "gain_change_pp": -7.862112627740498,
+              "harm_change": 1
+            },
+            "direct_memory": {
+              "gain_change_pp": -8.078269699418769,
+              "harm_change": 2
+            }
+          },
+          "validation_cached4_v1": {
+            "direct_no_memory": {
+              "gain_change_pp": -8.23577833486045,
+              "harm_change": 3
+            },
+            "direct_memory": {
+              "gain_change_pp": -8.61732444009115,
+              "harm_change": 3
+            }
+          }
+        },
+        "data_control_note": "Same algorithm refit on more M/F; h/lambda refitted by original procedure. New F includes uniform and challenge; CV keeps original pooled macro objectivefor this control. Not risk calibration or fresh validation."
+      }
+    ]
+  },
+  {
+    "attachment": "b17abf93-c7d2-4cae-9de7-1cb86f5c9a54",
+    "objects": [
+      {
+        "status": "complete",
+        "primary": "baseline",
+        "cohorts": {
+          "budget20gb_v1": {
+            "methods": {
+              "baseline": {
+                "score_mean": 0.887651020704365,
+                "gain_macro_pp": 0.0,
+                "gain_micro_pp": 0.0,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  0.0,
+                  0.0
+                ],
+                "interventions": 0,
+                "coverage": 0.0,
+                "harm": 0,
+                "harm_among_interventions": null,
+                "quality_degraded": 0,
+                "improved": 0,
+                "absolute_violation": 0.08333333333333333,
+                "filtered_gain_pp": 0.0,
+                "oracle_reserve_fraction": 0.0,
+                "oracle_regret_mean_pp": 6.644948025042495
+              },
+              "memory_component": {
+                "score_mean": 0.8853119385751421,
+                "gain_macro_pp": -0.23390821292228656,
+                "gain_micro_pp": -0.23390821292228656,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  -0.7092273066959892,
+                  0.0075026679291295695
+                ],
+                "interventions": 4,
+                "coverage": 0.16666666666666666,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 2,
+                "improved": 1,
+                "absolute_violation": 0.08333333333333333,
+                "filtered_gain_pp": -0.23390821292228656,
+                "oracle_reserve_fraction": -0.03520090932852567,
+                "oracle_regret_mean_pp": 6.87885623796478
+              },
+              "memory_guarded": {
+                "score_mean": 0.8862841550898225,
+                "gain_macro_pp": -0.1366865614542495,
+                "gain_micro_pp": -0.1366865614542495,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  -0.29438326259313,
+                  0.0
+                ],
+                "interventions": 2,
+                "coverage": 0.08333333333333333,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 2,
+                "improved": 0,
+                "absolute_violation": 0.08333333333333333,
+                "filtered_gain_pp": -0.1366865614542495,
+                "oracle_reserve_fraction": -0.020569997077347402,
+                "oracle_regret_mean_pp": 6.781634586496744
+              },
+              "memory_raw": {
+                "score_mean": 0.8985689369973379,
+                "gain_macro_pp": 1.0917916292972782,
+                "gain_micro_pp": 1.0917916292972785,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  -1.4072346175943398,
+                  4.512817963277309
+                ],
+                "interventions": 21,
+                "coverage": 0.875,
+                "harm": 1,
+                "harm_among_interventions": 0.047619047619047616,
+                "quality_degraded": 4,
+                "improved": 5,
+                "absolute_violation": 0.041666666666666664,
+                "filtered_gain_pp": 1.0917916292972785,
+                "oracle_reserve_fraction": 0.16430401339223363,
+                "oracle_regret_mean_pp": 5.553156395745216
+              },
+              "no_memory_component": {
+                "score_mean": 0.8592499826834862,
+                "gain_macro_pp": -2.840103802087873,
+                "gain_micro_pp": -2.8401038020878726,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  -8.035714285714286,
+                  0.0075026679291295695
+                ],
+                "interventions": 8,
+                "coverage": 0.3333333333333333,
+                "harm": 2,
+                "harm_among_interventions": 0.25,
+                "quality_degraded": 3,
+                "improved": 1,
+                "absolute_violation": 0.08333333333333333,
+                "filtered_gain_pp": -2.8401038020878726,
+                "oracle_reserve_fraction": -0.42740797841977257,
+                "oracle_regret_mean_pp": 9.485051827130368
+              },
+              "no_memory_guarded": {
+                "score_mean": 0.8862521369088207,
+                "gain_macro_pp": -0.13988837955442543,
+                "gain_micro_pp": -0.13988837955442543,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  -0.3039887168936578,
+                  0.0
+                ],
+                "interventions": 3,
+                "coverage": 0.125,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 2,
+                "improved": 0,
+                "absolute_violation": 0.08333333333333333,
+                "filtered_gain_pp": -0.13988837955442543,
+                "oracle_reserve_fraction": -0.021051839536928636,
+                "oracle_regret_mean_pp": 6.78483640459692
+              },
+              "no_memory_raw": {
+                "score_mean": 0.8994635686296978,
+                "gain_macro_pp": 1.1812547925332677,
+                "gain_micro_pp": 1.1812547925332677,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  -1.3245555125379145,
+                  4.6985283479288515
+                ],
+                "interventions": 22,
+                "coverage": 0.9166666666666666,
+                "harm": 1,
+                "harm_among_interventions": 0.045454545454545456,
+                "quality_degraded": 4,
+                "improved": 5,
+                "absolute_violation": 0.041666666666666664,
+                "filtered_gain_pp": 1.1812547925332677,
+                "oracle_reserve_fraction": 0.1777673486807617,
+                "oracle_regret_mean_pp": 5.463693232509226
+              },
+              "random_component": {
+                "score_mean": 0.859507501831405,
+                "gain_macro_pp": -2.8143518872960054,
+                "gain_micro_pp": -2.8143518872960054,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  -8.035714285714286,
+                  0.0075026679291295695
+                ],
+                "interventions": 4,
+                "coverage": 0.16666666666666666,
+                "harm": 1,
+                "harm_among_interventions": 0.25,
+                "quality_degraded": 2,
+                "improved": 1,
+                "absolute_violation": 0.08333333333333333,
+                "filtered_gain_pp": -2.8143518872960054,
+                "oracle_reserve_fraction": -0.4235325658966321,
+                "oracle_regret_mean_pp": 9.4592999123385
+              },
+              "random_guarded": {
+                "score_mean": 0.8872654326317995,
+                "gain_macro_pp": -0.038558807256539505,
+                "gain_micro_pp": -0.038558807256539505,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  -0.11567642176961851,
+                  0.0
+                ],
+                "interventions": 1,
+                "coverage": 0.041666666666666664,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 1,
+                "improved": 0,
+                "absolute_violation": 0.08333333333333333,
+                "filtered_gain_pp": -0.038558807256539505,
+                "oracle_reserve_fraction": -0.0058027251847907295,
+                "oracle_regret_mean_pp": 6.683506832299034
+              },
+              "random_raw": {
+                "score_mean": 0.8987951486010651,
+                "gain_macro_pp": 1.1144127896700258,
+                "gain_micro_pp": 1.1144127896700258,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  -1.3245555125379145,
+                  4.512817963277309
+                ],
+                "interventions": 20,
+                "coverage": 0.8333333333333334,
+                "harm": 1,
+                "harm_among_interventions": 0.05,
+                "quality_degraded": 5,
+                "improved": 5,
+                "absolute_violation": 0.041666666666666664,
+                "filtered_gain_pp": 1.1144127896700258,
+                "oracle_reserve_fraction": 0.16770827784810238,
+                "oracle_regret_mean_pp": 5.530535235372469
+              },
+              "shuffled_component": {
+                "score_mean": 0.8861244481412734,
+                "gain_macro_pp": -0.15265725630916097,
+                "gain_micro_pp": -0.15265725630916097,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  -0.45797176892748287,
+                  0.0
+                ],
+                "interventions": 3,
+                "coverage": 0.125,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 2,
+                "improved": 0,
+                "absolute_violation": 0.08333333333333333,
+                "filtered_gain_pp": -0.15265725630916097,
+                "oracle_reserve_fraction": -0.02297343120425456,
+                "oracle_regret_mean_pp": 6.797605281351655
+              },
+              "shuffled_guarded": {
+                "score_mean": 0.8864541952489967,
+                "gain_macro_pp": -0.11968254553682926,
+                "gain_micro_pp": -0.11968254553682926,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  -0.3590476366104878,
+                  0.0
+                ],
+                "interventions": 1,
+                "coverage": 0.041666666666666664,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 1,
+                "improved": 0,
+                "absolute_violation": 0.08333333333333333,
+                "filtered_gain_pp": -0.11968254553682926,
+                "oracle_reserve_fraction": -0.018011058188233744,
+                "oracle_regret_mean_pp": 6.764630570579324
+              },
+              "shuffled_raw": {
+                "score_mean": 0.8945050110758793,
+                "gain_macro_pp": 0.6853990371514233,
+                "gain_micro_pp": 0.6853990371514231,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  -2.8043014427540935,
+                  4.6985283479288515
+                ],
+                "interventions": 19,
+                "coverage": 0.7916666666666666,
+                "harm": 1,
+                "harm_among_interventions": 0.05263157894736842,
+                "quality_degraded": 4,
+                "improved": 3,
+                "absolute_violation": 0.041666666666666664,
+                "filtered_gain_pp": 0.6853990371514231,
+                "oracle_reserve_fraction": 0.1031458838456513,
+                "oracle_regret_mean_pp": 5.959548987891071
+              }
+            },
+            "paired_memory_minus_no_memory_guarded": {
+              "gain_macro_pp": 0.0032018181001759274,
+              "ci95_sessions": [
+                0.0,
+                0.009605454300527783
+              ]
+            }
+          },
+          "validation_cached4_v1": {
+            "methods": {
+              "baseline": {
+                "score_mean": 0.856927430561976,
+                "gain_macro_pp": 0.0,
+                "gain_micro_pp": 0.0,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  0.0,
+                  0.0
+                ],
+                "interventions": 0,
+                "coverage": 0.0,
+                "harm": 0,
+                "harm_among_interventions": null,
+                "quality_degraded": 0,
+                "improved": 0,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": 0.0,
+                "oracle_reserve_fraction": 0.0,
+                "oracle_regret_mean_pp": 7.246393786429989
+              },
+              "memory_component": {
+                "score_mean": 0.856927430561976,
+                "gain_macro_pp": 0.0,
+                "gain_micro_pp": 0.0,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  0.0,
+                  0.0
+                ],
+                "interventions": 2,
+                "coverage": 0.125,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 0,
+                "improved": 0,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": 0.0,
+                "oracle_reserve_fraction": 0.0,
+                "oracle_regret_mean_pp": 7.246393786429989
+              },
+              "memory_guarded": {
+                "score_mean": 0.856927430561976,
+                "gain_macro_pp": 0.0,
+                "gain_micro_pp": 0.0,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  0.0,
+                  0.0
+                ],
+                "interventions": 0,
+                "coverage": 0.0,
+                "harm": 0,
+                "harm_among_interventions": null,
+                "quality_degraded": 0,
+                "improved": 0,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": 0.0,
+                "oracle_reserve_fraction": 0.0,
+                "oracle_regret_mean_pp": 7.246393786429989
+              },
+              "memory_raw": {
+                "score_mean": 0.7936308943700938,
+                "gain_macro_pp": -6.329653619188205,
+                "gain_micro_pp": -6.329653619188205,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  -18.160708862604174,
+                  0.1437554943464231
+                ],
+                "interventions": 15,
+                "coverage": 0.9375,
+                "harm": 1,
+                "harm_among_interventions": 0.06666666666666667,
+                "quality_degraded": 5,
+                "improved": 2,
+                "absolute_violation": 0.1875,
+                "filtered_gain_pp": -6.329653619188205,
+                "oracle_reserve_fraction": -0.8734901532734084,
+                "oracle_regret_mean_pp": 13.576047405618194
+              },
+              "no_memory_component": {
+                "score_mean": 0.8562649524412569,
+                "gain_macro_pp": -0.06624781207190122,
+                "gain_micro_pp": -0.06624781207190122,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  -0.19874343621570367,
+                  0.0
+                ],
+                "interventions": 2,
+                "coverage": 0.125,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 1,
+                "improved": 0,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": -0.06624781207190122,
+                "oracle_reserve_fraction": -0.009142176650123632,
+                "oracle_regret_mean_pp": 7.31264159850189
+              },
+              "no_memory_guarded": {
+                "score_mean": 0.8543440900835562,
+                "gain_macro_pp": -0.25833404784198627,
+                "gain_micro_pp": -0.25833404784198627,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  -0.7750021435259589,
+                  0.0
+                ],
+                "interventions": 1,
+                "coverage": 0.0625,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 1,
+                "improved": 0,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": -0.25833404784198627,
+                "oracle_reserve_fraction": -0.03565001509105914,
+                "oracle_regret_mean_pp": 7.504727834271975
+              },
+              "no_memory_raw": {
+                "score_mean": 0.7959997248380786,
+                "gain_macro_pp": -6.092770572389744,
+                "gain_micro_pp": -6.092770572389743,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  -17.450059722208792,
+                  0.1437554943464231
+                ],
+                "interventions": 15,
+                "coverage": 0.9375,
+                "harm": 1,
+                "harm_among_interventions": 0.06666666666666667,
+                "quality_degraded": 4,
+                "improved": 3,
+                "absolute_violation": 0.1875,
+                "filtered_gain_pp": -6.092770572389743,
+                "oracle_reserve_fraction": -0.840800369391933,
+                "oracle_regret_mean_pp": 13.339164358819732
+              },
+              "random_component": {
+                "score_mean": 0.8562649524412569,
+                "gain_macro_pp": -0.06624781207190122,
+                "gain_micro_pp": -0.06624781207190122,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  -0.19874343621570367,
+                  0.0
+                ],
+                "interventions": 2,
+                "coverage": 0.125,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 1,
+                "improved": 0,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": -0.06624781207190122,
+                "oracle_reserve_fraction": -0.009142176650123632,
+                "oracle_regret_mean_pp": 7.31264159850189
+              },
+              "random_guarded": {
+                "score_mean": 0.856927430561976,
+                "gain_macro_pp": 0.0,
+                "gain_micro_pp": 0.0,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  0.0,
+                  0.0
+                ],
+                "interventions": 0,
+                "coverage": 0.0,
+                "harm": 0,
+                "harm_among_interventions": null,
+                "quality_degraded": 0,
+                "improved": 0,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": 0.0,
+                "oracle_reserve_fraction": 0.0,
+                "oracle_regret_mean_pp": 7.246393786429989
+              },
+              "random_raw": {
+                "score_mean": 0.8008269216239643,
+                "gain_macro_pp": -5.61005089380117,
+                "gain_micro_pp": -5.61005089380117,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  -17.23973623945026,
+                  0.6500856780995117
+                ],
+                "interventions": 16,
+                "coverage": 1.0,
+                "harm": 1,
+                "harm_among_interventions": 0.0625,
+                "quality_degraded": 4,
+                "improved": 4,
+                "absolute_violation": 0.1875,
+                "filtered_gain_pp": -5.61005089380117,
+                "oracle_reserve_fraction": -0.7741852097945425,
+                "oracle_regret_mean_pp": 12.856444680231156
+              },
+              "shuffled_component": {
+                "score_mean": 0.8551220246160154,
+                "gain_macro_pp": -0.1805405945960556,
+                "gain_micro_pp": -0.1805405945960556,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  -0.5416217837881667,
+                  0.0
+                ],
+                "interventions": 1,
+                "coverage": 0.0625,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 1,
+                "improved": 0,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": -0.1805405945960556,
+                "oracle_reserve_fraction": -0.02491454369125595,
+                "oracle_regret_mean_pp": 7.426934381026045
+              },
+              "shuffled_guarded": {
+                "score_mean": 0.8543440900835562,
+                "gain_macro_pp": -0.25833404784198627,
+                "gain_micro_pp": -0.25833404784198627,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  -0.7750021435259589,
+                  0.0
+                ],
+                "interventions": 1,
+                "coverage": 0.0625,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 1,
+                "improved": 0,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": -0.25833404784198627,
+                "oracle_reserve_fraction": -0.03565001509105914,
+                "oracle_regret_mean_pp": 7.504727834271975
+              },
+              "shuffled_raw": {
+                "score_mean": 0.8001501210044043,
+                "gain_macro_pp": -5.677730955757163,
+                "gain_micro_pp": -5.677730955757163,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  -17.46564974425663,
+                  0.4233018448976125
+                ],
+                "interventions": 11,
+                "coverage": 0.6875,
+                "harm": 1,
+                "harm_among_interventions": 0.09090909090909091,
+                "quality_degraded": 1,
+                "improved": 2,
+                "absolute_violation": 0.1875,
+                "filtered_gain_pp": -5.677730955757163,
+                "oracle_reserve_fraction": -0.7835250364656702,
+                "oracle_regret_mean_pp": 12.924124742187152
+              }
+            },
+            "paired_memory_minus_no_memory_guarded": {
+              "gain_macro_pp": 0.25833404784198627,
+              "ci95_sessions": [
+                0.0,
+                0.7750021435259589
+              ]
+            }
+          }
+        },
+        "note": "Already inspected development cohorts, not fresh validation. Local PDM, not EPDMS. Bounded scores and pointwise component checks are not probabilities/confidence bounds or risk guarantees. Unsupported DDC/TLCremain limitations."
+      }
+    ]
+  },
+  {
+    "attachment": "f38b7c94-f0d8-428b-b4a0-4067a5f4f722",
+    "objects": [
+      {
+        "status": "complete",
+        "primary": "baseline",
+        "cohorts": {
+          "budget20gb_v1": {
+            "methods": {
+              "baseline": {
+                "score_mean": 0.887651020704365,
+                "gain_macro_pp": 0.0,
+                "gain_micro_pp": 0.0,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  0.0,
+                  0.0
+                ],
+                "interventions": 0,
+                "coverage": 0.0,
+                "harm": 0,
+                "harm_among_interventions": null,
+                "quality_degraded": 0,
+                "improved": 0,
+                "absolute_violation": 0.08333333333333333,
+                "filtered_gain_pp": 0.0,
+                "oracle_reserve_fraction": 0.0,
+                "oracle_regret_mean_pp": 6.644948025042495
+              },
+              "memory_component": {
+                "score_mean": 0.9283043916480528,
+                "gain_macro_pp": 4.065337094368781,
+                "gain_micro_pp": 4.065337094368781,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  0.0,
+                  12.196011283106342
+                ],
+                "interventions": 5,
+                "coverage": 0.20833333333333334,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 1,
+                "improved": 1,
+                "absolute_violation": 0.041666666666666664,
+                "filtered_gain_pp": 4.065337094368781,
+                "oracle_reserve_fraction": 0.611793663253338,
+                "oracle_regret_mean_pp": 2.5796109306737134
+              },
+              "memory_guarded": {
+                "score_mean": 0.9283043916480528,
+                "gain_macro_pp": 4.065337094368781,
+                "gain_micro_pp": 4.065337094368781,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  0.0,
+                  12.196011283106342
+                ],
+                "interventions": 2,
+                "coverage": 0.08333333333333333,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 1,
+                "improved": 1,
+                "absolute_violation": 0.041666666666666664,
+                "filtered_gain_pp": 4.065337094368781,
+                "oracle_reserve_fraction": 0.611793663253338,
+                "oracle_regret_mean_pp": 2.5796109306737134
+              },
+              "memory_raw": {
+                "score_mean": 0.8999882321964012,
+                "gain_macro_pp": 1.2337211492036153,
+                "gain_micro_pp": 1.2337211492036153,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  -1.0356833007245991,
+                  4.780276043360254
+                ],
+                "interventions": 20,
+                "coverage": 0.8333333333333334,
+                "harm": 1,
+                "harm_among_interventions": 0.05,
+                "quality_degraded": 4,
+                "improved": 4,
+                "absolute_violation": 0.041666666666666664,
+                "filtered_gain_pp": 1.2337211492036153,
+                "oracle_reserve_fraction": 0.1856630246849411,
+                "oracle_regret_mean_pp": 5.411226875838878
+              },
+              "no_memory_component": {
+                "score_mean": 0.8855173162538552,
+                "gain_macro_pp": -0.21337044505098288,
+                "gain_micro_pp": -0.21337044505098288,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  -0.7738916807133469,
+                  0.13378034556039836
+                ],
+                "interventions": 4,
+                "coverage": 0.16666666666666666,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 2,
+                "improved": 1,
+                "absolute_violation": 0.08333333333333333,
+                "filtered_gain_pp": -0.21337044505098288,
+                "oracle_reserve_fraction": -0.03211017516568437,
+                "oracle_regret_mean_pp": 6.858318470093477
+              },
+              "no_memory_guarded": {
+                "score_mean": 0.8860686071764312,
+                "gain_macro_pp": -0.15824135279336876,
+                "gain_micro_pp": -0.15824135279336876,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  -0.3590476366104878,
+                  0.0
+                ],
+                "interventions": 2,
+                "coverage": 0.08333333333333333,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 2,
+                "improved": 0,
+                "absolute_violation": 0.08333333333333333,
+                "filtered_gain_pp": -0.15824135279336876,
+                "oracle_reserve_fraction": -0.023813783373024474,
+                "oracle_regret_mean_pp": 6.803189377835864
+              },
+              "no_memory_raw": {
+                "score_mean": 0.8970647750722137,
+                "gain_macro_pp": 0.9413754367848656,
+                "gain_micro_pp": 0.9413754367848655,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  -1.6371769731106767,
+                  4.4642857142857135
+                ],
+                "interventions": 22,
+                "coverage": 0.9166666666666666,
+                "harm": 1,
+                "harm_among_interventions": 0.045454545454545456,
+                "quality_degraded": 6,
+                "improved": 4,
+                "absolute_violation": 0.041666666666666664,
+                "filtered_gain_pp": 0.9413754367848655,
+                "oracle_reserve_fraction": 0.141667840476276,
+                "oracle_regret_mean_pp": 5.703572588257629
+              },
+              "random_component": {
+                "score_mean": 0.9264446380733142,
+                "gain_macro_pp": 3.879361736894937,
+                "gain_micro_pp": 3.879361736894937,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  -0.11567642176961851,
+                  11.75376163245443
+                ],
+                "interventions": 6,
+                "coverage": 0.25,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 3,
+                "improved": 1,
+                "absolute_violation": 0.041666666666666664,
+                "filtered_gain_pp": 3.879361736894937,
+                "oracle_reserve_fraction": 0.583806182121361,
+                "oracle_regret_mean_pp": 2.7655862881475577
+              },
+              "random_guarded": {
+                "score_mean": 0.8860686071764312,
+                "gain_macro_pp": -0.15824135279336876,
+                "gain_micro_pp": -0.15824135279336876,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  -0.3590476366104878,
+                  0.0
+                ],
+                "interventions": 2,
+                "coverage": 0.08333333333333333,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 2,
+                "improved": 0,
+                "absolute_violation": 0.08333333333333333,
+                "filtered_gain_pp": -0.15824135279336876,
+                "oracle_reserve_fraction": -0.023813783373024474,
+                "oracle_regret_mean_pp": 6.803189377835864
+              },
+              "random_raw": {
+                "score_mean": 0.8966203755429284,
+                "gain_macro_pp": 0.8969354838563358,
+                "gain_micro_pp": 0.8969354838563355,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  -1.6371769731106767,
+                  4.330965855500124
+                ],
+                "interventions": 23,
+                "coverage": 0.9583333333333334,
+                "harm": 1,
+                "harm_among_interventions": 0.043478260869565216,
+                "quality_degraded": 7,
+                "improved": 4,
+                "absolute_violation": 0.041666666666666664,
+                "filtered_gain_pp": 0.8969354838563355,
+                "oracle_reserve_fraction": 0.13498006011124514,
+                "oracle_regret_mean_pp": 5.748012541186159
+              },
+              "shuffled_component": {
+                "score_mean": 0.8846857936960885,
+                "gain_macro_pp": -0.29652270082765514,
+                "gain_micro_pp": -0.29652270082765514,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  -0.7738916807133469,
+                  0.0
+                ],
+                "interventions": 7,
+                "coverage": 0.2916666666666667,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 3,
+                "improved": 0,
+                "absolute_violation": 0.08333333333333333,
+                "filtered_gain_pp": -0.29652270082765514,
+                "oracle_reserve_fraction": -0.044623780308012104,
+                "oracle_regret_mean_pp": 6.94147072587015
+              },
+              "shuffled_guarded": {
+                "score_mean": 0.8860686071764312,
+                "gain_macro_pp": -0.15824135279336876,
+                "gain_micro_pp": -0.15824135279336876,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  -0.3590476366104878,
+                  0.0
+                ],
+                "interventions": 2,
+                "coverage": 0.08333333333333333,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 2,
+                "improved": 0,
+                "absolute_violation": 0.08333333333333333,
+                "filtered_gain_pp": -0.15824135279336876,
+                "oracle_reserve_fraction": -0.023813783373024474,
+                "oracle_regret_mean_pp": 6.803189377835864
+              },
+              "shuffled_raw": {
+                "score_mean": 0.8974022156187469,
+                "gain_macro_pp": 0.9751194914381855,
+                "gain_micro_pp": 0.9751194914381857,
+                "sessions": 3,
+                "gain_ci95_sessions": [
+                  -1.6371769731106767,
+                  4.780276043360254
+                ],
+                "interventions": 22,
+                "coverage": 0.9166666666666666,
+                "harm": 1,
+                "harm_among_interventions": 0.045454545454545456,
+                "quality_degraded": 7,
+                "improved": 4,
+                "absolute_violation": 0.041666666666666664,
+                "filtered_gain_pp": 0.9751194914381857,
+                "oracle_reserve_fraction": 0.14674599225807336,
+                "oracle_regret_mean_pp": 5.669828533604309
+              }
+            },
+            "paired_memory_minus_no_memory_guarded": {
+              "gain_macro_pp": 4.22357844716215,
+              "ci95_sessions": [
+                0.0,
+                12.55505891971683
+              ]
+            }
+          },
+          "validation_cached4_v1": {
+            "methods": {
+              "baseline": {
+                "score_mean": 0.856927430561976,
+                "gain_macro_pp": 0.0,
+                "gain_micro_pp": 0.0,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  0.0,
+                  0.0
+                ],
+                "interventions": 0,
+                "coverage": 0.0,
+                "harm": 0,
+                "harm_among_interventions": null,
+                "quality_degraded": 0,
+                "improved": 0,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": 0.0,
+                "oracle_reserve_fraction": 0.0,
+                "oracle_regret_mean_pp": 7.246393786429989
+              },
+              "memory_component": {
+                "score_mean": 0.8577926322310394,
+                "gain_macro_pp": 0.08652016690634326,
+                "gain_micro_pp": 0.08652016690634326,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  0.0,
+                  0.24874743219266
+                ],
+                "interventions": 2,
+                "coverage": 0.125,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 0,
+                "improved": 2,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": 0.08652016690634326,
+                "oracle_reserve_fraction": 0.011939755063872718,
+                "oracle_regret_mean_pp": 7.159873619523646
+              },
+              "memory_guarded": {
+                "score_mean": 0.856927430561976,
+                "gain_macro_pp": 0.0,
+                "gain_micro_pp": 0.0,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  0.0,
+                  0.0
+                ],
+                "interventions": 0,
+                "coverage": 0.0,
+                "harm": 0,
+                "harm_among_interventions": null,
+                "quality_degraded": 0,
+                "improved": 0,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": 0.0,
+                "oracle_reserve_fraction": 0.0,
+                "oracle_regret_mean_pp": 7.246393786429989
+              },
+              "memory_raw": {
+                "score_mean": 0.7927547821007925,
+                "gain_macro_pp": -6.417264846118345,
+                "gain_micro_pp": -6.417264846118345,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  -17.296739679083064,
+                  0.6302775011010466
+                ],
+                "interventions": 14,
+                "coverage": 0.875,
+                "harm": 1,
+                "harm_among_interventions": 0.07142857142857142,
+                "quality_degraded": 5,
+                "improved": 3,
+                "absolute_violation": 0.1875,
+                "filtered_gain_pp": -6.417264846118345,
+                "oracle_reserve_fraction": -0.8855804742678601,
+                "oracle_regret_mean_pp": 13.663658632548334
+              },
+              "no_memory_component": {
+                "score_mean": 0.8579876673924351,
+                "gain_macro_pp": 0.10602368304591242,
+                "gain_micro_pp": 0.10602368304591242,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  -0.04283119588587847,
+                  0.36090224502361573
+                ],
+                "interventions": 4,
+                "coverage": 0.25,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 1,
+                "improved": 1,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": 0.10602368304591242,
+                "oracle_reserve_fraction": 0.014631233986270305,
+                "oracle_regret_mean_pp": 7.140370103384076
+              },
+              "no_memory_guarded": {
+                "score_mean": 0.856927430561976,
+                "gain_macro_pp": 0.0,
+                "gain_micro_pp": 0.0,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  0.0,
+                  0.0
+                ],
+                "interventions": 1,
+                "coverage": 0.0625,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 0,
+                "improved": 0,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": 0.0,
+                "oracle_reserve_fraction": 0.0,
+                "oracle_regret_mean_pp": 7.246393786429989
+              },
+              "no_memory_raw": {
+                "score_mean": 0.7811694633071474,
+                "gain_macro_pp": -7.575796725482852,
+                "gain_micro_pp": -7.575796725482852,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  -19.989738707348593,
+                  0.3236374148495952
+                ],
+                "interventions": 14,
+                "coverage": 0.875,
+                "harm": 1,
+                "harm_among_interventions": 0.07142857142857142,
+                "quality_degraded": 6,
+                "improved": 2,
+                "absolute_violation": 0.1875,
+                "filtered_gain_pp": -7.575796725482852,
+                "oracle_reserve_fraction": -1.0454574991038608,
+                "oracle_regret_mean_pp": 14.82219051191284
+              },
+              "random_component": {
+                "score_mean": 0.8542870252851359,
+                "gain_macro_pp": -0.2640405276840077,
+                "gain_micro_pp": -0.2640405276840077,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  -0.5558988490834595,
+                  -0.028554130590585647
+                ],
+                "interventions": 4,
+                "coverage": 0.25,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 3,
+                "improved": 0,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": -0.2640405276840077,
+                "oracle_reserve_fraction": -0.03643750746453568,
+                "oracle_regret_mean_pp": 7.510434314113996
+              },
+              "random_guarded": {
+                "score_mean": 0.856927430561976,
+                "gain_macro_pp": 0.0,
+                "gain_micro_pp": 0.0,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  0.0,
+                  0.0
+                ],
+                "interventions": 1,
+                "coverage": 0.0625,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 0,
+                "improved": 0,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": 0.0,
+                "oracle_reserve_fraction": 0.0,
+                "oracle_regret_mean_pp": 7.246393786429989
+              },
+              "random_raw": {
+                "score_mean": 0.7818325608224317,
+                "gain_macro_pp": -7.509486973954436,
+                "gain_micro_pp": -7.509486973954436,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  -19.73657361547205,
+                  0.8299675986026835
+                ],
+                "interventions": 16,
+                "coverage": 1.0,
+                "harm": 1,
+                "harm_among_interventions": 0.0625,
+                "quality_degraded": 5,
+                "improved": 4,
+                "absolute_violation": 0.1875,
+                "filtered_gain_pp": -7.509486973954436,
+                "oracle_reserve_fraction": -1.036306774828761,
+                "oracle_regret_mean_pp": 14.755880760384425
+              },
+              "shuffled_component": {
+                "score_mean": 0.856784659909023,
+                "gain_macro_pp": -0.014277065295292823,
+                "gain_micro_pp": -0.014277065295292823,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  -0.04283119588587847,
+                  0.0
+                ],
+                "interventions": 3,
+                "coverage": 0.1875,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 1,
+                "improved": 0,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": -0.014277065295292823,
+                "oracle_reserve_fraction": -0.001970230395431845,
+                "oracle_regret_mean_pp": 7.260670851725282
+              },
+              "shuffled_guarded": {
+                "score_mean": 0.856927430561976,
+                "gain_macro_pp": 0.0,
+                "gain_micro_pp": 0.0,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  0.0,
+                  0.0
+                ],
+                "interventions": 1,
+                "coverage": 0.0625,
+                "harm": 0,
+                "harm_among_interventions": 0.0,
+                "quality_degraded": 0,
+                "improved": 0,
+                "absolute_violation": 0.125,
+                "filtered_gain_pp": 0.0,
+                "oracle_reserve_fraction": 0.0,
+                "oracle_regret_mean_pp": 7.246393786429989
+              },
+              "shuffled_raw": {
+                "score_mean": 0.7826752974505581,
+                "gain_macro_pp": -7.425213311141785,
+                "gain_micro_pp": -7.4252133111417855,
+                "sessions": 4,
+                "gain_ci95_sessions": [
+                  -19.989738707348593,
+                  0.3236374148495952
+                ],
+                "interventions": 14,
+                "coverage": 0.875,
+                "harm": 1,
+                "harm_among_interventions": 0.07142857142857142,
+                "quality_degraded": 5,
+                "improved": 3,
+                "absolute_violation": 0.1875,
+                "filtered_gain_pp": -7.4252133111417855,
+                "oracle_reserve_fraction": -1.024677036603595,
+                "oracle_regret_mean_pp": 14.671607097571775
+              }
+            },
+            "paired_memory_minus_no_memory_guarded": {
+              "gain_macro_pp": 0.0,
+              "ci95_sessions": [
+                0.0,
+                0.0
+              ]
+            }
+          }
+        },
+        "note": "Already inspected development cohorts, not fresh validation. Local PDM, not EPDMS. Bounded scores and pointwise component checks are not probabilities/confidence bounds or risk guarantees. Unsupported DDC/TLC remain limitations."
+      }
+    ]
+  },
+  {
+    "attachment": "bed09855-c39b-4096-8a06-26371c2bd16b",
+    "objects": [
+      {
+        "status": "planned",
+        "spec": {
+          "source_identity_sha256": "db5a09ddbbd72d82ea48679219a669c38d8cf9349ec400b5093b9fefdbdb00a0",
+          "source_split_identity": {
+            "splits": "00b88133cd5f3b15e691835bd0699fc34d66a071798c8999458b8d0dfb520e34",
+            "inventory": "fec94fd47a7f2a58cf2e1f29e8ed2139e4c4a80cfccdbe732aed014a73298b8a"
+          },
+          "budget_bytes": 20000000000,
+          "sessions": {
+            "memory": 6,
+            "fit": 4,
+            "development": 3,
+            "calibration": 2,
+            "test": 2
+          },
+          "scenes_per_session": 8,
+          "seed": 20261027,
+          "mapping_sha256": "52ee3d5eb7c4b7e3681bea6fe410458d3b30a2c8d480ac9882d6c6f5a6039bf2"
+        },
+        "root": "/workspace/exp_v2/drivemem_memory/budget20gb_v1",
+        "archive_count": 4,
+        "compressed_GB": 17.148088228,
+        "limit_GB": 20.0,
+        "largest_archive_GB": 5.675002023,
+        "selected_scenes": 136,
+        "selected_sessions": 17,
+        "required_images": 4352,
+        "roles": {
+          "memory": {
+            "sessions": 6,
+            "scenes": 48
+          },
+          "fit": {
+            "sessions": 4,
+            "scenes": 32
+          },
+          "development": {
+            "sessions": 3,
+            "scenes": 24
+          },
+          "calibration": {
+            "sessions": 2,
+            "scenes": 16
+          },
+          "test": {
+            "sessions": 2,
+            "scenes": 16
+          }
+        },
+        "archive_plan_sha256": "0d2e8c68e2ef97299c8ce94d285d75d53de1fe47d6319c67d8fd09cee87779e9",
+        "preparer_sha256": "2d196be5a716b1734a685dbe5262a17b1ea5524d55371de6eff971e12fa393e9",
+        "note": "No image archive downloaded. Budget covers unique compressed archives, not protocol overhead/retries. Selection favors archive availability/cost; this is a technical pilot, not representative benchmark evidence."
+      },
+      {
+        "status": "complete",
+        "role": "development",
+        "scenes": 24,
+        "sessions": 3,
+        "methods": {
+          "baseline": {
+            "raw_score": 0.887651020704365,
+            "raw_gain_pp": 0.0,
+            "filtered_score": 0.887651020704365,
+            "filtered_gain_pp": 0.0,
+            "gain_ci95_sessions": [
+              0.0,
+              0.0
+            ],
+            "coverage": 0.0,
+            "interventions": 0,
+            "harm_events": 0,
+            "quality_degradation_events": 0,
+            "improved_scenes": 0,
+            "harm_all_scenes": 0.0,
+            "harm_among_interventions": null,
+            "filtered_harm_among_interventions": null,
+            "quality_degradation_among_interventions": null,
+            "absolute_violation": 0.08333333333333333
+          },
+          "no_memory_ridge": {
+            "raw_score": 0.8850370664396601,
+            "raw_gain_pp": -0.2613954264704903,
+            "filtered_score": 0.8850370664396601,
+            "filtered_gain_pp": -0.2613954264704903,
+            "gain_ci95_sessions": [
+              -0.6688174569662184,
+              0.2593675837665996
+            ],
+            "coverage": 0.6666666666666666,
+            "interventions": 16,
+            "harm_events": 1,
+            "quality_degradation_events": 5,
+            "improved_scenes": 3,
+            "harm_all_scenes": 0.041666666666666664,
+            "harm_among_interventions": 0.0625,
+            "filtered_harm_among_interventions": 0.0625,
+            "quality_degradation_among_interventions": 0.3125,
+            "absolute_violation": 0.08333333333333333
+          },
+          "random_memory": {
+            "raw_score": 0.8879368334445387,
+            "raw_gain_pp": 0.028581274017378904,
+            "filtered_score": 0.8879368334445387,
+            "filtered_gain_pp": 0.028581274017378904,
+            "gain_ci95_sessions": [
+              0.0,
+              0.08574382205213671
+            ],
+            "coverage": 0.125,
+            "interventions": 3,
+            "harm_events": 0,
+            "quality_degradation_events": 0,
+            "improved_scenes": 1,
+            "harm_all_scenes": 0.0,
+            "harm_among_interventions": 0.0,
+            "filtered_harm_among_interventions": 0.0,
+            "quality_degradation_among_interventions": 0.0,
+            "absolute_violation": 0.08333333333333333
+          },
+          "similarity_memory": {
+            "raw_score": 0.887651020704365,
+            "raw_gain_pp": 0.0,
+            "filtered_score": 0.887651020704365,
+            "filtered_gain_pp": 0.0,
+            "gain_ci95_sessions": [
+              0.0,
+              0.0
+            ],
+            "coverage": 0.08333333333333333,
+            "interventions": 2,
+            "harm_events": 0,
+            "quality_degradation_events": 0,
+            "improved_scenes": 0,
+            "harm_all_scenes": 0.0,
+            "harm_among_interventions": 0.0,
+            "filtered_harm_among_interventions": 0.0,
+            "quality_degradation_among_interventions": 0.0,
+            "absolute_violation": 0.08333333333333333
+          },
+          "similarity_threshold": {
+            "raw_score": 0.887651020704365,
+            "raw_gain_pp": 0.0,
+            "filtered_score": 0.887651020704365,
+            "filtered_gain_pp": 0.0,
+            "gain_ci95_sessions": [
+              0.0,
+              0.0
+            ],
+            "coverage": 0.08333333333333333,
+            "interventions": 2,
+            "harm_events": 0,
+            "quality_degradation_events": 0,
+            "improved_scenes": 0,
+            "harm_all_scenes": 0.0,
+            "harm_among_interventions": 0.0,
+            "filtered_harm_among_interventions": 0.0,
+            "quality_degradation_among_interventions": 0.0,
+            "absolute_violation": 0.08333333333333333
+          }
+        },
+        "memory_mode": "enriched",
+        "note": "Local simulated metric; empirical harm only, no calibrated guarantee; all donor outcomes come from simulation."
+      }
+    ]
+  }
+]

@@ -1,0 +1,83 @@
+egorov@astra:/auto/ws/drivesuprim_workspace$ docker exec \
+  -w /workspace/DriveSuprim egorov_drivesuprim \
+  python -u scripts/drivesuprim/evaluation/diagnose_drivemem_memory.py \
+  /workspace/exp_v2/drivemem_memory/budget20gb_v1
+DEVELOPMENT ONLY; READ-ONLY; no GPU or new simulator calls
+FIT: {
+  "status": "complete",
+  "ridge_sha256": "56d58d5a45dd36df43f34472163537811c71cddf5ac5cc4c1510083e791423c2",
+  "labels": "80 frozen label files",
+  "similarity_threshold": 0.19386561515828718,
+  "threshold_source": "fit nearest-neighbor distances only; no query outcomes",
+  "memory_mode": "enriched",
+  "training_scenes": 80,
+  "bank_scenes": 48
+}
+
+RETRIEVAL / RANKING (selection margins use model-score units, not PDM points):
+       baseline_score  donor_count  donor_sessions  nearest_distance  baseline_top2_margin  correction_abs_mean  correction_candidate_std_mean  selection_delta_span  evaluated_union_best_gain_pp
+count       24.000000         24.0       24.000000         24.000000             24.000000   24.000000                      24.000000             24.000000                     24.000000
+mean         0.887651          5.0        3.291667          0.145759              0.026214    0.035613                       0.000550              0.168272                      0.181793
+std          0.209607          0.0        0.750604          0.154305              0.054237    0.027699                       0.000819              0.660079                      0.504579
+min          0.000000          5.0        2.000000          0.028966              0.000090    0.003950                       0.000019              0.005036                      0.000000
+25%          0.857143          5.0        3.000000          0.071104              0.002849    0.006279                       0.000066              0.013972                      0.000000
+50%          0.956109          5.0        3.000000          0.090402              0.005129    0.034647                       0.000276              0.019720                      0.000000
+75%          1.000000          5.0        4.000000          0.132694              0.015967    0.053971                       0.000490              0.050124                      0.000000
+max          1.000000          5.0        5.000000          0.611935              0.237040    0.095249                       0.003424              3.263929                      1.898277
+No compatible donors: 0/24
+Pass distance threshold: 20/24
+Distinct retrieved episodes: 45/48
+Retrieved donor sessions (episode occurrences): {'2021.06.14.18.42.45_veh-12': 18, '2021.06.07.17.48.02_veh-38': 22, '2021.10.11.05.34.05_veh-50': 17, '2021.10.11.08.31.07_veh-50': 19, '2021.08.17.14.45.12_veh-42': 29, '2021.10.05.04.03.05_veh-50': 15}
+
+METHODS BY SESSION:
+                                                 scenes  interventions   gain_pp  harm  quality_degraded
+session_id                 method     
+2021.06.09.12.39.51_veh-26 baseline                   8              0  0.000000     0    0
+                           no_memory_ridge            8              6 -0.374736     0    1
+                           random_memory              8              1  0.000000     0    0
+                           similarity_memory          8              1  0.000000     0    0
+                           similarity_threshold       8              1  0.000000     0    0
+2021.07.16.16.08.35_veh-35 baseline                   8              0  0.000000     0    0
+                           no_memory_ridge            8              5  0.259368     0    1
+                           random_memory              8              2  0.085744     0    0
+                           similarity_memory          8              1  0.000000     0    0
+                           similarity_threshold       8              1  0.000000     0    0
+2021.10.11.07.47.13_veh-50 baseline                   8              0  0.000000     0    0
+                           no_memory_ridge            8              5 -0.668817     1    3
+                           random_memory              8              0  0.000000     0    0
+                           similarity_memory          8              0  0.000000     0    0
+                           similarity_threshold       8              0  0.000000     0    0
+
+ALL INTERVENTIONS:
+           token               method  candidate_id  raw_gain_pp  raw_harm  raw_quality_degraded
+539eba3476c952fa      no_memory_ridge          5364     0.000000     False                 False
+6d224a369e6d559d      no_memory_ridge           817     0.000000     False                 False
+9669e25d37d55fda      no_memory_ridge          8178     0.000000     False                 False
+9669e25d37d55fda        random_memory          3757     0.000000     False                 False
+9669e25d37d55fda    similarity_memory          3757     0.000000     False                 False
+9669e25d37d55fda similarity_threshold          3757     0.000000     False                 False
+908982b7b76d55b8      no_memory_ridge          7282     0.000000     False                 False
+8dc0c10eb60f51ac      no_memory_ridge           579    -2.997891     False                  True
+f221518470775b5f      no_memory_ridge          1188     0.000000     False                 False
+2bd82ef18f655498      no_memory_ridge          7633    -0.389804     False                  True
+fabca9b9e2805a4e      no_memory_ridge          7282     0.000000     False                 False
+fabca9b9e2805a4e        random_memory          7829     0.000000     False                 False
+fabca9b9e2805a4e    similarity_memory          7829     0.000000     False                 False
+fabca9b9e2805a4e similarity_threshold          7829     0.000000     False                 False
+ac7370c5c37957fe      no_memory_ridge          7802     0.000000     False                 False
+bb1dc3a17211547e      no_memory_ridge          3770     1.295762     False                 False
+bb1dc3a17211547e        random_memory          7324     0.685951     False                 False
+48bdc41174c55f59      no_memory_ridge          3880     1.168983     False                 False
+f27a618a5c7458ee      no_memory_ridge           917     0.000000      True                 False
+8597dd83e37b5e5b      no_memory_ridge           248    -1.305226     False                  True
+fb6ee63f31fd56ce      no_memory_ridge          7263     1.898277     False                 False
+dbfedc756de85252      no_memory_ridge           886    -0.968727     False                  True
+7233f453d6425baf      no_memory_ridge          3228    -4.974864     False                  True
+
+SIMILARITY SAFETY/QUALITY COMPONENT DIFFERENCES:
+           token  similarity_gain_pp  delta_no_at_fault_collisions  delta_drivable_area_compliance delta_driving_direction_compliance  delta_traffic_light_compliance  delta_ego_progress  delta_time_to_collision_within_bound  delta_lane_keeping  delta_history_comfort
+9669e25d37d55fda                 0.0                           0.0                             0.0                                0.0                             0.0                 0.0                       0.0                 0.0                    0.0
+fabca9b9e2805a4e                 0.0                           0.0                             0.0                                0.0                             0.0                 0.0                       0.0                 0.0                    0.0
+
+Best evaluated-union action is NOT a full/top-k oracle; unevaluated alternatives remain unknown.
+egorov@astra:/auto/ws/drivesuprim_workspace$ 

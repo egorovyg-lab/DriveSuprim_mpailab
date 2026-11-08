@@ -1,0 +1,201 @@
+egorov@astra:/auto/ws/drivesuprim_workspace$ docker exec \
+  -e OPENSCENE_DATA_ROOT=/workspace/exp_v2/drivemem_data \
+  -w /workspace/DriveSuprim egorov_drivesuprim \
+  bash scripts/drivesuprim/evaluation/run_drivemem_cached_validation.sh report
+{
+  "status": "complete",
+  "primary": "B3",
+  "scenes": 16,
+  "sessions": 4,
+  "methods": {
+    "B0": {
+      "score_mean": 0.856927430561976,
+      "gain_macro_pp": 0.0,
+      "gain_micro_pp": 0.0,
+      "sessions": 4,
+      "gain_ci95_sessions": [
+        0.0,
+        0.0
+      ],
+      "interventions": 1,
+      "coverage": 0.0625,
+      "harm": 0,
+      "harm_among_interventions": 0.0,
+      "quality_degraded": 0,
+      "improved": 0,
+      "absolute_violation": 0.125,
+      "filtered_gain_pp": 0.0
+    },
+    "B1": {
+      "score_mean": 0.856927430561976,
+      "gain_macro_pp": 0.0,
+      "gain_micro_pp": 0.0,
+      "sessions": 4,
+      "gain_ci95_sessions": [
+        0.0,
+        0.0
+      ],
+      "interventions": 1,
+      "coverage": 0.0625,
+      "harm": 0,
+      "harm_among_interventions": 0.0,
+      "quality_degraded": 0,
+      "improved": 0,
+      "absolute_violation": 0.125,
+      "filtered_gain_pp": 0.0
+    },
+    "B2": {
+      "score_mean": 0.856927430561976,
+      "gain_macro_pp": 0.0,
+      "gain_micro_pp": 0.0,
+      "sessions": 4,
+      "gain_ci95_sessions": [
+        0.0,
+        0.0
+      ],
+      "interventions": 0,
+      "coverage": 0.0,
+      "harm": 0,
+      "harm_among_interventions": null,
+      "quality_degraded": 0,
+      "improved": 0,
+      "absolute_violation": 0.125,
+      "filtered_gain_pp": 0.0
+    },
+    "B3": {
+      "score_mean": 0.8473480158894149,
+      "gain_macro_pp": -0.957941467256105,
+      "gain_micro_pp": -0.957941467256105,
+      "sessions": 4,
+      "gain_ci95_sessions": [
+        -2.6785714285714293,
+        0.0
+      ],
+      "interventions": 4,
+      "coverage": 0.25,
+      "harm": 0,
+      "harm_among_interventions": 0.0,
+      "quality_degraded": 2,
+      "improved": 0,
+      "absolute_violation": 0.125,
+      "filtered_gain_pp": -0.957941467256105
+    },
+    "baseline": {
+      "score_mean": 0.856927430561976,
+      "gain_macro_pp": 0.0,
+      "gain_micro_pp": 0.0,
+      "sessions": 4,
+      "gain_ci95_sessions": [
+        0.0,
+        0.0
+      ],
+      "interventions": 0,
+      "coverage": 0.0,
+      "harm": 0,
+      "harm_among_interventions": null,
+      "quality_degraded": 0,
+      "improved": 0,
+      "absolute_violation": 0.125,
+      "filtered_gain_pp": 0.0
+    },
+    "no_memory_ridge_full": {
+      "score_mean": 0.8481850660087178,
+      "gain_macro_pp": -0.8742364553258288,
+      "gain_micro_pp": -0.8742364553258289,
+      "sessions": 4,
+      "gain_ci95_sessions": [
+        -2.7218701622589965,
+        0.2736550954429137
+      ],
+      "interventions": 11,
+      "coverage": 0.6875,
+      "harm": 0,
+      "harm_among_interventions": 0.0,
+      "quality_degraded": 4,
+      "improved": 3,
+      "absolute_violation": 0.125,
+      "filtered_gain_pp": -0.8742364553258289
+    },
+    "random_0": {
+      "score_mean": 0.8479988591334044,
+      "gain_macro_pp": -0.8928571428571431,
+      "gain_micro_pp": -0.8928571428571431,
+      "sessions": 4,
+      "gain_ci95_sessions": [
+        -2.6785714285714293,
+        0.0
+      ],
+      "interventions": 2,
+      "coverage": 0.125,
+      "harm": 0,
+      "harm_among_interventions": 0.0,
+      "quality_degraded": 1,
+      "improved": 0,
+      "absolute_violation": 0.125,
+      "filtered_gain_pp": -0.8928571428571431
+    },
+    "random_1": {
+      "score_mean": 0.8577324488614613,
+      "gain_macro_pp": 0.08050182994853855,
+      "gain_micro_pp": 0.08050182994853855,
+      "sessions": 4,
+      "gain_ci95_sessions": [
+        0.0,
+        0.24150548984561565
+      ],
+      "interventions": 3,
+      "coverage": 0.1875,
+      "harm": 0,
+      "harm_among_interventions": 0.0,
+      "quality_degraded": 0,
+      "improved": 1,
+      "absolute_violation": 0.125,
+      "filtered_gain_pp": 0.08050182994853855
+    },
+    "random_2": {
+      "score_mean": 0.8473480158894149,
+      "gain_macro_pp": -0.957941467256105,
+      "gain_micro_pp": -0.957941467256105,
+      "sessions": 4,
+      "gain_ci95_sessions": [
+        -2.6785714285714293,
+        0.0
+      ],
+      "interventions": 2,
+      "coverage": 0.125,
+      "harm": 0,
+      "harm_among_interventions": 0.0,
+      "quality_degraded": 2,
+      "improved": 0,
+      "absolute_violation": 0.125,
+      "filtered_gain_pp": -0.957941467256105
+    },
+    "scene_only": {
+      "score_mean": 0.856927430561976,
+      "gain_macro_pp": 0.0,
+      "gain_micro_pp": 0.0,
+      "sessions": 4,
+      "gain_ci95_sessions": [
+        0.0,
+        0.0
+      ],
+      "interventions": 1,
+      "coverage": 0.0625,
+      "harm": 0,
+      "harm_among_interventions": 0.0,
+      "quality_degraded": 0,
+      "improved": 0,
+      "absolute_violation": 0.125,
+      "filtered_gain_pp": 0.0
+    }
+  },
+  "paired_primary_minus_ridge": {
+    "gain_macro_pp": -0.0837050119302761,
+    "ci95_sessions": [
+      -0.37077014548033416,
+      0.20336012161978195
+    ]
+  },
+  "note": "Frozen-model new-session check in cached archives. No refit, no oracle, local PDM not full EPDMS. Four sessions are preliminary and archive selection bias remains; no calibrated safety guarantee."
+}
+egorov@astra:/auto/ws/drivesuprim_workspace$ 

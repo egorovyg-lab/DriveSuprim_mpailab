@@ -1,0 +1,261 @@
+egorov@astra:/auto/ws/drivesuprim_workspace$ docker exec   -e OPENSCENE_DATA_ROOT=/workspace/exp_v2/drivemem_data   -w /workspace/DriveSuprim egorov_drivesuprim   bash scripts/drivesuprim/evaluation/run_drivemem_budget.sh action-report
+Memory pilot stage=action-report root=/workspace/exp_v2/drivemem_memory/budget20gb_v1
+{
+  "stage": "report",
+  "source": "/workspace/exp_v2/drivemem_memory/budget20gb_v1",
+  "output": "/workspace/exp_v2/drivemem_memory/experiments/action_transfer_v2",
+  "fit_scenes": 32,
+  "new_actions": 0,
+  "baseline_repeats": 32,
+  "scorer_calls": 64,
+  "new_image_download_GB": 0,
+  "gpu_required": false
+}
+{
+  "status": "complete",
+  "primary": "B3",
+  "scenes": 24,
+  "sessions": 3,
+  "topk": 16,
+  "methods": {
+    "B0": {
+      "score_mean": 0.887651020704365,
+      "gain_macro_pp": 0.0,
+      "gain_micro_pp": 0.0,
+      "sessions": 3,
+      "gain_ci95_sessions": [
+        0.0,
+        0.0
+      ],
+      "interventions": 2,
+      "coverage": 0.08333333333333333,
+      "harm": 0,
+      "harm_among_interventions": 0.0,
+      "quality_degraded": 0,
+      "improved": 0,
+      "absolute_violation": 0.08333333333333333,
+      "filtered_gain_pp": 0.0,
+      "oracle_reserve_fraction": 0.0,
+      "oracle_regret_mean_pp": 6.644948025042495
+    },
+    "B1": {
+      "score_mean": 0.9331746208607733,
+      "gain_macro_pp": 4.552360015640837,
+      "gain_micro_pp": 4.552360015640837,
+      "sessions": 3,
+      "gain_ci95_sessions": [
+        0.0,
+        13.65708004692251
+      ],
+      "interventions": 7,
+      "coverage": 0.2916666666666667,
+      "harm": 0,
+      "harm_among_interventions": 0.0,
+      "quality_degraded": 0,
+      "improved": 3,
+      "absolute_violation": 0.041666666666666664,
+      "filtered_gain_pp": 4.552360015640837,
+      "oracle_reserve_fraction": 0.6850858725282091,
+      "oracle_regret_mean_pp": 2.092588009401657
+    },
+    "B2": {
+      "score_mean": 0.887651020704365,
+      "gain_macro_pp": 0.0,
+      "gain_micro_pp": 0.0,
+      "sessions": 3,
+      "gain_ci95_sessions": [
+        0.0,
+        0.0
+      ],
+      "interventions": 0,
+      "coverage": 0.0,
+      "harm": 0,
+      "harm_among_interventions": null,
+      "quality_degraded": 0,
+      "improved": 0,
+      "absolute_violation": 0.08333333333333333,
+      "filtered_gain_pp": 0.0,
+      "oracle_reserve_fraction": 0.0,
+      "oracle_regret_mean_pp": 6.644948025042495
+    },
+    "B3": {
+      "score_mean": 0.9300071260775881,
+      "gain_macro_pp": 4.23561053732231,
+      "gain_micro_pp": 4.235610537322309,
+      "sessions": 3,
+      "gain_ci95_sessions": [
+        0.0,
+        12.706831611966928
+      ],
+      "interventions": 4,
+      "coverage": 0.16666666666666666,
+      "harm": 0,
+      "harm_among_interventions": 0.0,
+      "quality_degraded": 0,
+      "improved": 3,
+      "absolute_violation": 0.041666666666666664,
+      "filtered_gain_pp": 4.235610537322309,
+      "oracle_reserve_fraction": 0.6374181590826246,
+      "oracle_regret_mean_pp": 2.409337487720185
+    },
+    "baseline": {
+      "score_mean": 0.887651020704365,
+      "gain_macro_pp": 0.0,
+      "gain_micro_pp": 0.0,
+      "sessions": 3,
+      "gain_ci95_sessions": [
+        0.0,
+        0.0
+      ],
+      "interventions": 0,
+      "coverage": 0.0,
+      "harm": 0,
+      "harm_among_interventions": null,
+      "quality_degraded": 0,
+      "improved": 0,
+      "absolute_violation": 0.08333333333333333,
+      "filtered_gain_pp": 0.0,
+      "oracle_reserve_fraction": 0.0,
+      "oracle_regret_mean_pp": 6.644948025042495
+    },
+    "no_memory_ridge_full": {
+      "score_mean": 0.900885175843173,
+      "gain_macro_pp": 1.3234155138808033,
+      "gain_micro_pp": 1.3234155138808033,
+      "sessions": 3,
+      "gain_ci95_sessions": [
+        -0.3784958021336813,
+        4.225417574212073
+      ],
+      "interventions": 17,
+      "coverage": 0.7083333333333334,
+      "harm": 0,
+      "harm_among_interventions": 0.0,
+      "quality_degraded": 3,
+      "improved": 7,
+      "absolute_violation": 0.041666666666666664,
+      "filtered_gain_pp": 1.3234155138808033,
+      "oracle_reserve_fraction": 0.19916115353999927,
+      "oracle_regret_mean_pp": 5.321532511161691
+    },
+    "random_0": {
+      "score_mean": 0.9281574015440569,
+      "gain_macro_pp": 4.050638083969206,
+      "gain_micro_pp": 4.050638083969206,
+      "sessions": 3,
+      "gain_ci95_sessions": [
+        -0.23886814007364063,
+        12.390782391981256
+      ],
+      "interventions": 5,
+      "coverage": 0.20833333333333334,
+      "harm": 0,
+      "harm_among_interventions": 0.0,
+      "quality_degraded": 2,
+      "improved": 2,
+      "absolute_violation": 0.041666666666666664,
+      "filtered_gain_pp": 4.050638083969206,
+      "oracle_reserve_fraction": 0.6095816052591777,
+      "oracle_regret_mean_pp": 2.594309941073288
+    },
+    "random_1": {
+      "score_mean": 0.8875442322773427,
+      "gain_macro_pp": -0.010678842702237698,
+      "gain_micro_pp": -0.010678842702237698,
+      "sessions": 3,
+      "gain_ci95_sessions": [
+        -0.23886814007364063,
+        0.20683161196692748
+      ],
+      "interventions": 6,
+      "coverage": 0.25,
+      "harm": 0,
+      "harm_among_interventions": 0.0,
+      "quality_degraded": 1,
+      "improved": 2,
+      "absolute_violation": 0.08333333333333333,
+      "filtered_gain_pp": -0.010678842702237698,
+      "oracle_reserve_fraction": -0.001607061885509542,
+      "oracle_regret_mean_pp": 6.655626867744732
+    },
+    "random_2": {
+      "score_mean": 0.9285436475474592,
+      "gain_macro_pp": 4.089262684309433,
+      "gain_micro_pp": 4.089262684309433,
+      "sessions": 3,
+      "gain_ci95_sessions": [
+        0.0,
+        12.267788052928298
+      ],
+      "interventions": 4,
+      "coverage": 0.16666666666666666,
+      "harm": 0,
+      "harm_among_interventions": 0.0,
+      "quality_degraded": 1,
+      "improved": 1,
+      "absolute_violation": 0.041666666666666664,
+      "filtered_gain_pp": 4.089262684309433,
+      "oracle_reserve_fraction": 0.6153942316626746,
+      "oracle_regret_mean_pp": 2.5556853407330613
+    },
+    "scene_only": {
+      "score_mean": 0.887651020704365,
+      "gain_macro_pp": 0.0,
+      "gain_micro_pp": 0.0,
+      "sessions": 3,
+      "gain_ci95_sessions": [
+        0.0,
+        0.0
+      ],
+      "interventions": 2,
+      "coverage": 0.08333333333333333,
+      "harm": 0,
+      "harm_among_interventions": 0.0,
+      "quality_degraded": 0,
+      "improved": 0,
+      "absolute_violation": 0.08333333333333333,
+      "filtered_gain_pp": 0.0,
+      "oracle_reserve_fraction": 0.0,
+      "oracle_regret_mean_pp": 6.644948025042495
+    }
+  },
+  "oracle_inputs": {
+    "539eba3476c952fa": "0268088f3316d20a20ac5623ef0f4f78693f76cff50fd1065315cf60c6242bbf",
+    "6d224a369e6d559d": "ec267d056eb6903fa20d9abc1452179bec7419950bcb99b6ff6f06227722e00d",
+    "c77e7e3d0ff458e4": "a6889bcf39859f977126ebc0c431d11a7531916c6a9210890a935d1767956533",
+    "9669e25d37d55fda": "650e01996602d09263ba7b5ce2d26fa258b228a9e3ed51be30840f7f5e9bfc01",
+    "908982b7b76d55b8": "24ac0c48d5ad91f15fd13cab7501d44b88f13dff646c8f17b6a01cf9b86ad57a",
+    "aba8aa62bb3b5de1": "90132f6ff03f43411e047b38fbd28066f8193950cb8a3059bca642af5f8f4e22",
+    "8dc0c10eb60f51ac": "ad1ff86d1c6d9aedbc96d80b1715bbd1e7dfd819c51ac752aa05bd4cb6c7537f",
+    "f221518470775b5f": "26813c67a6311acd537e078d355a2c55432342606e7e52cdf0258535c47fa7fb",
+    "2bd82ef18f655498": "71dbae055d0f3845de3b42dabb6f09d0cd24299bcb7d51da4fb467fe475c13b1",
+    "fabca9b9e2805a4e": "d479d1f1096a64c8e729756d876eee5ef5696531ee588e3756e06457b83cd3d4",
+    "ac7370c5c37957fe": "4d83780d588e100262c3238c12cc5cfb1647487328e53ed427a8acf774d37a1a",
+    "bb1dc3a17211547e": "154a6e4d50c18c131257b30c53a8a44cfb6e179d8f6ecdec019324a568e0e6b5",
+    "c003a3e1c2cd51f0": "6bbe71ce0a58c25880a6707cc57277611348fbe3d546a4cc4ae123606b8cb0db",
+    "4f2fedff10035d63": "4b000273feae41b0be7cecf44807ad9a62d6a88ffe557a4a3bab526524eb26e4",
+    "af4844e88a6a5009": "0d854389118b244478f39afc99c33ef312d5b3da47f367cd691ec475b1cc3bc7",
+    "48bdc41174c55f59": "20697c058ab85fd368bf185b3973696d4145132e70bc8728d3362d3fbd4e97c4",
+    "f27a618a5c7458ee": "6b844fa9b8fc21c8399405c5d186de53516000c4d400989b61f5d6379ae26b9d",
+    "cfd2ce4e362e5abd": "258c18b11f0c4aec35c5267a3f136293eb9d7e1842052277863006586f67f16a",
+    "d0539ff2c79f5bde": "ab8281091fa1bdf4a658b92aeb125b937e5a1c3d3b09c895e9d7d20cf7263ca3",
+    "8597dd83e37b5e5b": "bdb6099191b0369f60a7c9368a89374a75a31b5b05860a2447859d01782b1a2a",
+    "fb6ee63f31fd56ce": "382ea5d75386c5f273ed1632328b0edbdd79c257cd4cee0485fe1ed4caf25ebb",
+    "dbfedc756de85252": "f31e95202192bf18e9375f469860ace7becce7532699a58ab0c7bca2e20de592",
+    "31f2320ece515ff7": "b1550eb59c0d2b31469136fc15b5a49f580297cd1d476643cdef7278fd9e041c",
+    "7233f453d6425baf": "9b18bbff766b5939232086e1caaba7797396d774f6b00086910ae801378d2b90"
+  },
+  "note": "Exploratory development; local PDM, not full EPDMS. Enriched bank; no calibrated guarantee. Random seeds reported individually; no selection by development outcomes.",
+  "paired_primary_minus_ridge": {
+    "gain_macro_pp": 2.9121950234415066,
+    "ci95_sessions": [
+      -4.225417574212073,
+      13.08532741410061
+    ]
+  },
+  "random_seed_summary": {
+    "mean_gain_pp": 2.709740641858801,
+    "std_gain_pp": 1.9236916928867733
+  }
+}
+egorov@astra:/auto/ws/drivesuprim_workspace$ 

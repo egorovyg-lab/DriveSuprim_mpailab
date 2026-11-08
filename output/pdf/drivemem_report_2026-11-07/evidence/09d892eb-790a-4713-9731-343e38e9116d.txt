@@ -1,0 +1,92 @@
+egorov@astra:/auto/ws/drivesuprim_workspace$ docker exec -w /workspace/DriveSuprim egorov_drivesuprim \
+  python -u scripts/drivesuprim/evaluation/audit_drivemem_donor_family.py \
+  /workspace/exp_v2/drivemem_memory/experiments/action_transfer_v2 \
+  /workspace/exp_v2/drivemem_memory/validation_cached4_v1
+PROPOSALS budget20gb_v1: 4 queries; no outcome lookup yet
+PROPOSALS budget20gb_v1: 8 queries; no outcome lookup yet
+PROPOSALS budget20gb_v1: 12 queries; no outcome lookup yet
+PROPOSALS budget20gb_v1: 16 queries; no outcome lookup yet
+PROPOSALS budget20gb_v1: 20 queries; no outcome lookup yet
+PROPOSALS budget20gb_v1: 24 queries; no outcome lookup yet
+PROPOSALS validation_cached4_v1: 4 queries; no outcome lookup yet
+PROPOSALS validation_cached4_v1: 8 queries; no outcome lookup yet
+PROPOSALS validation_cached4_v1: 12 queries; no outcome lookup yet
+PROPOSALS validation_cached4_v1: 16 queries; no outcome lookup yet
+
+COHORT: /workspace/exp_v2/drivemem_memory/budget20gb_v1 SCENES: 24 SESSIONS: 3
+MEAN DIAGNOSTIC GAINS (oracle values use true query outcomes):
+frozen_gain_pp                     4.235611
+gate_oracle_gain_pp                4.235611
+retrieved_family_oracle_gain_pp    4.843391
+all_family_oracle_gain_pp          4.859772
+safe_all_family_oracle_gain_pp     4.859772
+action_oracle_gain_pp              6.644948
+BY SESSION:
+                            frozen_gain_pp  gate_oracle_gain_pp  retrieved_family_oracle_gain_pp  all_family_oracle_gain_pp  safe_all_family_oracle_gain_pp  action_oracle_gain_pp
+session_id                                                                                                                                                                        
+2021.06.09.12.39.51_veh-26        0.000000             0.000000                         0.484257                   0.484257                        0.484257               4.979212
+2021.07.16.16.08.35_veh-35        0.000000             0.000000                         0.125488                   0.174631                        0.174631               0.413093
+2021.10.11.07.47.13_veh-50       12.706832            12.706832                        13.920429                  13.920429                       13.920429              14.542538
+ALL CASES:
+           token                 session_id  frozen_gain_pp  gate_oracle_gain_pp  retrieved_family_oracle_gain_pp  all_family_oracle_gain_pp  safe_all_family_oracle_gain_pp  action_oracle_gain_pp  policy_count  distinct_proposed_actions  degraded_proposed_actions  unsafe_proposed_actions  best_proposed_rank
+539eba3476c952fa 2021.06.09.12.39.51_veh-26        0.000000             0.000000                         0.000000                   0.000000                        0.000000               0.000000            48                          2                          1                        0                   1
+6d224a369e6d559d 2021.06.09.12.39.51_veh-26        0.000000             0.000000                         0.000000                   0.000000                        0.000000               0.000000            48                          4                          0                        0                   2
+c77e7e3d0ff458e4 2021.06.09.12.39.51_veh-26        0.000000             0.000000                         0.000000                   0.000000                        0.000000              35.714286            22                          1                          0                        0                   1
+9669e25d37d55fda 2021.06.09.12.39.51_veh-26        0.000000             0.000000                         0.000000                   0.000000                        0.000000               0.000000            23                          3                          0                        0                   2
+908982b7b76d55b8 2021.06.09.12.39.51_veh-26        0.000000             0.000000                         0.000000                   0.000000                        0.000000               0.000000            48                          6                          0                        0                   1
+aba8aa62bb3b5de1 2021.06.09.12.39.51_veh-26        0.000000             0.000000                         0.000000                   0.000000                        0.000000               0.000000            48                          4                          1                        0                   3
+8dc0c10eb60f51ac 2021.06.09.12.39.51_veh-26        0.000000             0.000000                         3.874052                   3.874052                        3.874052               4.119414            22                          2                          0                        0                   2
+f221518470775b5f 2021.06.09.12.39.51_veh-26        0.000000             0.000000                         0.000000                   0.000000                        0.000000               0.000000            48                          2                          0                        0                   4
+2bd82ef18f655498 2021.07.16.16.08.35_veh-35        0.000000             0.000000                         0.000000                   0.000000                        0.000000               0.000000            22                          2                          0                        0                   3
+fabca9b9e2805a4e 2021.07.16.16.08.35_veh-35        0.000000             0.000000                         0.000000                   0.000000                        0.000000               0.000000            48                          2                          0                        0                   2
+ac7370c5c37957fe 2021.07.16.16.08.35_veh-35        0.000000             0.000000                         0.000000                   0.000000                        0.000000               0.000000            48                          2                          0                        0                   2
+bb1dc3a17211547e 2021.07.16.16.08.35_veh-35        0.000000             0.000000                         1.003907                   1.003907                        1.003907               1.295762            48                          3                          1                        0                  12
+c003a3e1c2cd51f0 2021.07.16.16.08.35_veh-35        0.000000             0.000000                         0.000000                   0.000000                        0.000000               0.000000            48                          1                          0                        0                   1
+4f2fedff10035d63 2021.07.16.16.08.35_veh-35        0.000000             0.000000                         0.000000                   0.000000                        0.000000               0.575462            48                          1                          0                        0                   1
+af4844e88a6a5009 2021.07.16.16.08.35_veh-35        0.000000             0.000000                         0.000000                   0.000000                        0.000000               0.000000            48                          1                          0                        0                   1
+48bdc41174c55f59 2021.07.16.16.08.35_veh-35        0.000000             0.000000                         0.000000                   0.393143                        0.393143               1.433523            48                          2                          0                        0                   2
+f27a618a5c7458ee 2021.10.11.07.47.13_veh-50      100.000000           100.000000                       100.000000                 100.000000                      100.000000             100.000000            23                          2                          0                        0                   2
+cfd2ce4e362e5abd 2021.10.11.07.47.13_veh-50        0.000000             0.000000                         0.000000                   0.000000                        0.000000               0.000000            48                          1                          0                        0                   1
+d0539ff2c79f5bde 2021.10.11.07.47.13_veh-50        0.000000             0.000000                         0.000000                   0.000000                        0.000000               0.583214            48                          1                          0                        0                   1
+8597dd83e37b5e5b 2021.10.11.07.47.13_veh-50        0.983955             0.983955                         1.192469                   1.192469                        1.192469               1.212535            48                          3                          0                        0                  13
+fb6ee63f31fd56ce 2021.10.11.07.47.13_veh-50        0.000000             0.000000                         1.898277                   1.898277                        1.898277               4.017570            48                          2                          0                        0                   2
+dbfedc756de85252 2021.10.11.07.47.13_veh-50        0.000000             0.000000                         0.000000                   0.000000                        0.000000               2.254302            48                          4                          3                        0                   1
+31f2320ece515ff7 2021.10.11.07.47.13_veh-50        0.000000             0.000000                         0.000000                   0.000000                        0.000000               0.000000            48                          1                          0                        0                   1
+7233f453d6425baf 2021.10.11.07.47.13_veh-50        0.670698             0.670698                         8.272686                   8.272686                        8.272686               8.272686            22                          4                          1                        0                   7
+
+COHORT: /workspace/exp_v2/drivemem_memory/validation_cached4_v1 SCENES: 16 SESSIONS: 4
+MEAN DIAGNOSTIC GAINS (oracle values use true query outcomes):
+frozen_gain_pp                    -0.957941
+gate_oracle_gain_pp                0.000000
+retrieved_family_oracle_gain_pp    0.058564
+all_family_oracle_gain_pp          0.588699
+safe_all_family_oracle_gain_pp     0.588699
+action_oracle_gain_pp              7.246394
+BY SESSION:
+                            frozen_gain_pp  gate_oracle_gain_pp  retrieved_family_oracle_gain_pp  all_family_oracle_gain_pp  safe_all_family_oracle_gain_pp  action_oracle_gain_pp
+session_id                                                                                                                                                                        
+2021.06.14.18.33.41_veh-35        0.000000                  0.0                         0.000000                   1.334668                        1.334668               1.677419
+2021.07.16.21.17.55_veh-26       -3.571429                  0.0                         0.000000                   0.095961                        0.095961               0.619135
+2021.08.17.13.15.12_veh-45       -0.260337                  0.0                         0.234258                   0.924166                        0.924166               0.924166
+2021.10.05.07.10.04_veh-52        0.000000                  0.0                         0.000000                   0.000000                        0.000000              25.764855
+ALL CASES:
+           token                 session_id  frozen_gain_pp  gate_oracle_gain_pp  retrieved_family_oracle_gain_pp  all_family_oracle_gain_pp  safe_all_family_oracle_gain_pp  action_oracle_gain_pp  policy_count  distinct_proposed_actions  degraded_proposed_actions  unsafe_proposed_actions  best_proposed_rank
+f739c929cf6d5144 2021.06.14.18.33.41_veh-35        0.000000                  0.0                         0.000000                   0.000000                        0.000000               0.000000            22                          1                          0                        0                   1
+c537bbd564185334 2021.06.14.18.33.41_veh-35        0.000000                  0.0                         0.000000                   4.050641                        4.050641               4.050641            48                          2                          0                        0                   7
+02cbf1d711075533 2021.06.14.18.33.41_veh-35        0.000000                  0.0                         0.000000                   0.000000                        0.000000               0.000000            48                          1                          0                        0                   1
+7b4eb5e29d4b5a23 2021.06.14.18.33.41_veh-35        0.000000                  0.0                         0.000000                   1.288029                        1.288029               2.659035            48                          4                          1                        0                   4
+4ba1b1466e3355a4 2021.07.16.21.17.55_veh-26        0.000000                  0.0                         0.000000                   0.000000                        0.000000               1.599017            22                          1                          0                        0                   1
+9205b3ee61685f07 2021.07.16.21.17.55_veh-26      -14.285714                  0.0                         0.000000                   0.000000                        0.000000               0.000000            22                          3                          1                        0                   1
+d5c84c70e2915fa3 2021.07.16.21.17.55_veh-26        0.000000                  0.0                         0.000000                   0.000000                        0.000000               0.000000            23                          1                          0                        0                   1
+c2f8efa8358050de 2021.07.16.21.17.55_veh-26        0.000000                  0.0                         0.000000                   0.383845                        0.383845               0.877524            48                          3                          1                        0                   4
+f895bc253a215fc4 2021.08.17.13.15.12_veh-45        0.000000                  0.0                         0.000000                   0.000000                        0.000000               0.000000            48                          5                          1                        0                   1
+05573e9cebc55b5c 2021.08.17.13.15.12_veh-45       -1.041349                  0.0                         0.000000                   0.000000                        0.000000               0.000000            48                          5                          2                        0                   1
+aa0fd97b62e55a20 2021.08.17.13.15.12_veh-45        0.000000                  0.0                         0.937031                   3.696665                        3.696665               3.696665            48                          4                          0                        0                   6
+83397570882e57ef 2021.08.17.13.15.12_veh-45        0.000000                  0.0                         0.000000                   0.000000                        0.000000               0.000000            48                          5                          0                        0                   1
+c4ac2d2c2c525579 2021.10.05.07.10.04_veh-52        0.000000                  0.0                         0.000000                   0.000000                        0.000000               0.000000            48                          2                          0                        0                  15
+767b5a578408531d 2021.10.05.07.10.04_veh-52        0.000000                  0.0                         0.000000                   0.000000                        0.000000               1.924812            22                          1                          0                        0                   1
+a5e429799b6753f5 2021.10.05.07.10.04_veh-52        0.000000                  0.0                         0.000000                   0.000000                        0.000000              99.807953            22                          3                          0                        0                   1
+3f526a6123c157e4 2021.10.05.07.10.04_veh-52        0.000000                  0.0                         0.000000                   0.000000                        0.000000               1.326653            22                          1                          0                        0                   1
+
+These are retrospective capacities of the specified proposal families, NOT learned method results. They do not exhaust all donor combinations. Donor-policy pairs are not independent observations. No fitting, simulator calls, downloads or artifact changes were performed.
+egorov@astra:/auto/ws/drivesuprim_workspace$ 
