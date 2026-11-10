@@ -55,6 +55,7 @@ class SlurmRoutingTests(unittest.TestCase):
             self.assertIn("--gres=gpu:1", args)
             self.assertIn("--time=" + limit, args)
             self.assertIn("--login", args)
+            self.assertFalse(any(arg.startswith("--immediate") for arg in args))
             self.assertEqual(args[-2:], ["--inside", stage])
             self.assertFalse((self.envroot / "venv").exists())
 

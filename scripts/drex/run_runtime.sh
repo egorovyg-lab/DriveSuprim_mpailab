@@ -42,7 +42,7 @@ if [[ "$inside" == false ]]; then
   echo "Slurm stage=$stage memory=$memory limit=$limit"
   exec srun --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 \
     --cpus-per-task="$cpus" --mem="$memory" "${resources[@]}" --time="$limit" \
-    --immediate=60 --export=ALL bash --login "$repo/scripts/drex/run_runtime.sh" --inside "$stage"
+    --export=ALL bash --login "$repo/scripts/drex/run_runtime.sh" --inside "$stage"
 fi
 [[ -n ${SLURM_JOB_ID:-} && -n ${SLURM_STEP_ID:-} ]] || {
   echo '--inside is internal and requires an actual Slurm job step' >&2; exit 2;
