@@ -56,7 +56,7 @@ def packet():
     return pipeline.make_packet(cache, examples[0], vocab, (40, .1), backend)
 
 
-def source_bundle(base):
+def source_bundle(base, mixed=False):
     examples, vocab = prepared()
     source, bundle = base / "source", base / "bundle"
     cache_index = {}
@@ -71,7 +71,21 @@ def source_bundle(base):
     cache_index["heldout"] = dict(path=str(base / "never-open-this"), sha256="not-a-real-hash")
     pipeline.write(source / "cache_index.json", cache_index)
     pipeline.write(source / "source_config.json", dict(proposal_sampling=dict(num_poses=40, interval_length=.1)))
-    bindings = {str(source / n): pipeline.sha(source / n) for n in ("cache_index.json", "source_config.json")}
+    if mixed:
+        # Real legacy provenance: only the experiment identity is bound in the
+        # bundle; its relative inputs bind the old source's cache index/config.
+        legacy = base / "legacy_experiment"
+        new = base / "new_collection"
+        pipeline.write(new / "cache_index.json", {"t2": cache_index.pop("t2")})
+        cache_index["t0"]["path"] = "t0.xz"
+        pipeline.write(source / "cache_index.json", cache_index)
+        pipeline.write(source / "identity.json", pipeline.read(source / "source_config.json"))
+        pipeline.write(legacy / "identity.json", dict(source=str(source), inputs={
+            n: pipeline.sha(source / n) for n in ("identity.json", "cache_index.json")}))
+        paths = (legacy / "identity.json", new / "cache_index.json", source / "source_config.json")
+        bindings = {str(p): pipeline.sha(p) for p in paths}
+    else:
+        bindings = {str(source / n): pipeline.sha(source / n) for n in ("cache_index.json", "source_config.json")}
     pipeline.bundles.build(bundle, examples, vocab, bindings, {"reserved_session"})
     return examples, vocab, bundle, source
 
@@ -143,10 +157,72 @@ class CorridorTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "selected metric cache"):
                 pipeline.resolve_inputs(bundle, examples)
 
+    def test_cache_resolution_combines_direct_and_transitive_legacy_inputs(self):
+        with tempfile.TemporaryDirectory(dir=str(Path.cwd())) as tmp, redirect_stdout(io.StringIO()):
+            examples, _, bundle, source = source_bundle(Path(tmp).resolve(), mixed=True)
+            self.assertNotIn(str(source / "cache_index.json"), pipeline.read(bundle / "identity.json")["inputs"])
+            selected, sampling, bindings = pipeline.resolve_inputs(bundle, examples)
+            self.assertEqual(set(selected), {"t0", "t1", "t2"})
+            self.assertEqual(sampling, (40, .1))
+            self.assertEqual(selected["t0"]["path"], str(source / "t0.xz"))
+            self.assertEqual(selected["t0"]["index"], str(source / "cache_index.json"))
+            self.assertIn(str(source / "identity.json"), bindings)
+            self.assertIn(str(source / "cache_index.json"), bindings)
+
+    def test_transitive_geometry_manifests_require_unchanged_hashes(self):
+        for filename in ("cache_index.json", "identity.json"):
+            with self.subTest(filename=filename), tempfile.TemporaryDirectory(dir=str(Path.cwd())) as tmp, redirect_stdout(io.StringIO()):
+                examples, _, bundle, source = source_bundle(Path(tmp).resolve(), mixed=True)
+                path = source / filename
+                path.write_bytes(path.read_bytes() + b"\n")
+                with self.assertRaisesRegex(RuntimeError, "Pinned geometry source changed"):
+                    pipeline.resolve_inputs(bundle, examples)
+
+    def test_grouped_protocol_inputs_and_relative_source_are_hash_bound(self):
+        with tempfile.TemporaryDirectory(dir=str(Path.cwd())) as tmp, redirect_stdout(io.StringIO()):
+            base = Path(tmp).resolve()
+            examples, _, bundle, source = source_bundle(base, mixed=True)
+            legacy = base / "legacy_experiment"
+            state = pipeline.read(legacy / "identity.json")
+            state["source"] = "../source"
+            pipeline.write(legacy / "identity.json", state)
+            protocol = base / "addition/expansion_protocol.json"
+            pipeline.write(protocol, dict(inputs={"../legacy_experiment": {
+                "identity.json": pipeline.sha(legacy / "identity.json")}}))
+            marker = bundle / "identity.json"
+            state = pipeline.read(marker)
+            state["inputs"].pop(str(legacy / "identity.json"))
+            state["inputs"][str(protocol)] = pipeline.sha(protocol)
+            # Only the resolver is tested here; normal CLI uses load_bundle
+            # before resolving and separately verifies the bundle manifest.
+            pipeline.write(marker, state)
+            selected, sampling, bindings = pipeline.resolve_inputs(bundle, examples)
+            self.assertEqual(set(selected), {"t0", "t1", "t2"})
+            self.assertEqual(sampling, (40, .1))
+            self.assertIn(str(protocol), bindings)
+            self.assertIn(str(legacy / "identity.json"), bindings)
+            self.assertIn(str(source / "cache_index.json"), bindings)
+
+    def test_unbound_sibling_cache_index_is_not_a_fallback(self):
+        with tempfile.TemporaryDirectory(dir=str(Path.cwd())) as tmp, redirect_stdout(io.StringIO()):
+            base = Path(tmp).resolve()
+            examples, _, bundle, source = source_bundle(base, mixed=True)
+            legacy = base / "legacy_experiment/identity.json"
+            state = pipeline.read(legacy)
+            del state["inputs"]["cache_index.json"]
+            pipeline.write(legacy, state)
+            marker = bundle / "identity.json"
+            state = pipeline.read(marker)
+            state["inputs"][str(legacy)] = pipeline.sha(legacy)
+            pipeline.write(marker, state)
+            self.assertTrue((source / "cache_index.json").is_file())
+            with self.assertRaisesRegex(ValueError, "Missing pinned metric caches for 2/3 training tokens"):
+                pipeline.resolve_inputs(bundle, examples)
+
     def test_full_pipeline_resume_labels_after_freeze_and_non_DAC_harm_is_reported(self):
         with tempfile.TemporaryDirectory(dir=str(Path.cwd())) as tmp, redirect_stdout(io.StringIO()):
             base = Path(tmp).resolve()
-            _, _, bundle, source = source_bundle(base)
+            _, _, bundle, source = source_bundle(base, mixed=True)
             out = base / "experiment"
             before = {str(p): pipeline.sha(p) for root in (bundle, source) for p in root.rglob("*") if p.is_file()}
             actual_packet, actual_record = pipeline.make_packet, pipeline.record

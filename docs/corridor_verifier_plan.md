@@ -65,9 +65,13 @@ Sampling берётся из замороженной конфигурации �
 Bundle loader проверяет training membership, protected sessions и hashes.
 Из pinned cache_index выбираются только токены bundle; зарезервированные
 поездки не конвертируются. Cache files и sampling обнаруживаются через
-замороженные inputs bundle, ручной поиск по всему диску не выполняется.
+замороженные inputs bundle, включая цепочки старых `identity.json` с
+относительными inputs от явно указанного `source` и группированные inputs
+`expansion_protocol.json`. Hash каждого вложенного manifest проверяется до
+чтения. Непривязанные соседние cache indexes и поиск по всему диску не используются.
 Несколько cache options разрешаются лексикографически до просмотра геометрии
-или outcomes; количество таких случаев показывается в plan.
+или outcomes; количество таких случаев показывается в plan вместе с покрытием
+training-токенов и числом проверенных manifests/cache indexes.
 
 Конвертер вынужден десериализовать существующий trusted local metric cache,
 который содержит также будущие поля. Он обращается только к `ego_state` и

@@ -92,34 +92,89 @@ def arrays(path):
         return {k: data[k].copy() for k in data.files}
 
 
+GEOMETRY_MANIFEST_NAMES = frozenset(("identity.json", "source_config.json", "cache_index.json", "expansion_protocol.json"))
+
+
+def manifest_children(path, value):
+    """Verified manifest edges only; never guess adjacent cache files.
+
+    Modern bundles use absolute flat inputs. Legacy action-transfer identities
+    bind relative filenames below their explicit source root; expansion
+    protocols also have inputs grouped by root directory.
+    """
+    inputs = value.get("inputs", {})
+    if not isinstance(inputs, dict):
+        raise ValueError("Unsupported geometry manifest inputs: " + str(path))
+    base = path.parent
+    source = value.get("source")
+    if isinstance(source, str):
+        source_path = Path(source)
+        base = source_path if source_path.is_absolute() else path.parent / source_path
+    children = []
+    for name, expected in inputs.items():
+        location = Path(name)
+        if isinstance(expected, dict):
+            root = location if location.is_absolute() else path.parent / location
+            for filename, digest in expected.items():
+                child = Path(filename)
+                if child.name in GEOMETRY_MANIFEST_NAMES:
+                    if not isinstance(digest, str):
+                        raise ValueError("Manifest hash must be a string: " + str(path))
+                    children.append(((child if child.is_absolute() else root / child).resolve(), digest))
+        elif location.name in GEOMETRY_MANIFEST_NAMES:
+            if not isinstance(expected, str):
+                raise ValueError("Manifest hash must be a string: " + str(path))
+            children.append(((location if location.is_absolute() else base / location).resolve(), expected))
+    return children
+
+
+def geometry_manifests(bundle):
+    """Traverse only hash-bound metadata, including legacy relative inputs."""
+    marker = (bundle / "identity.json").resolve()
+    pending = [(marker, sha(marker))]
+    visited = {}
+    while pending:
+        path, digest = pending.pop()
+        if path in visited:
+            if visited[path] != digest:
+                raise RuntimeError("Conflicting pinned geometry hashes: " + str(path))
+            continue
+        if not path.is_file() or sha(path) != digest:
+            raise RuntimeError("Pinned geometry source changed: " + str(path))
+        value = read(path)
+        if not isinstance(value, dict):
+            raise ValueError("Geometry manifest must be an object: " + str(path))
+        visited[path] = digest
+        yield path, digest, value
+        if path.name != "cache_index.json":
+            pending.extend(manifest_children(path, value))
+
+
 def resolve_inputs(bundle, examples):
-    parent = read(bundle / "identity.json")
     tokens = {e["metadata"]["token"] for e in examples}
     caches, configs, bound = {t: [] for t in tokens}, [], {}
-    for name, digest in parent["inputs"].items():
-        path = Path(name)
-        if path.name not in ("cache_index.json", "source_config.json", "identity.json"):
-            continue
-        value = read(path)
-        if sha(path) != digest:
-            raise RuntimeError("Pinned geometry source changed: " + name)
+    for path, digest, value in geometry_manifests(bundle):
+        name = str(path)
+        bound[name] = digest
         if path.name == "cache_index.json":
-            bound[name] = digest
             for token in tokens & set(value):
                 info = value[token]
                 if not isinstance(info, dict) or set(("path", "sha256")) - set(info):
                     raise ValueError("Explicit cache file path/hash required: " + name)
-                caches[token].append(dict(path=str(Path(info["path"]).resolve()), sha256=info["sha256"], index=name))
+                cache_path = Path(info["path"])
+                if not cache_path.is_absolute():
+                    cache_path = path.parent / cache_path
+                caches[token].append(dict(path=str(cache_path.resolve()), sha256=info["sha256"], index=name))
         elif "proposal_sampling" in value:
             cfg = value["proposal_sampling"]
             count, interval = int(cfg["num_poses"]), float(cfg["interval_length"])
             if count < 1 or interval <= 0 or not np.isfinite(interval):
                 raise ValueError("Invalid pinned rollout sampling")
             configs.append((count, interval))
-            bound[name] = digest
     missing = sorted(t for t, options in caches.items() if not options)
     if missing:
-        raise ValueError("Missing pinned metric caches for training tokens: " + ",".join(missing[:10]))
+        raise ValueError(f"Missing pinned metric caches for {len(missing)}/{len(tokens)} training tokens "
+            f"after following {len(bound)} verified source manifests: " + ",".join(missing[:10]))
     if not configs or len(set(configs)) != 1:
         raise ValueError("One consistent pinned proposal_sampling required")
     selected = {}
@@ -374,6 +429,8 @@ def execute(a):
     if a.stage == "plan":
         result = dict(status="planned", scenes=len(examples), pilot_scenes=len(identity["pilot_tokens"]),
             sampling=list(sampling), modes=list(MODES), privileged=True, camera_only_comparable=False,
+            cache_covered_scenes=len(selected), verified_source_manifests=len(bindings),
+            resolved_cache_indexes=sum(Path(name).name == "cache_index.json" for name in bindings),
             scenes_with_multiple_cache_options=sum(v["alternatives"] > 1 for v in selected.values()),
             note=NOTE)
         write(out / "plan.json", result)
