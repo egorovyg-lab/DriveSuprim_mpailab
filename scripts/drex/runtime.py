@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import socket
 import subprocess
 import sys
 
@@ -56,7 +57,8 @@ def environment(root, gpu):
     import torch
     from transformers import AutoProcessor, Qwen3_5Model
     from drex_max.model import DecisionModel
-    result = dict(python=sys.version, torch=torch.__version__, cuda_build=torch.version.cuda,
+    result = dict(python=sys.version, python_executable=sys.executable, hostname=socket.gethostname(),
+                  torch=torch.__version__, cuda_build=torch.version.cuda,
                   transformers=importlib.metadata.version("transformers"), model_imports="ok",
                   cuda_visible_devices=os.environ.get("CUDA_VISIBLE_DEVICES"),
                   slurm_job_id=os.environ.get("SLURM_JOB_ID"))
