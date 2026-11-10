@@ -97,7 +97,7 @@ bash scripts/drivesuprim/evaluation/run_corridor_geometry.sh pilot
 
 Pilot выбирает до восьми training-сцен по metadata/seed с разнесением по
 поездкам, без просмотра outcomes. Его каталог отдельный:
-`/workspace/exp_v2/drivemem_memory/experiments/corridor_geometry_pilot_v1`.
+`/workspace/exp_v2/drivemem_memory/experiments/corridor_geometry_pilot_v2`.
 JSON report и SVG preview появляются автоматически. Red=baseline,
 blue=raw choice, green=rollout choice; прямоугольники — footprint в пяти моментах.
 Превью показывает world XY относительно позиции ego, не изображение камеры.
@@ -109,18 +109,26 @@ blue=raw choice, green=rollout choice; прямоугольники — footprin
 
 ```bash
 nohup bash scripts/drivesuprim/evaluation/run_corridor_geometry.sh all \
-  > /workspace/exp_v2/corridor_geometry_v1.log 2>&1 &
+  > /workspace/exp_v2/corridor_geometry_v2.log 2>&1 &
 
-tail -n 60 /workspace/exp_v2/corridor_geometry_v1.log
+tail -n 60 /workspace/exp_v2/corridor_geometry_v2.log
 bash scripts/drivesuprim/evaluation/run_corridor_geometry.sh report
 ```
 
-Основной каталог: `/workspace/exp_v2/drivemem_memory/experiments/corridor_geometry_v1`.
+Основной каталог: `/workspace/exp_v2/drivemem_memory/experiments/corridor_geometry_v2`.
 Ожидаются 651 сцена, 10416 проверяемых кандидатов в каждом режиме, 10416
 ego-rollouts. GPU, новые scorer calls и image download не нужны. CPU-время
 зависит от распаковки cache и симулятора. Пакеты коммитятся по одному, повторный
 `all` продолжает подготовку, сверяет решения и не пересоздаёт готовые пакеты.
 Системный lock запрещает параллельную запись в один каталог.
+
+`identity.json` записывается один раз; при продолжении сравнивается содержимое,
+а исходные байты сохраняются. Это важно для hashes: порядок ключей словаря
+может различаться между Python-процессами. Тест запускает каждый этап pilot
+отдельным процессом с другим `PYTHONHASHSEED` и проверяет неизменность identity
+и пакетов. Старые каталоги `*_v1` сохраняются для диагностики ошибки повторной
+сериализации identity; скрипт использует новые `*_v2` без изменения геометрической
+политики и без переноса или перепривязки старых hashes.
 
 Выходы: `plan.json`, `identity.json`, `packet_index.json`, `packets/*.npz`,
 `decisions.json`, `per_scene.csv`, `candidate_geometry.csv`, `report.json`,

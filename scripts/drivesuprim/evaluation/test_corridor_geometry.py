@@ -3,8 +3,11 @@ import copy
 import io
 import json
 import lzma
+import os
 from pathlib import Path
 import pickle
+import subprocess
+import sys
 from types import SimpleNamespace
 import tempfile
 import unittest
@@ -258,6 +261,72 @@ class CorridorTests(unittest.TestCase):
             path.write_bytes(path.read_bytes() + b"changed")
             with mock.patch("sys.argv", argv), self.assertRaisesRegex(RuntimeError, "packet changed"):
                 pipeline.main()
+
+    def test_existing_identity_is_never_rewritten_and_real_changes_still_fail(self):
+        with tempfile.TemporaryDirectory(dir=str(Path.cwd())) as tmp, redirect_stdout(io.StringIO()):
+            base = Path(tmp).resolve()
+            examples, _, bundle, _ = source_bundle(base, mixed=True)
+            out = base / "identity_once"
+            selected, sampling, bindings = pipeline.resolve_inputs(bundle, examples)
+            pipeline.freeze_identity(out, bundle, examples, selected, sampling, bindings)
+            original = (out / "identity.json").read_bytes()
+            reordered = dict(reversed(list(selected.items())))
+            with mock.patch.object(pipeline, "write", side_effect=AssertionError("must not rewrite identity")):
+                pipeline.freeze_identity(out, bundle, examples, reordered, sampling, bindings)
+                with self.assertRaisesRegex(RuntimeError, "Corridor inputs/code/runtime changed"):
+                    pipeline.freeze_identity(out, bundle, examples, selected, (20, .2), bindings)
+            self.assertEqual((out / "identity.json").read_bytes(), original)
+
+    def test_packet_identity_mismatch_does_not_claim_packet_bytes_changed(self):
+        with tempfile.TemporaryDirectory(dir=str(Path.cwd())) as tmp:
+            out = Path(tmp).resolve()
+            identity = dict(tokens=["t0"])
+            pipeline.write(out / "identity.json", identity)
+            path = out / "packets/t0.npz"
+            pipeline.save(path, **packet())
+            digest = pipeline.sha(path)
+            pipeline.write(out / "packet_index.json", dict(t0=dict(sha256=digest, identity_sha256="old-identity")))
+            with self.assertRaisesRegex(RuntimeError, "identity hash mismatch: t0.*Packet bytes are unchanged"):
+                pipeline.checked_packets(out, identity)
+            self.assertEqual(pipeline.sha(path), digest)
+
+    def test_pilot_stages_in_separate_processes_preserve_identity_and_packets(self):
+        # The shell wrapper starts a fresh interpreter for every stage. A set
+        # iterates in different orders across processes: JSON equality alone
+        # must not authorize rewriting a file already referenced by SHA256.
+        code = """
+import sys
+from pathlib import Path
+from unittest import mock
+sys.path.insert(0, str(Path.cwd() / 'scripts/drivesuprim/evaluation'))
+from test_corridor_geometry import backend
+from navsim.planning.script import run_corridor_geometry as pipeline
+original = pipeline.make_packet
+def converted(cache, example, vocab, sampling):
+    return original(cache, example, vocab, sampling, backend)
+sys.argv = ['corridor', sys.argv[1], '--bundle', sys.argv[2], '--out', sys.argv[3]]
+with mock.patch.object(pipeline, 'make_packet', side_effect=converted):
+    pipeline.main()
+"""
+        with tempfile.TemporaryDirectory(dir=str(Path.cwd())) as tmp, redirect_stdout(io.StringIO()):
+            base = Path(tmp).resolve()
+            _, _, bundle, _ = source_bundle(base, mixed=True)
+            out = base / "separate_process_pilot"
+            frozen = {}
+            stages = ("prepare-pilot", "infer", "preview", "evaluate", "report", "prepare-pilot")
+            for seed, stage in enumerate(stages, 1):
+                env = dict(os.environ, PYTHONHASHSEED=str(seed), PYTHONDONTWRITEBYTECODE="1")
+                env["PYTHONPATH"] = str(pipeline.REPO) + os.pathsep + env.get("PYTHONPATH", "")
+                result = subprocess.run([sys.executable, "-c", code, stage, str(bundle), str(out)],
+                    cwd=str(pipeline.REPO), env=env, capture_output=True, text=True, timeout=30)
+                self.assertEqual(result.returncode, 0, stage + ":\n" + result.stdout + result.stderr)
+                for name, digest in frozen.items():
+                    self.assertEqual(pipeline.sha(out / name), digest, stage + " changed " + name)
+                if not frozen:
+                    paths = [out / "identity.json", out / "packet_index.json", *sorted((out / "packets").glob("*.npz"))]
+                    frozen = {str(path.relative_to(out)): pipeline.sha(path) for path in paths}
+            self.assertEqual(json.loads(result.stdout)["newly_prepared"], 0)
+            self.assertTrue(pipeline.read(out / "report.json")["rollout_DAC_consistency_passed"])
 
     def test_rollout_mismatch_is_preserved_and_stops_the_cli(self):
         with tempfile.TemporaryDirectory(dir=str(Path.cwd())) as tmp, redirect_stdout(io.StringIO()):

@@ -152,7 +152,7 @@ def geometry_manifests(bundle):
 
 def resolve_inputs(bundle, examples):
     tokens = {e["metadata"]["token"] for e in examples}
-    caches, configs, bound = {t: [] for t in tokens}, [], {}
+    caches, configs, bound = {t: [] for t in sorted(tokens)}, [], {}
     for path, digest, value in geometry_manifests(bundle):
         name = str(path)
         bound[name] = digest
@@ -263,9 +263,15 @@ def freeze_identity(out, bundle, examples, selected, sampling, bindings):
         python=platform.python_version(), numpy=np.__version__, shapely=shapely.__version__,
         nuplan_version=nuplan_version, note=NOTE)
     marker = out / "identity.json"
-    if marker.exists() and read(marker) != identity:
-        raise RuntimeError("Corridor inputs/code/runtime changed; use a new --out root")
-    if out.exists() and not marker.exists() and any(p.name != ".run.lock" for p in out.iterdir()):
+    if marker.exists():
+        previous = read(marker)
+        if previous != identity:
+            raise RuntimeError("Corridor inputs/code/runtime changed; use a new --out root")
+        # Equal dictionaries can serialize differently after a process restart
+        # (e.g. set-derived key order). Packet hashes refer to the original
+        # identity BYTES, so an accepted identity must never be rewritten.
+        return previous
+    if out.exists() and any(p.name != ".run.lock" for p in out.iterdir()):
         raise ValueError("Nonempty corridor output without identity")
     write(marker, identity)
     return identity
@@ -275,10 +281,15 @@ def checked_packets(out, identity):
     index = read(out / "packet_index.json") if (out / "packet_index.json").exists() else {}
     if set(index) - set(identity["tokens"]):
         raise ValueError("Unexpected geometry packet tokens")
+    identity_digest = sha(out / "identity.json")
     for token, info in index.items():
-        if (info["identity_sha256"] != sha(out / "identity.json")
-                or sha(out / "packets" / (token + ".npz")) != info["sha256"]):
+        path = out / "packets" / (token + ".npz")
+        if not path.is_file() or sha(path) != info["sha256"]:
             raise RuntimeError("Committed geometry packet changed: " + token)
+        if info["identity_sha256"] != identity_digest:
+            raise RuntimeError("Geometry packet identity hash mismatch: " + token
+                + "; pinned=" + info["identity_sha256"] + "; current=" + identity_digest
+                + ". Packet bytes are unchanged; preserve the directory and inspect identity.json.")
     return index
 
 
@@ -467,7 +478,7 @@ def main():
     base = Path(os.environ.get("NAVSIM_EXP_ROOT", "/workspace/exp_v2")) / "drivemem_memory"
     p.add_argument("stage", choices=("plan", "prepare-pilot", "prepare", "infer", "evaluate", "preview", "report", "all"))
     p.add_argument("--bundle", type=Path, default=base / "selector_training_bundle_v3_30gb")
-    p.add_argument("--out", type=Path, default=base / "experiments/corridor_geometry_v1")
+    p.add_argument("--out", type=Path, default=base / "experiments/corridor_geometry_v2")
     a = p.parse_args()
     bundle, out = a.bundle.resolve(), a.out.resolve()
     if out == bundle or out in bundle.parents or bundle in out.parents:
