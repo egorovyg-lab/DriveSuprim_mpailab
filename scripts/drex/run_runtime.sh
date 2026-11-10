@@ -7,6 +7,11 @@ venv=$root/venv
 commit=b932571901f531b2378b356fcab7d176048c2bcb
 stage=${1:-check}
 inside=false
+background=false
+if [[ "$stage" == submit-smoke ]]; then
+  background=true
+  stage=smoke
+fi
 if [[ "$stage" == --inside ]]; then
   inside=true
   stage=${2:-}
@@ -19,8 +24,8 @@ if [[ "$stage" == tests ]]; then
   exit
 fi
 case "$stage" in
-  prepare|setup|check|gpu-check|model-plan|download) ;;
-  *) echo "Usage: $0 tests|prepare|setup|check|gpu-check|model-plan|download" >&2; exit 2 ;;
+  prepare|setup|check|gpu-check|model-plan|download|smoke) ;;
+  *) echo "Usage: $0 tests|prepare|setup|check|gpu-check|model-plan|download|smoke|submit-smoke" >&2; exit 2 ;;
 esac
 mkdir -p "$root"
 root=$(cd "$root" && pwd)
@@ -32,6 +37,8 @@ if [[ "$inside" == false ]]; then
   resources=(--gres=gpu:1)
   if [[ "$stage" == setup || "$stage" == prepare ]]; then
     memory=16G; limit=00:30:00; cpus=4
+  elif [[ "$stage" == smoke ]]; then
+    memory=96G; limit=00:20:00; cpus=4
   elif [[ "$stage" == model-plan || "$stage" == download ]]; then
     [[ -s "$root/setup_node.txt" ]] || { echo 'Run setup or prepare first' >&2; exit 1; }
     node=$(cat "$root/setup_node.txt")
@@ -40,6 +47,17 @@ if [[ "$inside" == false ]]; then
     if [[ "$stage" == download ]]; then limit=00:45:00; fi
   fi
   echo "Slurm stage=$stage memory=$memory limit=$limit"
+  if [[ "$background" == true ]]; then
+    mkdir -p "$root/logs"
+    # A Bash batch script with shell-escaped arguments; no eval or nested allocation.
+    printf -v worker '%q ' srun --ntasks=1 --cpus-per-task="$cpus" --gres=gpu:1 \
+      bash --login "$repo/scripts/drex/run_runtime.sh" --inside smoke
+    printf '#!/usr/bin/env bash\nset -euo pipefail\nexec %s\n' "$worker" | \
+      sbatch --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 \
+        --cpus-per-task="$cpus" --mem="$memory" --gres=gpu:1 --time="$limit" \
+        --export=ALL --job-name=drex-smoke --output="$root/logs/smoke-%j.log"
+    exit
+  fi
   exec srun --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 \
     --cpus-per-task="$cpus" --mem="$memory" "${resources[@]}" --time="$limit" \
     --export=ALL bash --login "$repo/scripts/drex/run_runtime.sh" --inside "$stage"
@@ -88,6 +106,12 @@ fi
 [[ $(git -C "$upstream" rev-parse HEAD) == "$commit" ]] || { echo 'Wrong upstream commit' >&2; exit 1; }
 [[ -z $(git -C "$upstream" status --porcelain) ]] || { echo 'Upstream has local changes' >&2; exit 1; }
 export PYTHONPATH="$upstream${PYTHONPATH:+:$PYTHONPATH}"
+if [[ "$stage" == smoke ]]; then
+  exec 9>"$root/.smoke.lock"
+  flock -n 9 || { echo 'Another smoke is running' >&2; exit 1; }
+  "$venv/bin/python" -u "$repo/scripts/drex/smoke.py" --root "$root"
+  exit
+fi
 case "$stage" in
   check|gpu-check|model-plan|download)
     "$venv/bin/python" "$repo/scripts/drex/runtime.py" "$stage" --root "$root"

@@ -2,7 +2,7 @@
 
 Проверено через Slurm: cn29.sc.test, A100-SXM4-80GB, Python 3.12.3,
 драйвер 580.178.04. Код в ~/drivesuprim, ветка codex/drex-max от c6279ad.
-Эта поставка готовит окружение; полный text/image smoke будет следующим этапом.
+Скрипты готовят окружение и выполняют synthetic text/image smoke полной модели.
 
 После commit/push новых файлов в codex/drex-max, на msu270:
 
@@ -78,3 +78,45 @@ Download получает до 45 минут, 8 GB RAM, 2 CPU и не запра
 DREX_PARTITION по умолчанию batch. Значения --account/--qos, если они нужны,
 уточняются по настройкам кластера. BF16-проверка требует GPU с >=70 GiB VRAM:
 случайно выделенная более маленькая GPU вызывает понятную остановку.
+
+## Проверка скачанной модели в фоне
+
+После успешной загрузки обновить код и подать задание с login node:
+
+```bash
+cd ~/drivesuprim
+git pull --ff-only
+export DREX_RUNTIME_ROOT=/scratch/pr0201/drex_runtime
+bash scripts/drex/run_runtime.sh tests && bash scripts/drex/run_runtime.sh submit-smoke
+```
+
+После Submitted batch job <номер> можно закрыть SSH/VS Code. Один GPU, 4 CPU,
+96 GB RAM, максимум 20 минут выполнения; обычная очередь, без --immediate.
+Sbatch запрашивает ресурсы один раз, внутренний srun запускает только job step.
+Лог: /scratch/pr0201/drex_runtime/logs/smoke-<номер>.log. Для foreground запуска
+доступна команда smoke, но она зависит от текущего SSH-соединения.
+
+Проверки: прежний environment lock; наличие и размеры всех файлов модели;
+non-causal full attention; официальный loader с BF16 и batch=1; текстовый вопрос;
+два одноцветных изображения с одинаковым вопросом; повтор текста. Проверяется
+наличие pixel_values в подготовленном визуальном запросе, корректность вероятностей
+и ожидаемые ответы BLUE/red/blue/BLUE. Изменение вероятностей в повторе отдельно
+логируется; нулевая разница не является обязательным критерием. Локальная
+проверка 52 GB весов по полным checksums этим этапом не выполняется.
+
+Тест не запускает установку/скачивание весов и не читает NAVSIM. При исключении
+сохраняет traceback и этап, при ошибочном ответе — semantic_smoke_failed. Успех —
+status=complete и passed=true. Это проверка исполнения, не вождения или safety.
+Первый запрос может включать компиляцию kernels, поэтому времена холодного
+и повторного запросов показываются отдельно. Исходный runtime не модифицируется.
+
+Отчёт: /scratch/pr0201/drex_runtime/runs/smoke-<UTC>/report.json. В конце лога
+показывается полный отчёт с report_path. Начатая работа сохраняет status=running;
+если Slurm завершит процесс сигналом/таймаутом, проверять sacct и лог, не считать
+этот файл успешным. Готовые отчёты не перезаписываются; повтор — новый запуск.
+
+```bash
+squeue -u "$USER"
+tail -n 100 /scratch/pr0201/drex_runtime/logs/smoke-НОМЕР.log
+sacct -j НОМЕР --format=JobID,State,ExitCode
+```

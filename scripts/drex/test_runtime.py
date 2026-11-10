@@ -7,6 +7,7 @@ from types import SimpleNamespace as NS
 import unittest
 
 import runtime
+import smoke
 
 
 class SlurmRoutingTests(unittest.TestCase):
@@ -68,6 +69,23 @@ class SlurmRoutingTests(unittest.TestCase):
             self.assertIn("--nodelist=cn29", args)
             self.assertIn("--gres=none", args)
             self.assertNotIn("--gres=gpu:1", args)
+
+    def test_submit_smoke_is_one_background_gpu_allocation(self):
+        batch_script = self.root / "batch.sh"
+        self.env["DREX_TEST_BATCH"] = self.posix(batch_script)
+        self.stub("sbatch", 'printf "%s\\n" "$@" > "$DREX_TEST_LOG"\ncat > "$DREX_TEST_BATCH"\n')
+        result = self.run_stage("submit-smoke")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        args = self.log.read_text().splitlines()
+        self.assertIn("--gres=gpu:1", args)
+        self.assertIn("--mem=96G", args)
+        self.assertIn("--time=00:20:00", args)
+        self.assertNotIn("--immediate=60", args)
+        script = batch_script.read_text()
+        self.assertIn("exec srun", script)
+        self.assertIn("--inside smoke", script)
+        self.assertNotIn("sbatch", script)
+        self.assertFalse((self.envroot / "venv").exists())
 
     def test_internal_mode_requires_a_real_job_step(self):
         self.env["SLURM_JOB_ID"] = "100"  # salloc alone does not imply a compute-node shell.
@@ -146,6 +164,36 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(runtime.remaining_bytes(p, rows), 4)
             (p / "one").write_bytes(b"a")
             self.assertEqual(runtime.remaining_bytes(p, rows), 7)
+
+
+class SmokeTests(unittest.TestCase):
+    def exercise(self, vectors):
+        calls = []
+        def infer(row):
+            self.assertEqual(set(row) - {"state", "question", "images"}, set())
+            p = vectors[len(calls)]
+            calls.append(row)
+            return dict(probabilities=p, input_tokens=100, seconds=.1)
+        result = smoke.exercise(infer, lambda colour: colour)
+        self.assertEqual(len(calls), 4)
+        self.assertEqual(calls[1]["state"], calls[2]["state"])
+        self.assertEqual(calls[1]["question"], calls[2]["question"])
+        return result
+
+    def test_text_images_and_repeat_use_only_inference_fields(self):
+        r = self.exercise([[.01, .99], [.98, .01, .01], [.01, .98, .01], [.02, .98]])
+        self.assertTrue(r["passed"])
+        self.assertAlmostEqual(r["repeat_max_abs_diff"], .01)
+
+    def test_wrong_image_answer_is_a_failure_without_retry(self):
+        r = self.exercise([[.01, .99], [.98, .01, .01], [.98, .01, .01], [.01, .99]])
+        self.assertFalse(r["passed"])
+        self.assertEqual(r["cases"][2]["case"], "image_blue")
+
+    def test_invalid_distribution_stops_smoke(self):
+        for p in ([float("nan"), 1], [.2, .2], [1], [-1, 2]):
+            with self.assertRaisesRegex(ValueError, "Invalid probability"):
+                smoke.exercise(lambda row: dict(probabilities=p), lambda colour: colour)
 
 
 if __name__ == "__main__":
