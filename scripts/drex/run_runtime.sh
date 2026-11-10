@@ -8,9 +8,9 @@ commit=b932571901f531b2378b356fcab7d176048c2bcb
 stage=${1:-check}
 inside=false
 background=false
-if [[ "$stage" == submit-smoke ]]; then
+if [[ "$stage" == submit-smoke || "$stage" == submit-night || "$stage" == submit-night-pilot ]]; then
   background=true
-  stage=smoke
+  stage=${stage#submit-}
 fi
 if [[ "$stage" == --inside ]]; then
   inside=true
@@ -20,12 +20,12 @@ export PYTHONDONTWRITEBYTECODE=1
 export TOKENIZERS_PARALLELISM=false
 if [[ "$stage" == tests ]]; then
   cd "$repo"
-  "${PYTHON:-python3}" -m unittest discover -s scripts/drex -p 'test_runtime.py' -v
+  "${PYTHON:-python3}" -m unittest discover -s scripts/drex -p 'test_*.py' -v
   exit
 fi
 case "$stage" in
-  prepare|setup|check|gpu-check|model-plan|download|smoke) ;;
-  *) echo "Usage: $0 tests|prepare|setup|check|gpu-check|model-plan|download|smoke|submit-smoke" >&2; exit 2 ;;
+  prepare|setup|check|gpu-check|model-plan|download|smoke|night-plan|night-pilot|night|night-report) ;;
+  *) echo "Usage: $0 tests|prepare|setup|check|gpu-check|model-plan|download|smoke|submit-smoke|night-plan|night-pilot|night|submit-night-pilot|submit-night|night-report" >&2; exit 2 ;;
 esac
 mkdir -p "$root"
 root=$(cd "$root" && pwd)
@@ -37,9 +37,11 @@ if [[ "$inside" == false ]]; then
   resources=(--gres=gpu:1)
   if [[ "$stage" == setup || "$stage" == prepare ]]; then
     memory=16G; limit=00:30:00; cpus=4
-  elif [[ "$stage" == smoke ]]; then
+  elif [[ "$stage" == smoke || "$stage" == night-pilot ]]; then
     memory=96G; limit=00:20:00; cpus=4
-  elif [[ "$stage" == model-plan || "$stage" == download ]]; then
+  elif [[ "$stage" == night ]]; then
+    memory=96G; limit=08:00:00; cpus=4
+  elif [[ "$stage" == model-plan || "$stage" == download || "$stage" == night-plan || "$stage" == night-report ]]; then
     [[ -s "$root/setup_node.txt" ]] || { echo 'Run setup or prepare first' >&2; exit 1; }
     node=$(cat "$root/setup_node.txt")
     [[ "$node" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo 'Invalid saved setup node' >&2; exit 1; }
@@ -51,11 +53,11 @@ if [[ "$inside" == false ]]; then
     mkdir -p "$root/logs"
     # A Bash batch script with shell-escaped arguments; no eval or nested allocation.
     printf -v worker '%q ' srun --ntasks=1 --cpus-per-task="$cpus" --gres=gpu:1 \
-      bash --login "$repo/scripts/drex/run_runtime.sh" --inside smoke
+      bash --login "$repo/scripts/drex/run_runtime.sh" --inside "$stage"
     printf '#!/usr/bin/env bash\nset -euo pipefail\nexec %s\n' "$worker" | \
       sbatch --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 \
         --cpus-per-task="$cpus" --mem="$memory" --gres=gpu:1 --time="$limit" \
-        --export=ALL --job-name=drex-smoke --output="$root/logs/smoke-%j.log"
+        --export=ALL --job-name="drex-$stage" --output="$root/logs/$stage-%j.log"
     exit
   fi
   exec srun --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 \
@@ -110,6 +112,16 @@ if [[ "$stage" == smoke ]]; then
   exec 9>"$root/.smoke.lock"
   flock -n 9 || { echo 'Another smoke is running' >&2; exit 1; }
   "$venv/bin/python" -u "$repo/scripts/drex/smoke.py" --root "$root"
+  exit
+fi
+if [[ "$stage" == night || "$stage" == night-pilot || "$stage" == night-plan || "$stage" == night-report ]]; then
+  exec 9>"$root/.night.lock"
+  flock -n 9 || { echo 'Another night benchmark command is running' >&2; exit 1; }
+  args=(run)
+  if [[ "$stage" == night-pilot ]]; then args+=(--max-new 28); fi
+  if [[ "$stage" == night-plan ]]; then args=(plan); fi
+  if [[ "$stage" == night-report ]]; then args=(report); fi
+  "$venv/bin/python" -u "$repo/scripts/drex/night.py" "${args[@]}" --root "$root"
   exit
 fi
 case "$stage" in

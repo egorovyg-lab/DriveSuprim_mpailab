@@ -62,7 +62,7 @@ class SlurmRoutingTests(unittest.TestCase):
 
     def test_metadata_and_download_use_recorded_compute_node_without_gpu(self):
         (self.envroot / "setup_node.txt").write_text("cn29\n")
-        for stage in ("model-plan", "download"):
+        for stage in ("model-plan", "download", "night-plan", "night-report"):
             result = self.run_stage(stage)
             self.assertEqual(result.returncode, 0, result.stderr)
             args = self.log.read_text().splitlines()
@@ -93,6 +93,20 @@ class SlurmRoutingTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("actual Slurm job step", result.stderr)
         self.assertFalse(self.log.exists())
+
+    def test_night_uses_one_queued_gpu_and_background_stage_is_correct(self):
+        batch_script = self.root / "batch.sh"
+        self.env["DREX_TEST_BATCH"] = self.posix(batch_script)
+        self.stub("sbatch", 'printf "%s\\n" "$@" > "$DREX_TEST_LOG"\ncat > "$DREX_TEST_BATCH"\n')
+        for stage, limit in (("night", "08:00:00"), ("night-pilot", "00:20:00")):
+            result = self.run_stage("submit-" + stage)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            args = self.log.read_text().splitlines()
+            self.assertIn("--time=" + limit, args)
+            self.assertIn("--mem=96G", args)
+            self.assertIn("--gres=gpu:1", args)
+            self.assertIn("--inside " + stage, batch_script.read_text())
+            self.assertFalse(any('--immediate' in a or '--exclusive' in a for a in args))
 
     def fake_setup(self):
         self.env.update(SLURM_JOB_ID="100", SLURM_STEP_ID="0", SLURMD_NODENAME="cn29")
