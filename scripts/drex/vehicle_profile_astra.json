@@ -1,0 +1,10 @@
+{
+  "schema": "scorer_vehicle_ground_dimensions_v1",
+  "dimensions_m": {
+    "width": 2.297,
+    "front_length": 4.049,
+    "rear_length": 1.127,
+    "rear_axle_to_center": 1.461
+  },
+  "provenance": "User confirmed these values on Astra from inspect.signature(PDMScorer.__init__).parameters['vehicle_parameters'].default. No nuPlan installation or guessed dimensions in the Drex runtime."
+}
