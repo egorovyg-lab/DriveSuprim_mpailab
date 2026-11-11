@@ -52,9 +52,9 @@ def source_snapshot(root, source_name):
         note='Privileged geometry audit only. No Drex input, scoring, simulation, training or holdout.')
 
 
-def input_archive(out):
+def input_archive(out, tools=TOOLS):
     files = {'audit_request.json': (out/'audit_request.json').read_bytes()}
-    files.update({'tools/'+name: Path(__file__).with_name(name).read_bytes() for name in TOOLS})
+    files.update({'tools/'+name: Path(__file__).with_name(name).read_bytes() for name in tools})
     files['upload_manifest.json'] = json.dumps({n: dict(size=len(v), sha256=hashlib.sha256(v).hexdigest())
         for n, v in files.items()}, sort_keys=True).encode()
     buffer = io.BytesIO()
@@ -64,18 +64,21 @@ def input_archive(out):
     return buffer.getvalue()
 
 
-def run(args):
+def run(args, request=None, tools=TOOLS, remote_tool='clearance_remote.py'):
+    if remote_tool not in tools or Path(remote_tool).name != remote_tool:
+        raise ValueError('Remote entrypoint must be a staged tool')
     if not re.fullmatch(r'rollout_audit_[A-Za-z0-9_-]{1,64}', args.name) or args.name == args.source:
         raise ValueError('Use a separate rollout_audit_* output name')
     root = args.root.expanduser().resolve(); out = root/'runs'/args.name
-    request = source_snapshot(root, args.source); out.mkdir(parents=True, exist_ok=True)
+    request = source_snapshot(root, args.source) if request is None else request
+    out.mkdir(parents=True, exist_ok=True)
     freeze(out/'audit_request.json', request)
     destination = bridge.REMOTE_BASE+'/'+args.name
     command = lambda code: remote_command(args.host, args.port, args.control.expanduser(), args.container, code)
-    data = input_archive(out)
+    data = input_archive(out, tools)
     code = bridge.remote_python(bridge.receive_archive)+f'receive_archive({destination!r}, {hashlib.sha256(data).hexdigest()!r})'
     subprocess.run(command(code), input=data, check=True)
-    tool = destination+'/tools/clearance_remote.py'
+    tool = destination+'/tools/'+remote_tool
     argv = [tool, '--input', destination+'/audit_request.json', '--out', destination+'/artifacts', '--repo', args.remote_repo]
     code = ('import os,sys,runpy; os.environ["CUDA_VISIBLE_DEVICES"]=""; '
         'os.environ["OMP_NUM_THREADS"]="2"; os.environ["OPENBLAS_NUM_THREADS"]="2"; '
