@@ -110,7 +110,7 @@ class BridgeTests(unittest.TestCase):
 
 @unittest.skipUnless(AVAILABLE, 'NumPy/Pillow needed')
 class GeometryTests(unittest.TestCase):
-    def test_bound_cache_and_configuration_resolution_rejects_changed_cache(self):
+    def bound_fixture(self):
         import test_real as fixtures
         f = fixtures.RealPilotTests('test_input_allowlist_never_deserializes_labels_or_teacher_heads')
         f.setUp(); self.addCleanup(f.doCleanups)
@@ -127,8 +127,11 @@ class GeometryTests(unittest.TestCase):
         template = dict(scorer={}, simulator={}, proposal_sampling={}, traffic_agents='non_reactive',
                         traffic_agents_policy={}, agent=dict(config=dict(trajectory_sampling={})), sources=source_hashes)
         write(provider/'source_config.json', template)
+        return f, repo, provider, cache, feature
+
+    def bind_package(self, f, bindings):
         identity = read(f.package/'bundle/identity.json')
-        identity['inputs'] = {str(p): sha(p) for p in (provider/'cache_index.json', provider/'source_config.json', feature)}
+        identity['inputs'] = bindings
         write(f.package/'bundle/identity.json', identity)
         manifest = read(f.package/'bundle/bundle_manifest.json')
         manifest['identity_sha256'] = sha(f.package/'bundle/identity.json'); write(f.package/'bundle/bundle_manifest.json', manifest)
@@ -136,12 +139,63 @@ class GeometryTests(unittest.TestCase):
         for name in ('bundle/identity.json', 'bundle/bundle_manifest.json'):
             path = f.package/name; portable['files'][name] = dict(size=path.stat().st_size, sha256=sha(path))
         write(f.package/'package_manifest.json', portable)
+
+    def test_bound_cache_and_configuration_resolution_rejects_changed_cache(self):
+        f, repo, provider, cache, feature = self.bound_fixture()
+        self.bind_package(f, {str(p): sha(p) for p in (provider/'cache_index.json', provider/'source_config.json', feature)})
         *_, context = replay.bound_context(f.package, repo, [dict(token='token0')])
         self.assertEqual(context['token0']['path'], str(cache))
         self.assertTrue(context['token0']['matching_source_feature'])
         cache.write_bytes(b'changed')
         with self.assertRaisesRegex(RuntimeError, 'Metric cache changed'):
             replay.bound_context(f.package, repo, [dict(token='token0')])
+
+    def test_legacy_cache_is_resolved_through_hashed_identity_inputs_without_changing_sources(self):
+        f, repo, provider, cache, feature = self.bound_fixture()
+        write(provider/'identity.json', read(provider/'source_config.json'))
+        previous = f.root/'action_transfer/identity.json'
+        write(previous, dict(source=str(provider), inputs={name: sha(provider/name)
+              for name in ('identity.json', 'cache_index.json')}))
+        intermediate = f.root/'decoder/identity.json'
+        write(intermediate, dict(inputs={str(previous): sha(previous)}))
+        # A directly bound newer index does not contain this legacy scene.
+        direct = f.root/'new/cache_index.json'; write(direct, {})
+        self.bind_package(f, {str(p): sha(p) for p in (intermediate, direct, feature)})
+        watched = (previous, intermediate, provider/'identity.json', provider/'cache_index.json', cache, feature)
+        before = {p: p.read_bytes() for p in watched}
+        *_, context = replay.bound_context(f.package, repo, [dict(token='token0')])
+        self.assertEqual(context['token0']['path'], str(cache))
+        self.assertTrue(context['token0']['matching_source_feature'])
+        chain = context['token0']['cache_index_binding_chain']
+        self.assertEqual([r['path'] for r in chain], [str(p.resolve()) for p in
+                         (intermediate, previous, provider/'cache_index.json')])
+        self.assertEqual(chain[-1]['sha256'], sha(provider/'cache_index.json'))
+        for path, content in before.items():
+            self.assertEqual(path.read_bytes(), content)
+        previous.write_text('{}')
+        with self.assertRaisesRegex(RuntimeError, 'Frozen upstream metadata changed'):
+            replay.bound_context(f.package, repo, [dict(token='token0')])
+
+    def test_cache_index_is_not_trusted_just_because_it_exists_beside_a_config(self):
+        f, repo, provider, _, feature = self.bound_fixture()
+        self.bind_package(f, {str(p): sha(p) for p in (provider/'source_config.json', feature)})
+        with self.assertRaisesRegex(FileNotFoundError, 'No bound cache index contains token0'):
+            replay.bound_context(f.package, repo, [dict(token='token0')])
+
+    def test_nested_cache_index_hash_and_conflicting_bindings_are_checked(self):
+        f, _, provider, _, _ = self.bound_fixture()
+        first = f.root/'a/identity.json'; second = f.root/'b/identity.json'
+        index = provider/'cache_index.json'
+        write(first, dict(source=str(provider), inputs={'cache_index.json': sha(index)}))
+        write(second, dict(inputs={str(index): '0'*64}))
+        with self.assertRaisesRegex(RuntimeError, 'Conflicting frozen input hashes'):
+            replay.bound_metadata({str(p): sha(p) for p in (first, second)})
+        index.write_text('{}')
+        with self.assertRaisesRegex(RuntimeError, 'Frozen upstream metadata changed'):
+            replay.bound_metadata({str(first): sha(first)})
+        write(first, dict(inputs={'cache_index.json': sha(index)}))
+        with self.assertRaisesRegex(ValueError, 'no absolute source root'):
+            replay.bound_metadata({str(first): sha(first)})
 
     def test_local_coordinates_and_heading_wrap(self):
         origin = np.array([10., 20., np.pi/2])

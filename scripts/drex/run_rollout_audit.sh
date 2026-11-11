@@ -2,7 +2,7 @@
 set -euo pipefail
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 root=${DREX_RUNTIME_ROOT:-$HOME/drex_runtime}
-export DREX_ROLLOUT_AUDIT_NAME=${DREX_ROLLOUT_AUDIT_NAME:-rollout_audit_pair6_v1}
+export DREX_ROLLOUT_AUDIT_NAME=${DREX_ROLLOUT_AUDIT_NAME:-rollout_audit_pair6_v2}
 export DREX_ROLLOUT_PAIR_SOURCE=${DREX_ROLLOUT_PAIR_SOURCE:-pair_diag_gpu4_v1}
 [[ "$DREX_ROLLOUT_AUDIT_NAME" =~ ^rollout_audit_[A-Za-z0-9_-]{1,64}$ ]] || exit 2
 [[ "$DREX_ROLLOUT_PAIR_SOURCE" =~ ^pair_diag_[A-Za-z0-9_-]{1,64}$ ]] || exit 2

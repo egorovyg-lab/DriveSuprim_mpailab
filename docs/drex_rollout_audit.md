@@ -11,7 +11,7 @@ cd ~/drivesuprim
 git pull --ff-only
 export DREX_RUNTIME_ROOT=/scratch/pr0201/drex_runtime
 export DREX_ROLLOUT_PAIR_SOURCE=pair_diag_gpu4_v1
-export DREX_ROLLOUT_AUDIT_NAME=rollout_audit_pair6_v1
+export DREX_ROLLOUT_AUDIT_NAME=rollout_audit_pair6_v2
 
 bash scripts/drex/run_rollout_audit.sh connect
 bash scripts/drex/run_rollout_audit.sh start
@@ -31,7 +31,7 @@ compute-node venv на login-узле. Вычисления выполняютс
 небольшой запрос и девять файлов инструментов в отдельный каталог:
 
 ```text
-/workspace/exp_v2/drex_rollout_audit/rollout_audit_pair6_v1/
+/workspace/exp_v2/drex_rollout_audit/rollout_audit_pair6_v2/
 ```
 
 Исходный checkout Astra, конфигурации, cache, bundle, результаты v1/v2 и
@@ -49,7 +49,7 @@ bash scripts/drex/run_rollout_audit.sh status
 на msu270. Путь имеет вид:
 
 ```text
-/scratch/pr0201/drex_runtime/runs/rollout_audit_pair6_v1/result_HASH/
+/scratch/pr0201/drex_runtime/runs/rollout_audit_pair6_v2/result_HASH/
 ```
 
 Снимки возвращаются с контрольными суммами; разные снимки сохраняются в
@@ -59,11 +59,26 @@ bash scripts/drex/run_rollout_audit.sh status
 ## Что воспроизводится
 
 На Astra по исходному bundle ищутся связанные контрольными суммами
-`source_config.json`/`identity.json` и `cache_index.json`. Конфигурации scorer,
+`source_config.json`/`identity.json` и `cache_index.json`. Кроме прямых ссылок
+обходятся вложенные таблицы `inputs`: абсолютные пути в новых identity и
+имена относительно явно записанного `source` в старом action-transfer.
+Каждый metadata-файл проверяется по записанному SHA до чтения его зависимостей.
+Поиск соседних cache-файлов без такой привязки не используется. Цепочка до
+выбранного индекса сохраняется в `identity.json` аудита, в поле
+`caches[TOKEN].cache_index_binding_chain`.
+
+Конфигурации scorer,
 симулятора, proposal sampling, traffic policy и sampling агента должны
 совпадать. Проверяются исходные файлы scorer/simulator, cache SHA и лог сцены.
 Если для токена доступны несколько cache, предпочтение имеет корень с
 связанным исходным feature-файлом, содержащим те же кандидаты; выбор записан.
+
+Ошибка v1 `No bound cache index contains 6394ed413b685026` означала, что поиск
+не дошёл до вложенного cache-индекса старого эксперимента. Это уже полученный
+технический результат с Astra, а не ожидание выполнения. Исправление требует
+`git pull --ff-only` только на msu270 и нового имени аудита v2: мост доставит
+обновлённые инструменты отдельно. Обновлять checkout Astra не нужно. Сбой v1
+сохраняется; замена frozen scorer или расширение допусков не выполняются.
 
 Для каждого кандидата один раз вызывается исходный `pdm_score` с
 `human_penalty_filter=False`, как при сборе raw labels. Все девять выходных

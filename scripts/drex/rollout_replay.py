@@ -43,17 +43,67 @@ def config_core(value):
     return dict({k: value[k] for k in keys}, agent_sampling=value['agent']['config']['trajectory_sampling'])
 
 
+def bound_metadata(inputs):
+    """Follow recorded metadata hashes, including legacy source-relative inputs.
+
+    The original action-transfer identity binds source/cache_index.json in its
+    own inputs table. Later bundles bind that identity, but do not flatten all
+    of its dependencies. Never discover a cache by globbing or an unbound path.
+    """
+    names = {'identity.json', 'source_config.json', 'cache_index.json'}
+    bindings = {}; chains = {}; pending = []; metadata = []
+
+    def bind(path, digest, chain):
+        if (not path.is_absolute() or not isinstance(digest, str) or len(digest) != 64 or
+                any(c not in '0123456789abcdef' for c in digest)):
+            raise ValueError('Unsupported frozen input binding: '+str(path))
+        path = path.resolve(); key = str(path)
+        if key in bindings:
+            if bindings[key] != digest:
+                raise RuntimeError('Conflicting frozen input hashes: '+key)
+            return
+        bindings[key] = digest
+        if path.name in names:
+            chains[key] = chain+[dict(path=key, sha256=digest)]
+            pending.append(path)
+
+    for name, digest in sorted(inputs.items()):
+        bind(Path(name), digest, [])
+    cursor = 0
+    while cursor < len(pending):
+        if len(pending) > 1024:
+            raise ValueError('Frozen metadata dependency graph is too large')
+        path = pending[cursor]; cursor += 1; key = str(path)
+        if sha(path) != bindings[key]:
+            raise RuntimeError('Frozen upstream metadata changed: '+key)
+        value = read(path)
+        if not isinstance(value, dict):
+            raise ValueError('Unsupported frozen metadata: '+key)
+        metadata.append((path, value))
+        if path.name == 'cache_index.json':
+            continue
+        children = value.get('inputs', {})
+        if not isinstance(children, dict):
+            raise ValueError('Unsupported frozen inputs table: '+key)
+        for name, digest in sorted(children.items()):
+            child = Path(name)
+            if child.name not in names:
+                continue
+            if not child.is_absolute():
+                source = value.get('source')
+                if len(child.parts) != 1 or not isinstance(source, str) or not Path(source).is_absolute():
+                    raise ValueError('Relative metadata input has no absolute source root: '+key)
+                child = Path(source)/child
+            bind(child, digest, chains[key])
+    return sorted(metadata, key=lambda item: str(item[0])), bindings, chains
+
+
 def bound_context(package, repo, candidates):
     manifest, index, scenes, vocab = base.package_metadata(package)
-    identity = read(package/'bundle/identity.json'); bindings = identity['inputs']
+    identity = read(package/'bundle/identity.json')
+    metadata, bindings, chains = bound_metadata(identity['inputs'])
     configurations = []; cache_indices = []
-    for name, expected in sorted(bindings.items()):
-        path = Path(name)
-        if path.name not in ('identity.json', 'source_config.json', 'cache_index.json'):
-            continue
-        if sha(path) != expected:
-            raise RuntimeError('Frozen upstream metadata changed: '+name)
-        value = read(path)
+    for path, value in metadata:
         if path.name == 'cache_index.json':
             cache_indices.append((path, value))
         elif config_core(value) is not None:
@@ -82,7 +132,7 @@ def bound_context(package, repo, candidates):
             entry = values[token]
             if not isinstance(entry, dict) or not {'path', 'sha256'} <= set(entry):
                 raise ValueError('Unsupported bound cache index format')
-            feature = path.parent/'features'/(token+'.npz')
+            feature = (path.parent/'features'/(token+'.npz')).resolve()
             matching_feature = False
             if str(feature) in bindings:
                 if sha(feature) != bindings[str(feature)]:
@@ -94,11 +144,13 @@ def bound_context(package, repo, candidates):
                         and int(arrays['selected_local']) == sample['baseline_local'])
             options.append((not matching_feature, str(path), entry))
         if not options:
-            raise FileNotFoundError('No bound cache index contains '+token)
+            raise FileNotFoundError('No bound cache index contains '+token+'; checked: '+
+                                    ', '.join(str(path) for path, _ in cache_indices))
         options.sort(key=lambda item: (item[0], item[1])); _, cache_index, entry = options[0]
         if sha(Path(entry['path'])) != entry['sha256']:
             raise RuntimeError('Metric cache changed for '+token)
         chosen[token] = dict(entry, cache_index=cache_index,
+                             cache_index_binding_chain=chains[cache_index],
                              matching_source_feature=not options[0][0], alternatives=len(options))
     return manifest, scenes, vocab, template, chosen
 
