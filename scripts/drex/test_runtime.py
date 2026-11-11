@@ -62,7 +62,7 @@ class SlurmRoutingTests(unittest.TestCase):
 
     def test_metadata_and_download_use_recorded_compute_node_without_gpu(self):
         (self.envroot / "setup_node.txt").write_text("cn29\n")
-        for stage in ("model-plan", "download", "night-plan", "night-report"):
+        for stage in ("model-plan", "download", "night-plan", "night-report", "real-check", "real-plan", "real-report"):
             result = self.run_stage(stage)
             self.assertEqual(result.returncode, 0, result.stderr)
             args = self.log.read_text().splitlines()
@@ -98,7 +98,8 @@ class SlurmRoutingTests(unittest.TestCase):
         batch_script = self.root / "batch.sh"
         self.env["DREX_TEST_BATCH"] = self.posix(batch_script)
         self.stub("sbatch", 'printf "%s\\n" "$@" > "$DREX_TEST_LOG"\ncat > "$DREX_TEST_BATCH"\n')
-        for stage, limit in (("night", "08:00:00"), ("night-pilot", "00:20:00")):
+        for stage, limit in (("night", "08:00:00"), ("night-pilot", "00:20:00"),
+                             ("real", "04:00:00"), ("real-pilot", "00:30:00")):
             result = self.run_stage("submit-" + stage)
             self.assertEqual(result.returncode, 0, result.stderr)
             args = self.log.read_text().splitlines()

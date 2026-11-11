@@ -8,7 +8,7 @@ commit=b932571901f531b2378b356fcab7d176048c2bcb
 stage=${1:-check}
 inside=false
 background=false
-if [[ "$stage" == submit-smoke || "$stage" == submit-night || "$stage" == submit-night-pilot ]]; then
+if [[ "$stage" == submit-smoke || "$stage" == submit-night || "$stage" == submit-night-pilot || "$stage" == submit-real || "$stage" == submit-real-pilot ]]; then
   background=true
   stage=${stage#submit-}
 fi
@@ -24,8 +24,8 @@ if [[ "$stage" == tests ]]; then
   exit
 fi
 case "$stage" in
-  prepare|setup|check|gpu-check|model-plan|download|smoke|night-plan|night-pilot|night|night-report) ;;
-  *) echo "Usage: $0 tests|prepare|setup|check|gpu-check|model-plan|download|smoke|submit-smoke|night-plan|night-pilot|night|submit-night-pilot|submit-night|night-report" >&2; exit 2 ;;
+  prepare|setup|check|gpu-check|model-plan|download|smoke|night-plan|night-pilot|night|night-report|real-check|real-plan|real-pilot|real|real-report) ;;
+  *) echo "Usage: $0 tests|prepare|setup|check|gpu-check|model-plan|download|smoke|submit-smoke|night-plan|night-pilot|night|submit-night-pilot|submit-night|night-report|real-check|real-plan|real-pilot|real|submit-real-pilot|submit-real|real-report" >&2; exit 2 ;;
 esac
 mkdir -p "$root"
 root=$(cd "$root" && pwd)
@@ -41,12 +41,17 @@ if [[ "$inside" == false ]]; then
     memory=96G; limit=00:20:00; cpus=4
   elif [[ "$stage" == night ]]; then
     memory=96G; limit=08:00:00; cpus=4
-  elif [[ "$stage" == model-plan || "$stage" == download || "$stage" == night-plan || "$stage" == night-report ]]; then
+  elif [[ "$stage" == real ]]; then
+    memory=96G; limit=04:00:00; cpus=4
+  elif [[ "$stage" == real-pilot ]]; then
+    memory=96G; limit=00:30:00; cpus=4
+  elif [[ "$stage" == model-plan || "$stage" == download || "$stage" == night-plan || "$stage" == night-report || "$stage" == real-check || "$stage" == real-plan || "$stage" == real-report ]]; then
     [[ -s "$root/setup_node.txt" ]] || { echo 'Run setup or prepare first' >&2; exit 1; }
     node=$(cat "$root/setup_node.txt")
     [[ "$node" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo 'Invalid saved setup node' >&2; exit 1; }
     resources=(--nodelist="$node" --gres=none)
     if [[ "$stage" == download ]]; then limit=00:45:00; fi
+    if [[ "$stage" == real-check || "$stage" == real-plan || "$stage" == real-report ]]; then limit=00:15:00; fi
   fi
   echo "Slurm stage=$stage memory=$memory limit=$limit"
   if [[ "$background" == true ]]; then
@@ -108,6 +113,12 @@ fi
 [[ $(git -C "$upstream" rev-parse HEAD) == "$commit" ]] || { echo 'Wrong upstream commit' >&2; exit 1; }
 [[ -z $(git -C "$upstream" status --porcelain) ]] || { echo 'Upstream has local changes' >&2; exit 1; }
 export PYTHONPATH="$upstream${PYTHONPATH:+:$PYTHONPATH}"
+if [[ "$stage" == real-check ]]; then
+  cd "$repo"
+  "$venv/bin/python" -c 'import numpy, PIL'
+  "$venv/bin/python" -m unittest discover -s scripts/drex -p 'test_real.py' -v
+  exit
+fi
 if [[ "$stage" == smoke ]]; then
   exec 9>"$root/.smoke.lock"
   flock -n 9 || { echo 'Another smoke is running' >&2; exit 1; }
@@ -122,6 +133,16 @@ if [[ "$stage" == night || "$stage" == night-pilot || "$stage" == night-plan || 
   if [[ "$stage" == night-plan ]]; then args=(plan); fi
   if [[ "$stage" == night-report ]]; then args=(report); fi
   "$venv/bin/python" -u "$repo/scripts/drex/night.py" "${args[@]}" --root "$root"
+  exit
+fi
+if [[ "$stage" == real || "$stage" == real-pilot || "$stage" == real-plan || "$stage" == real-report ]]; then
+  exec 9>"$root/.real.lock"
+  flock -n 9 || { echo 'Another real-pilot command is running' >&2; exit 1; }
+  args=(all)
+  if [[ "$stage" == real-pilot ]]; then args=(infer --max-new 16); fi
+  if [[ "$stage" == real-plan ]]; then args=(plan); fi
+  if [[ "$stage" == real-report ]]; then args=(report); fi
+  "$venv/bin/python" -u "$repo/scripts/drex/real_pilot.py" "${args[@]}" --root "$root"
   exit
 fi
 case "$stage" in
