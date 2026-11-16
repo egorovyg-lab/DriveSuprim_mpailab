@@ -80,6 +80,29 @@ class V2Tests(unittest.TestCase):
         f.stub('sbatch','printf "%s\\n" "$*" >> "$DREX_TEST_LOG"\n')
         r=f.run_stage('submit'); self.assertEqual(r.returncode,0,r.stderr)
         text=f.log.read_text(); self.assertIn('--gres=none',text); self.assertNotIn('--gres=gpu',text)
+        self.assertIn('--chdir=',text); self.assertIn('--inside ',text)
+
+    def test_batch_spool_copy_uses_explicit_checkout_and_runtime(self):
+        import test_runtime as fixtures
+        f=fixtures.SlurmRoutingTests('test_internal_mode_requires_a_real_job_step'); f.setUp(); self.addCleanup(f.doCleanups)
+        repo=f.root/'checkout with spaces'; scripts=repo/'scripts/drex'; scripts.mkdir(parents=True)
+        (scripts/'consequence_v2.py').write_text('# fixture\n')
+        spool=f.root/'spool/job123'; spool.mkdir(parents=True)
+        copy=spool/'slurm_script'
+        copy.write_bytes(Path(v2.__file__).with_name('run_consequence_v2.sh').read_bytes())
+        f.script=copy; f.env['SLURM_JOB_ID']='123'
+        venv=f.envroot/'venv/bin'; venv.mkdir(parents=True)
+        python=venv/'python'
+        python.write_text('#!/usr/bin/env bash\nprintf "%s|%s\\n" "$PWD" "$*" >> "$DREX_TEST_CALLS"\n',newline='\n')
+        python.chmod(0o755); f.stub('flock','exit 0\n')
+        source=f.envroot/'runs/original_probe'
+        result=f.run_stage('--inside',f.posix(repo),f.posix(f.envroot),'v2_test',f.posix(source))
+        self.assertEqual(result.returncode,0,result.stderr)
+        calls=f.calls.read_text().splitlines(); self.assertEqual(len(calls),3)
+        self.assertTrue(all(line.startswith(f.posix(repo)+'|') for line in calls))
+        self.assertIn('--stage pilot',calls[1]); self.assertIn('--stage full',calls[2])
+        self.assertIn('--source '+f.posix(source),calls[2])
+        result=f.run_stage('--inside'); self.assertNotEqual(result.returncode,0)
 
 
 if __name__=='__main__':unittest.main()
