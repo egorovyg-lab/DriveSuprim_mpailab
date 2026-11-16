@@ -13,6 +13,9 @@ args=(--root "$root" --name "$DREX_PROBE_NAME"
   --control "${DREX_TRANSFER_CONTROL:-$HOME/.ssh/drex-astra-transfer.sock}")
 case "$stage" in
   connect) exec bash "$repo/scripts/drex/run_transfer.sh" connect ;;
+  diagnose)
+    exec "${PYTHON:-python3}" -B "$repo/scripts/drex/diagnose_consequence_probe.py" \
+      --run "$root/runs/$DREX_PROBE_NAME" ;;
   check|prepare)
     node=$(cat "$root/setup_node.txt"); [[ "$node" =~ ^[A-Za-z0-9_.-]+$ ]] || exit 2
     exec srun --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 --nodelist="$node" \
@@ -29,5 +32,5 @@ case "$stage" in
     exec "$root/venv/bin/python" -u "$repo/scripts/drex/consequence_cli.py" prepare "${args[@]}" ;;
   stage|start|status|fetch)
     exec "${PYTHON:-python3}" -u "$repo/scripts/drex/consequence_cli.py" "$stage" "${args[@]}" ;;
-  *) echo 'Usage: run_consequence_probe.sh check|prepare|connect|stage|start|status|fetch' >&2; exit 2 ;;
+  *) echo 'Usage: run_consequence_probe.sh check|prepare|connect|stage|start|status|fetch|diagnose' >&2; exit 2 ;;
 esac
