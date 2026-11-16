@@ -72,6 +72,12 @@ class DirectTests(unittest.TestCase):
         r=f.run_stage('submit-pilot','4');self.assertEqual(r.returncode,0,r.stderr)
         text=f.log.read_text();self.assertIn('--gres=gpu:4',text);self.assertIn('--ntasks=4',text)
         self.assertIn('--chdir=',text);self.assertIn('coordinator-pilot',text)
+        self.assertIn('--time=01:00:00',text)
+        f.env['DREX_DIRECT256_NAME']='direct256_limits_test'
+        pilot=f.envroot/'runs/direct256_limits_test/pilot_report.json';pilot.parent.mkdir(parents=True)
+        pilot.write_text('{}')
+        r=f.run_stage('submit-full','4');self.assertEqual(r.returncode,0,r.stderr)
+        self.assertIn('--time=08:00:00',f.log.read_text())
 
     def test_report_preserves_physical_choice_and_does_not_invent_scores(self):
         a,v=fixture();sample=d.inputs(a,v)

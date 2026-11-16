@@ -20,11 +20,12 @@ case "$action" in
     done; exit ;;
   submit-pilot|submit-full)
     phase=pilot; [[ "$action" != submit-full ]] || phase=full
+    limit=01:00:00; [[ "$phase" != full ]] || limit=08:00:00
     [[ "$phase" != full || -f "$out/pilot_report.json" ]] || { echo 'Successful pilot required' >&2; exit 1; }
     node=$(cat "$root/setup_node.txt"); [[ "$node" =~ ^[A-Za-z0-9_.-]+$ ]] || exit 2
     mkdir -p "$root/logs"
     exec sbatch --partition="${DREX_PARTITION:-batch}" --nodes=1 --nodelist="$node" --ntasks="$count" \
-      --cpus-per-task=4 --mem="$((96*count))G" --gres="gpu:$count" --time=08:00:00 --export=ALL \
+      --cpus-per-task=4 --mem="$((96*count))G" --gres="gpu:$count" --time="$limit" --export=ALL \
       --chdir="$repo" --job-name="drex-direct256-$phase" --output="$root/logs/direct256-$phase-%j.log" \
       "$repo/scripts/drex/run_direct256.sh" --inside "coordinator-$phase" "$repo" "$root" "$count" "$name" ;;
 esac
