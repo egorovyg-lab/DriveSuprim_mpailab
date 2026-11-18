@@ -3,6 +3,8 @@ import copy
 import json
 from pathlib import Path
 import tempfile
+import sys
+import types
 import unittest
 from unittest.mock import patch
 
@@ -19,6 +21,15 @@ def fixture():
 
 
 class DirectTests(unittest.TestCase):
+    def test_official_255_head_blocks_before_loading_weights_or_binding_gpu(self):
+        from unittest.mock import Mock
+        constructor=Mock()
+        module=types.ModuleType('drex_max.model');module.DecisionModel=constructor;module.MAX_OPTIONS=255
+        with patch.dict(sys.modules,{'torch':types.ModuleType('torch'),'drex_max.model':module}), \
+                patch.object(d,'context') as context:
+            with self.assertRaisesRegex(RuntimeError,'only 255'):d.worker(Path('.'),Path('.'),1,'pilot')
+            constructor.assert_not_called();context.assert_not_called()
+
     def test_only_allowed_arrays_and_256_complete_rows(self):
         a,v=fixture()
         class Whitelist(dict):

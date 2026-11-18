@@ -31,12 +31,29 @@ PY
     exec >>"$ASTRA_CPU256_ROOT/run.log" 2>&1
     exec 9>"$ASTRA_CPU256_ROOT/.pipeline.lock"; flock -n 9 || exit 0
     python -B -m unittest discover -s "$tools" -p test_astra_cpu256.py -v
+    if [[ -f "$tools/test_astra_night.py" ]]; then
+      python -B -m unittest discover -s "$tools" -p test_astra_night.py -v
+    fi
     args=(--package "$ASTRA_CPU256_PACKAGE" --source "$ASTRA_CPU256_SOURCE" --out "$ASTRA_CPU256_ROOT" --repo "$ASTRA_CPU256_REPO")
     [[ -z ${ASTRA_CPU256_DECISIONS:-} ]] || args+=(--decisions "$ASTRA_CPU256_DECISIONS")
+    [[ ${ASTRA_CPU256_ORACLE_ALL:-0} != 1 ]] || args+=(--oracle-all)
+    [[ -z ${ASTRA_CPU256_REUSE:-} ]] || args+=(--reuse "$ASTRA_CPU256_REUSE")
     python -u "$tools/astra_cpu256.py" pilot "${args[@]}"
     python -u "$tools/astra_cpu256.py" full "${args[@]}" ;;
   status)
     echo "Output: $ASTRA_CPU256_ROOT"
+    if [[ -d "$ASTRA_CPU256_ROOT" ]]; then
+      python - "$ASTRA_CPU256_ROOT" <<'PY'
+import fcntl,json,sys
+from pathlib import Path
+with (Path(sys.argv[1])/'.pipeline.lock').open('a') as lock:
+    try:
+        fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        state='idle'
+    except BlockingIOError:state='running'
+print(json.dumps(dict(pipeline_state=state)))
+PY
+    fi
     [[ ! -f "$ASTRA_CPU256_ROOT/run.log" ]] || tail -n 12 "$ASTRA_CPU256_ROOT/run.log"
     for file in progress.json report.json failure.json; do
       [[ ! -f "$ASTRA_CPU256_ROOT/$file" ]] || python - "$ASTRA_CPU256_ROOT/$file" <<'PY'

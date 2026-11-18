@@ -1,5 +1,6 @@
 """Astra-only: fixed 256 controls, balanced-64 oracle, and committed Drex choices."""
 import argparse
+import csv
 import gzip
 import json
 import os
@@ -11,6 +12,9 @@ import numpy as np
 
 CONFIG=dict(version=1,seed=20261117,oracle_scenes=64,oracle_sessions=32,oracle_per_session=2,
             progress_budget_m=1.,progress_budget_fraction=.05,score_match_atol=1e-4)
+# Exact LF source exported at cd0041e. Reuse is deliberately limited to that
+# completed experiment, whose scorer, package and per-candidate receipts bind it.
+LEGACY_CODE_SHA256='6baeee9c5b8ed570dafa9aa2a9a5722b585a9449a1cd021cbcebe67858403aeb'
 NOTE=('Exploratory previously inspected TRAIN replay, not holdout or EPDMS. '
       'Controls freeze before outcomes; oracle uses privileged outcomes and is not a policy. '
       'Raw PDM comes from the original scorer, not reconstructed filtered components. '
@@ -51,7 +55,7 @@ def selection(arrays):
     return dict(baseline=baseline,no_final_imitation=int(np.argmax(noimi)),absolute_head_proxy=best),dict(protocol=name,imitation_included=included)
 
 
-def plan(package,source,out,decisions=None):
+def plan(package,source,out,decisions=None,oracle_all=False,reuse=None):
     import real_data as base
     from transfer import read,freeze,sha
     manifest,index,_,_=base.package_metadata(package)
@@ -63,7 +67,18 @@ def plan(package,source,out,decisions=None):
     ranked={s:sorted(groups[s],key=lambda r:key(r['token'])) for s in sids}
     if any(len(v)<2 for v in ranked.values()):raise ValueError('Two scenes per session required')
     oracle=[ranked[s][i]['token'] for i in range(2) for s in sids]
-    pilot=oracle[:4]; methods={}; candidates={}; formulas={}
+    pilot=oracle[:4]
+    if oracle_all:
+        # Exercise both the already measured tail and genuinely new tail labels.
+        pilot=oracle[:2]
+        used={r['session_id'] for r in records if r['token'] in pilot}
+        for r in sorted(records,key=lambda r:key(r['token'])):
+            if r['token'] not in oracle and r['session_id'] not in used and len(pilot)<4:
+                pilot.append(r['token']);used.add(r['session_id'])
+        if len(pilot)!=4:raise ValueError('Four distinct pilot sessions with two new oracle scenes required')
+        oracle=[r['token'] for r in records]
+    if oracle_all and decisions:raise ValueError('Choose oracle-all OR committed model decisions')
+    methods={}; candidates={}; formulas={}
     for r in records:
         token=r['token']; path=package/'bundle/examples'/(token+'.npz')
         if sha(path)!=manifest['files']['bundle/examples/'+token+'.npz']['sha256']:raise RuntimeError('Example changed')
@@ -80,11 +95,81 @@ def plan(package,source,out,decisions=None):
             if not isinstance(j,int) or not 0<=j<256 or candidates[token]['vocab'][j]!=r['candidate_vocab']:raise ValueError('Drex vocabulary mismatch')
             seen.add(key);methods[token]['drex_'+order]=j
         if seen!={(t,o) for t in lookup for o in ('primary','reversed')}:raise ValueError('Complete 651-scene committed Drex decisions required')
-    request=dict(config=CONFIG,records=records,oracle_tokens=[] if decisions else oracle,pilot_tokens=pilot,methods=methods,candidates=candidates,
+    config=dict(CONFIG,version=2,oracle_scenes=651,oracle_per_session=None) if oracle_all else CONFIG
+    request=dict(config=config,records=records,oracle_tokens=[] if decisions else oracle,pilot_tokens=pilot,methods=methods,candidates=candidates,
         formulas=formulas,package=str(package),manifest_sha256=sha(package/'package_manifest.json'),source=str(source),
         source_identity_sha256=sha(source/'artifacts/identity.json'),source_request_sha256=sha(source/'audit_request.json'),
         source_report_sha256=sha(source/'artifacts/report.json'),drex_sha256=sha(decisions) if decisions else None,note=NOTE)
+    if reuse:
+        if reuse.resolve()==out.resolve():raise ValueError('Reuse source must differ from output')
+        request['reuse']=dict(path=str(reuse.resolve()),files={n:sha(reuse/n) for n in ('request.json','identity.json','report.json')})
+        reuse_context(request)  # Reject incomplete/unrelated runs before freezing anything.
     freeze(out/'request.json',request);return request
+
+
+def reuse_context(request):
+    from transfer import read,sha
+    spec=request.get('reuse')
+    if not spec:return None
+    root=Path(spec['path'])
+    for name,digest in spec['files'].items():
+        if sha(root/name)!=digest:raise RuntimeError('Reuse metadata changed: '+name)
+    previous=read(root/'request.json'); identity=read(root/'identity.json'); report=read(root/'report.json')
+    if identity['request_sha256']!=sha(root/'request.json') or identity['code_sha256']!=LEGACY_CODE_SHA256:
+        raise RuntimeError('Reuse requires the original cd0041e implementation and request')
+    if previous['config']!=CONFIG or previous['drex_sha256'] is not None:
+        raise RuntimeError('Reuse requires the original balanced-64 controls experiment')
+    if (report['status'],report['scenes'],report['oracle_scenes'],report['anchors_parity_passed'])!=('complete',651,64,651):
+        raise RuntimeError('Reuse experiment is incomplete')
+    records=previous['records']
+    if len(records)!=651 or len({r['session_id'] for r in records})!=32 or any(r['role']!='train' for r in records):
+        raise RuntimeError('Reuse cohort must be the original 651 TRAIN scenes / 32 sessions')
+    for key in ('records','methods','candidates','formulas','manifest_sha256','source',
+                'source_identity_sha256','source_request_sha256','source_report_sha256'):
+        if previous[key]!=request[key]:raise RuntimeError('Reuse binding differs: '+key)
+    if len(set(previous['oracle_tokens']))!=64 or not set(previous['oracle_tokens'])<=set(request['oracle_tokens']):
+        raise RuntimeError('Reuse oracle membership differs')
+    return root,sha(root/'identity.json')
+
+
+def check_candidate(value,token,j,info,metric_keys):
+    if (value['token'],value['candidate_local'],value['candidate_vocab'],value['teacher_rank'])!=(token,j,info['vocab'][j],info['ranked'].index(j)+1):
+        raise RuntimeError('Checkpoint physical candidate/rank mismatch')
+    raw=np.asarray(value['measured_raw'],float)
+    if raw.shape!=(9,) or not np.isfinite(raw).all() or np.any(raw<0) or np.any(raw>1):
+        raise RuntimeError('Invalid checkpoint raw metrics')
+    if set(value['metrics'])!=set(metric_keys) or any(v is not None and not np.isfinite(v) for v in value['metrics'].values()):
+        raise RuntimeError('Invalid checkpoint continuous metrics')
+
+
+def reused_candidate(context,token,j,info,metric_keys):
+    from transfer import read,sha
+    if not context:return None
+    root,binding=context; path=root/'scenes'/token/(str(j)+'.json'); commit=path.with_name(str(j)+'.commit.json')
+    if not commit.exists():return None  # An uncommitted partial JSON is never reused.
+    if read(commit)!=dict(identity_sha256=binding,sha256=sha(path)):
+        raise RuntimeError('Reuse candidate receipt changed: '+str(path))
+    value=read(path);check_candidate(value,token,j,info,metric_keys)
+    return value
+
+
+def pool_expansion(rows):
+    import continuous_metrics as cm
+    by_method={}
+    for row in rows:by_method.setdefault(row['method'],{})[row['token']]=row
+    result={}
+    for small,large in ((16,64),(64,256),(16,256)):
+        lo=by_method.get('oracle_pdm_top'+str(small),{});hi=by_method.get('oracle_pdm_top'+str(large),{})
+        if not lo and not hi:continue
+        if set(lo)!=set(hi):raise RuntimeError('Oracle comparison cohorts differ')
+        tokens=sorted(lo);delta=[100*(hi[t]['raw_pdm']-lo[t]['raw_pdm']) for t in tokens]
+        if any(v < -1e-8 for v in delta):raise RuntimeError('Nested PDM oracle reserve decreased')
+        sessions=[lo[t]['session_id'] for t in tokens]
+        positive=sorted((v for v in delta if v>1e-8),reverse=True)
+        result[str(large)+'_vs_'+str(small)]=dict(scenes=len(tokens),gain_pp=cm.paired_stats(delta,sessions),
+            improved_scenes=sum(v>1e-8 for v in delta),improved_sessions=len({s for s,v in zip(sessions,delta) if v>1e-8}),
+            top2_fraction_of_positive_micro_gain=sum(positive[:2])/sum(positive) if positive else None)
+    return result
 
 
 def evaluate(candidate, cache_info, template, scenes, vocab, expected_vehicle, expected_raw=None):
@@ -133,7 +218,7 @@ def evaluate(candidate, cache_info, template, scenes, vocab, expected_vehicle, e
     return dict(**candidate,measured_raw=raw,metrics=metrics,metric_parity_passed=expected_raw is not None)
 
 
-def execute(package,source,out,repo,stage,decisions=None):
+def execute(package,source,out,repo,stage,decisions=None,oracle_all=False,reuse=None):
     import continuous_remote as old
     import continuous_metrics as cm
     import pool_remote as pool
@@ -141,7 +226,8 @@ def execute(package,source,out,repo,stage,decisions=None):
     from transfer import read,write,freeze,sha
     import sys
     sys.path.insert(1,str(repo))
-    request=plan(package,source,out,decisions)  # No outcomes loaded until the choices commit exists.
+    request=plan(package,source,out,decisions,oracle_all,reuse)  # No outcomes loaded until the choices commit exists.
+    reuse_bound=reuse_context(request)
     prior=read(source/'audit_request.json'); sid=read(source/'artifacts/identity.json'); sr=read(source/'artifacts/report.json')
     if sr['status']!='complete' or sr['metric_parity_passed']!=41664 or sid['request_sha256']!=sha(source/'audit_request.json'):
         raise RuntimeError('Complete SHA-bound top64 source required')
@@ -159,7 +245,8 @@ def execute(package,source,out,repo,stage,decisions=None):
     freeze(out/'identity.json',identity); binding=sha(out/'identity.json')
     prior_records={r['token']:r for r in prior['records']}; prior_candidates={t:[] for t in prior_records}
     for c in prior['candidates']:prior_candidates[c['token']].append(c)
-    rows=[]; candidate_rows=[]; new=0; baseline_replays=0; start=time.monotonic()
+    rows=[]; new=0; reused=0; baseline_replays=0; start=time.monotonic(); measured_seconds=0.; completed_candidates=0
+    candidate_csv=out/'per_candidate.csv.gz.tmp'
     records=[r for r in request['records'] if stage=='full' or r['token'] in request['pilot_tokens']]
     if stage=='full' and (not (out/'pilot_complete.json').exists() or read(out/'pilot_complete.json')!=dict(identity_sha256=binding)):
         raise RuntimeError('Successful matching pilot required')
@@ -186,17 +273,29 @@ def execute(package,source,out,repo,stage,decisions=None):
         group={}
         for j in sorted(wanted):
             if j in known:group[j]=known[j];continue
+            generated=False
             path=folder/(str(j)+'.json'); commit=folder/(str(j)+'.commit.json')
             if commit.exists():
                 cp=read(commit)
                 if cp!=dict(identity_sha256=binding,sha256=sha(path)):raise RuntimeError('Candidate checkpoint changed')
                 value=read(path)
             else:
-                candidate=dict(token=token,candidate_local=j,candidate_vocab=info['vocab'][j],teacher_rank=info['ranked'].index(j)+1)
-                value=evaluate(candidate,caches[token],template,scenes,vocab,profile)
-                write(path,value);write(commit,dict(identity_sha256=binding,sha256=sha(path)));new+=1
-            if (value['token'],value['candidate_local'],value['candidate_vocab'])!=(token,j,info['vocab'][j]):raise RuntimeError('Checkpoint ID mismatch')
+                generated=True
+                value=reused_candidate(reuse_bound,token,j,info,known[baseline]['metrics'])
+                if value is None:
+                    candidate=dict(token=token,candidate_local=j,candidate_vocab=info['vocab'][j],teacher_rank=info['ranked'].index(j)+1)
+                    tick=time.monotonic();value=evaluate(candidate,caches[token],template,scenes,vocab,profile)
+                    measured_seconds+=time.monotonic()-tick;new+=1
+                else:reused+=1
+                check_candidate(value,token,j,info,known[baseline]['metrics'])
+                write(path,value);write(commit,dict(identity_sha256=binding,sha256=sha(path)))
+            check_candidate(value,token,j,info,known[baseline]['metrics'])
             group[j]=value
+            if generated and (new+reused)%25==0:
+                write(out/'progress.json',dict(scenes_completed=number-1,scenes_required=len(records),current_token=token,
+                    current_scene_candidates_completed=len(group),current_scene_candidates_required=len(wanted),new_candidates=new,
+                    reused_candidates=reused,elapsed_s=time.monotonic()-start,seconds_per_new_candidate=measured_seconds/new if new else None))
+                print('ASTRA256 candidate '+token+' '+str(len(group))+'/'+str(len(wanted))+' new='+str(new)+' reused='+str(reused),flush=True)
         methods=dict(request['methods'][token])
         if token in request['oracle_tokens']:
             for k in (16,64,256):
@@ -218,12 +317,19 @@ def execute(package,source,out,repo,stage,decisions=None):
                 gain=b['metrics'][key]-c['metrics'][key]
                 row['meaningful_'+objective]=bool(gain>=absolute and gain>=.2*b['metrics'][key])
             rows.append(row)
-            if token in request['oracle_tokens'] and method in request['methods'][token]:
+            if len(request['oracle_tokens'])==64 and token in request['oracle_tokens'] and method in request['methods'][token]:
                 rows.append(dict(row,method='control64/'+method))
-        for c in group.values():candidate_rows.append(dict(token=token,session_id=r['session_id'],candidate_local=c['candidate_local'],candidate_vocab=c['candidate_vocab'],teacher_rank=c['teacher_rank'],**dict(zip(['pdm_score',*old.base.METRICS],c['measured_raw'])),**c['metrics']))
-        write(out/'progress.json',dict(scenes_completed=number,scenes_required=len(records),new_candidates=new,elapsed_s=time.monotonic()-start))
-        print('ASTRA256 '+str(number)+'/'+str(len(records))+' new='+str(new),flush=True)
-    reserve.write_gzip_csv(out/'per_scene.csv.gz',rows);reserve.write_gzip_csv(out/'per_candidate.csv.gz',candidate_rows)
+        # Bound memory to one scene, rather than retaining 166,656 metric dicts.
+        candidate_rows=[dict(token=token,session_id=r['session_id'],candidate_local=c['candidate_local'],candidate_vocab=c['candidate_vocab'],teacher_rank=c['teacher_rank'],**dict(zip(['pdm_score',*old.base.METRICS],c['measured_raw'])),**c['metrics']) for c in group.values()]
+        with gzip.open(candidate_csv,'wt' if number==1 else 'at',newline='',encoding='utf-8') as stream:
+            writer=csv.DictWriter(stream,fieldnames=list(candidate_rows[0]))
+            if number==1:writer.writeheader()
+            writer.writerows(candidate_rows)
+        completed_candidates+=len(group)
+        write(out/'progress.json',dict(scenes_completed=number,scenes_required=len(records),new_candidates=new,reused_candidates=reused,
+            completed_candidates=completed_candidates,elapsed_s=time.monotonic()-start,seconds_per_new_candidate=measured_seconds/new if new else None))
+        print('ASTRA256 '+str(number)+'/'+str(len(records))+' new='+str(new)+' reused='+str(reused),flush=True)
+    reserve.write_gzip_csv(out/'per_scene.csv.gz',rows);candidate_csv.replace(out/'per_candidate.csv.gz')
     methods={}
     for method in sorted({r['method'] for r in rows}):
         g=[r for r in rows if r['method']==method];sessions=[r['session_id'] for r in g]
@@ -231,8 +337,9 @@ def execute(package,source,out,repo,stage,decisions=None):
             **{'meaningful_'+o:sum(r['meaningful_'+o] for r in g) for o in ('jerk','lateral')},
             **{k:cm.paired_stats([r[k] for r in g],sessions) for k in ('raw_pdm','pdm_gain_pp','delta_route_progress_m','delta_all_jerk_norm_mps3_rms','delta_all_accel_lat_mps2_rms')})
     report=dict(status='complete' if stage=='full' else 'pilot_complete',scenes=len(records),oracle_scenes=sum(r['token'] in request['oracle_tokens'] for r in records),
-        new_candidates_this_invocation=new,baseline_replays_this_invocation=baseline_replays,anchors_parity_passed=len(records),
-        methods=methods,holdout_processed=0,model_calls=0,note=NOTE)
+        sessions=len({r['session_id'] for r in records}),completed_candidates=completed_candidates,
+        reused_candidates_this_invocation=reused,new_candidates_this_invocation=new,baseline_replays_this_invocation=baseline_replays,anchors_parity_passed=len(records),
+        methods=methods,oracle_pool_expansion=pool_expansion(rows),holdout_processed=0,model_calls=0,note=NOTE)
     write(out/'report.json',report)
     if stage=='pilot':freeze(out/'pilot_complete.json',dict(identity_sha256=binding))
     return report
@@ -242,12 +349,13 @@ def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('stage',choices=('pilot','full'))
     p.add_argument('--package',type=Path,required=True);p.add_argument('--source',type=Path,required=True)
     p.add_argument('--out',type=Path,required=True);p.add_argument('--repo',type=Path,required=True);p.add_argument('--decisions',type=Path)
+    p.add_argument('--oracle-all',action='store_true');p.add_argument('--reuse',type=Path)
     a=p.parse_args();a.out.mkdir(parents=True,exist_ok=True)
     import fcntl,traceback
     from transfer import write
     with (a.out/'.execution.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
-        try:execute(a.package.resolve(),a.source.resolve(),a.out.resolve(),a.repo.resolve(),a.stage,a.decisions)
+        try:execute(a.package.resolve(),a.source.resolve(),a.out.resolve(),a.repo.resolve(),a.stage,a.decisions,a.oracle_all,a.reuse)
         except Exception as exc:
             write(a.out/'failure.json',dict(error=repr(exc),traceback=traceback.format_exc()));raise
 

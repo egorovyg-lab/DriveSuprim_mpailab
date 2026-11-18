@@ -124,7 +124,9 @@ def checked_sample(out,plan,token):
 def worker(root,out,count,phase):
     import torch
     import table_group
-    from drex_max.model import DecisionModel
+    from drex_max.model import DecisionModel,MAX_OPTIONS
+    if MAX_OPTIONS<256:
+        raise RuntimeError('Official Drex readout supports only '+str(MAX_OPTIONS)+' choices; exact256 is unsupported. No candidate was dropped or weights loaded.')
     identity,p=context(root,out,count); rank=table_group.gpu_binding(out,count,'direct256-'+phase)
     assigned=tasks(identity,phase)[rank::count]
     folder=out/'workers'/str(rank); folder.mkdir(parents=True,exist_ok=True)
