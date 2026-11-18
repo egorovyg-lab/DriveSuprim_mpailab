@@ -145,7 +145,11 @@ class PipelineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=str(Path.cwd())) as tmp:
             root=Path(tmp);binpath=root/'bin';binpath.mkdir();log=root/'calls'
             def stub(name,text):
-                file=binpath/name;file.write_text('#!/usr/bin/env bash\n'+text,encoding='utf-8',newline='\n');file.chmod(0o755)
+                file=binpath/name
+                # Path.write_text(newline=...) requires Python 3.10; Astra is 3.9.
+                with file.open('w',encoding='utf-8',newline='\n') as stream:
+                    stream.write('#!/usr/bin/env bash\n'+text)
+                file.chmod(0o755)
             stub('flock','exit 0\n')
             stub('python','printf "%s\\n" "$*" >> "$ASTRA_TEST_CALLS"\n'
                  '[[ ${CUDA_VISIBLE_DEVICES-unset} == "" && $OMP_NUM_THREADS == 2 ]] || exit 90\n'
