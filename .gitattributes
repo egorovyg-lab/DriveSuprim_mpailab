@@ -1,0 +1,2 @@
+# Bash launchers use LF on every platform.
+scripts/drex/*.sh text eol=lf

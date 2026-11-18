@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+source "$repo/scripts/drex/slurm_options.sh"
 root=${DREX_RUNTIME_ROOT:-$HOME/drex_runtime}
 stage=${1:-status}; inside=false
 if [[ "$stage" == --inside ]]; then inside=true; stage=${2:-}; shift; fi
@@ -21,17 +22,15 @@ if [[ "$stage" == status ]]; then
   exit
 fi
 if [[ "$inside" == false ]]; then
-  [[ -s "$root/setup_node.txt" ]] || { echo 'Run runtime prepare first' >&2; exit 1; }
-  node=$(cat "$root/setup_node.txt"); [[ "$node" =~ ^[A-Za-z0-9_.-]+$ ]] || exit 2
   if [[ "$stage" == check || "$stage" == plan ]]; then
-    exec srun --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 --nodelist="$node" \
+    exec srun --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 "${DREX_NODE_ARGS[@]}" \
       --cpus-per-task=2 --mem=8G --gres=none --time=00:20:00 --export=ALL \
       bash --login "$repo/scripts/drex/run_pair_diagnostic.sh" --inside "$stage" "$count"
   fi
   [[ "$stage" == submit || "$stage" == submit-plan ]] || { echo 'Internal stage' >&2; exit 2; }
   submit_one() {
     local action=$1 dep=$2 raw command memory=8G cpus=2 limit=00:20:00 gres=none id
-    local args=(--parsable --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 --nodelist="$node" --export=ALL)
+    local args=(--parsable --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 "${DREX_NODE_ARGS[@]}" --export=ALL)
     [[ -z "$dep" ]] || args+=(--dependency="afterok:$dep")
     if [[ "$action" == worker ]]; then
       memory=96G; cpus=4; limit=01:00:00; gres=gpu:1
@@ -51,7 +50,7 @@ if [[ "$inside" == false ]]; then
 fi
 [[ -n ${SLURM_JOB_ID:-} && -n ${SLURM_STEP_ID:-} ]] || { echo 'Requires an actual Slurm job step' >&2; exit 2; }
 venv=$root/venv; upstream=$root/upstream
-[[ -x "$venv/bin/python" ]] || exit 1
+drex_require_python "$root"
 if [[ "$stage" == check ]]; then
   cd "$repo"; "$venv/bin/python" -m unittest discover -s scripts/drex -p 'test_pair_diagnostic.py' -v; exit
 fi

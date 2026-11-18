@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+source "$repo/scripts/drex/slurm_options.sh"
 root=${DREX_RUNTIME_ROOT:-$HOME/drex_runtime}
 upstream=$root/upstream
 venv=$root/venv
@@ -46,10 +47,7 @@ if [[ "$inside" == false ]]; then
   elif [[ "$stage" == real-pilot ]]; then
     memory=96G; limit=00:30:00; cpus=4
   elif [[ "$stage" == model-plan || "$stage" == download || "$stage" == night-plan || "$stage" == night-report || "$stage" == real-check || "$stage" == real-plan || "$stage" == real-report ]]; then
-    [[ -s "$root/setup_node.txt" ]] || { echo 'Run setup or prepare first' >&2; exit 1; }
-    node=$(cat "$root/setup_node.txt")
-    [[ "$node" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo 'Invalid saved setup node' >&2; exit 1; }
-    resources=(--nodelist="$node" --gres=none)
+    resources=(--gres=none)
     if [[ "$stage" == download ]]; then limit=00:45:00; fi
     if [[ "$stage" == real-check || "$stage" == real-plan || "$stage" == real-report ]]; then limit=00:15:00; fi
   fi
@@ -60,12 +58,12 @@ if [[ "$inside" == false ]]; then
     printf -v worker '%q ' srun --ntasks=1 --cpus-per-task="$cpus" --gres=gpu:1 \
       bash --login "$repo/scripts/drex/run_runtime.sh" --inside "$stage"
     printf '#!/usr/bin/env bash\nset -euo pipefail\nexec %s\n' "$worker" | \
-      sbatch --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 \
+      sbatch --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 "${DREX_NODE_ARGS[@]}" \
         --cpus-per-task="$cpus" --mem="$memory" --gres=gpu:1 --time="$limit" \
         --export=ALL --job-name="drex-$stage" --output="$root/logs/$stage-%j.log"
     exit
   fi
-  exec srun --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 \
+  exec srun --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 "${DREX_NODE_ARGS[@]}" \
     --cpus-per-task="$cpus" --mem="$memory" "${resources[@]}" --time="$limit" \
     --export=ALL bash --login "$repo/scripts/drex/run_runtime.sh" --inside "$stage"
 fi
@@ -109,7 +107,7 @@ if [[ "$stage" == setup ]]; then
   mv "$root/setup_node.txt.tmp" "$root/setup_node.txt"
   exit
 fi
-[[ -x "$venv/bin/python" ]] || { echo 'Run setup first' >&2; exit 1; }
+drex_require_python "$root"
 [[ $(git -C "$upstream" rev-parse HEAD) == "$commit" ]] || { echo 'Wrong upstream commit' >&2; exit 1; }
 [[ -z $(git -C "$upstream" status --porcelain) ]] || { echo 'Upstream has local changes' >&2; exit 1; }
 export PYTHONPATH="$upstream${PYTHONPATH:+:$PYTHONPATH}"

@@ -267,7 +267,7 @@ class LaunchTests(unittest.TestCase):
             self.assertEqual(r.returncode, 0, r.stderr)
             args = self.f.log.read_text().splitlines()
             self.assertIn('--gres=none', args)
-            self.assertIn('--nodelist=cn29', args)
+            self.assertFalse(any(a.startswith('--nodelist') for a in args))
             self.assertEqual(args[-2:], ['--inside', stage])
 
     def test_successful_mini_tests_return_zero_and_prepare_runs_after_them(self):

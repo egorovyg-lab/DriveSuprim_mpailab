@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+source "$repo/scripts/drex/slurm_options.sh"
 root=${DREX_RUNTIME_ROOT:-$HOME/drex_runtime}
 stage=${1:-status}; inside=false
 if [[ "$stage" == --inside ]]; then inside=true; stage=${2:-}; shift; fi
@@ -21,11 +22,10 @@ if [[ "$stage" == status ]]; then
   done
   exit
 fi
-node=$(cat "$root/setup_node.txt"); [[ "$node" =~ ^[A-Za-z0-9_.-]+$ ]] || exit 2
 if [[ "$inside" == false ]]; then
   submit_one() {
     local action=$1 dep=$2 raw id command gpu=none memory=16G tasks=1 cpus=2 limit=00:45:00
-    local args=(--parsable --partition="${DREX_PARTITION:-batch}" --nodes=1 --nodelist="$node" --export=ALL)
+    local args=(--parsable --partition="${DREX_PARTITION:-batch}" --nodes=1 "${DREX_NODE_ARGS[@]}" --export=ALL)
     [[ -z "$dep" ]] || args+=(--dependency="afterok:$dep" --kill-on-invalid-dep=yes)
     if [[ "$action" == gpu-* || "$action" == bind ]]; then
       gpu=gpu:$count; tasks=$count; cpus=4; memory=$((96*count))G; limit=${DREX_TABLE_TIME:-08:00:00}
@@ -56,7 +56,7 @@ if [[ "$inside" == false ]]; then
   echo "Output: $out"; exit
 fi
 [[ -n ${SLURM_JOB_ID:-} ]] || { echo 'Requires a real Slurm allocation' >&2; exit 2; }
-venv=$root/venv; [[ -x "$venv/bin/python" ]] || exit 1
+venv=$root/venv; drex_require_python "$root"
 gpu_step() {
   local phase=$1
   export DREX_GROUP_STEP_TOKEN="$(date -u +%s%N)-${BASHPID}"

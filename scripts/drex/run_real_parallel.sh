@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+source "$repo/scripts/drex/slurm_options.sh"
 root=${DREX_RUNTIME_ROOT:-$HOME/drex_runtime}
 stage=${1:-submit}
 inside=false
@@ -22,18 +23,15 @@ export DREX_RUNTIME_ROOT="$root"
 out=$root/runs/$DREX_REAL_NAME
 if [[ "$inside" == false ]]; then
   [[ "$stage" != worker ]] || { echo 'Worker is internal to Slurm array' >&2; exit 2; }
-  [[ -s "$root/setup_node.txt" ]] || { echo 'Run runtime prepare first' >&2; exit 1; }
-  node=$(cat "$root/setup_node.txt")
-  [[ "$node" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo 'Invalid saved setup node' >&2; exit 1; }
   if [[ "$stage" != submit ]]; then
-    exec srun --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 --nodelist="$node" \
+    exec srun --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 "${DREX_NODE_ARGS[@]}" \
       --cpus-per-task=2 --mem=8G --gres=none --time=00:15:00 --export=ALL \
       bash --login "$repo/scripts/drex/run_real_parallel.sh" --inside "$stage" "$count"
   fi
   submit_stage() {
     local which=$1 dependency=$2 worker args memory cpus limit gres raw id
     memory=8G; cpus=2; limit=00:15:00; gres=none
-    args=(--parsable --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 --nodelist="$node" --export=ALL)
+    args=(--parsable --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 "${DREX_NODE_ARGS[@]}" --export=ALL)
     if [[ -n "$dependency" ]]; then args+=(--dependency="afterok:$dependency"); fi
     if [[ "$which" == worker ]]; then
       memory=96G; cpus=4; limit=04:00:00; gres=gpu:1
@@ -60,7 +58,7 @@ if [[ "$inside" == false ]]; then
 fi
 [[ -n ${SLURM_JOB_ID:-} && -n ${SLURM_STEP_ID:-} ]] || { echo 'Internal mode requires an actual Slurm step' >&2; exit 2; }
 venv=$root/venv; upstream=$root/upstream
-[[ -x "$venv/bin/python" ]] || { echo 'Run runtime prepare first' >&2; exit 1; }
+drex_require_python "$root"
 [[ $(git -C "$upstream" rev-parse HEAD) == b932571901f531b2378b356fcab7d176048c2bcb ]] || { echo 'Wrong upstream commit' >&2; exit 1; }
 [[ -z $(git -C "$upstream" status --porcelain) ]] || { echo 'Upstream has local changes' >&2; exit 1; }
 export PYTHONPATH="$upstream${PYTHONPATH:+:$PYTHONPATH}"

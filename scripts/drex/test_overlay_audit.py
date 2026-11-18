@@ -101,7 +101,7 @@ class ProjectionAuditSlurmTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         args = fixture.log.read_text().splitlines()
         self.assertIn('--gres=none', args)
-        self.assertIn('--nodelist=cn29', args)
+        self.assertFalse(any(a.startswith('--nodelist') for a in args))
         self.assertNotIn('--gres=gpu:1', args)
         self.assertFalse((fixture.envroot/'venv').exists())
         result = fixture.run_stage('--inside')

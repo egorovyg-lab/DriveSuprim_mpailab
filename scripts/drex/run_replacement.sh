@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+source "$repo/scripts/drex/slurm_options.sh"
 root=${DREX_RUNTIME_ROOT:-$HOME/drex_runtime}
 stage=${1:-status}; inside=false
 if [[ "$stage" == --inside ]]; then inside=true; stage=${2:-}; shift; fi
@@ -21,12 +22,11 @@ if [[ "$stage" == status ]]; then
   exit
 fi
 case "$stage" in check|submit-bind|submit-pilot|submit-night|resume|report|check-cpu|plan|gpu-night|gpu-pilot|gpu-full|bind|worker|worker-pilot) ;; *) echo 'Usage: run_replacement.sh check|submit-bind|submit-pilot|submit-night|resume|report|status [1|2|4|8]' >&2; exit 2 ;; esac
-node=$(cat "$root/setup_node.txt"); [[ "$node" =~ ^[A-Za-z0-9_.-]+$ ]] || exit 2
 if [[ "$inside" == false ]]; then
   submit_one() {
     local action=$1 dep=$2 command raw id tasks=1 cpus=2 memory=16G gpu=none limit=01:00:00
     [[ "$action" != report ]] || limit=02:00:00
-    local args=(--parsable --partition="${DREX_PARTITION:-batch}" --nodes=1 --nodelist="$node" --export=ALL)
+    local args=(--parsable --partition="${DREX_PARTITION:-batch}" --nodes=1 "${DREX_NODE_ARGS[@]}" --export=ALL)
     [[ -z "$dep" ]] || args+=(--dependency="afterok:$dep" --kill-on-invalid-dep=yes)
     if [[ "$action" == gpu-* || "$action" == bind ]]; then
       tasks=$count; cpus=4; memory=$((96*count))G; gpu=gpu:$count; limit=${DREX_REPLACEMENT_TIME:-08:00:00}
@@ -58,7 +58,7 @@ if [[ "$inside" == false ]]; then
   echo "Output: $out"; exit
 fi
 [[ -n ${SLURM_JOB_ID:-} ]] || { echo 'Requires Slurm' >&2; exit 2; }
-venv=$root/venv; [[ -x "$venv/bin/python" ]] || exit 1
+venv=$root/venv; drex_require_python "$root"
 gpu_step() {
   local phase=$1
   export DREX_GROUP_STEP_TOKEN="$(date -u +%s%N)-${BASHPID}"

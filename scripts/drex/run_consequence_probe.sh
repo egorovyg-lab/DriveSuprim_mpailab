@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+source "$repo/scripts/drex/slurm_options.sh"
 root=${DREX_RUNTIME_ROOT:-/scratch/pr0201/drex_runtime}
 stage=${1:-status}
 export PYTHONDONTWRITEBYTECODE=1 OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2
@@ -17,12 +18,12 @@ case "$stage" in
     exec "${PYTHON:-python3}" -B "$repo/scripts/drex/diagnose_consequence_probe.py" \
       --run "$root/runs/$DREX_PROBE_NAME" ;;
   check|prepare)
-    node=$(cat "$root/setup_node.txt"); [[ "$node" =~ ^[A-Za-z0-9_.-]+$ ]] || exit 2
-    exec srun --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 --nodelist="$node" \
+    exec srun --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 "${DREX_NODE_ARGS[@]}" \
       --cpus-per-task=2 --mem=16G --gres=none --time=02:00:00 --export=ALL \
       bash --login "$repo/scripts/drex/run_consequence_probe.sh" --inside "$stage" ;;
   --inside)
     [[ -n ${SLURM_JOB_ID:-} && -n ${SLURM_STEP_ID:-} ]] || exit 2
+    drex_require_python "$root"
     cd "$repo"
     "$root/venv/bin/python" -B -m unittest discover -s scripts/drex -p test_consequence_probe.py -v
     [[ ${2:-} != check ]] || exit 0

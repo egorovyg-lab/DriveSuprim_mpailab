@@ -14,20 +14,21 @@ else
   name=${DREX_CONSEQUENCE_V2_NAME:-consequence_nested_v2}
   source=$root/runs/${DREX_PROBE_NAME:-rollout_audit_drex_probe_v1}
 fi
+source "$repo/scripts/drex/slurm_options.sh"
 [[ -f "$repo/scripts/drex/consequence_v2.py" && -d "$repo/scripts/drex" ]] || { echo "Invalid repository: $repo" >&2; exit 2; }
 [[ "$name" =~ ^[A-Za-z0-9_-]+$ ]] || exit 2
 out=$root/runs/$name
 export PYTHONDONTWRITEBYTECODE=1 OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2 MKL_NUM_THREADS=2
 case "${1:-status}" in
   submit|resume)
-    node=$(cat "$root/setup_node.txt"); [[ "$node" =~ ^[A-Za-z0-9_.-]+$ ]] || exit 2
     mkdir -p "$root/logs"
-    exec sbatch --partition="${DREX_PARTITION:-batch}" --nodelist="$node" --nodes=1 --ntasks=1 \
+    exec sbatch --partition="${DREX_PARTITION:-batch}" "${DREX_NODE_ARGS[@]}" --nodes=1 --ntasks=1 \
       --cpus-per-task=2 --mem=16G --gres=none --time=08:00:00 --export=ALL \
       --job-name=drex-consequence-v2 --chdir="$repo" --output="$root/logs/consequence-v2-%j.log" \
       "$repo/scripts/drex/run_consequence_v2.sh" --inside "$repo" "$root" "$name" "$source" ;;
   --inside)
     [[ -n ${SLURM_JOB_ID:-} ]] || exit 2
+    drex_require_python "$root"
     cd "$repo"; mkdir -p "$out"; exec 9>"$out/.execution.lock"
     flock -n 9 || { echo 'Another v2 worker is running' >&2; exit 1; }
     "$root/venv/bin/python" -B -m unittest discover -s scripts/drex -p test_consequence_v2.py -v

@@ -10,6 +10,7 @@ import re
 import shlex
 import subprocess
 import sys
+from slurm_options import node_options
 
 LIMIT = 'RuntimeError: Worker time budget reached; resume SAME name/count before report'
 
@@ -66,8 +67,8 @@ class Chain:
             raise RuntimeError('Existing frozen plan does not match GPU count/protocol')
         self.binding = dict(plan_sha256=sha(self.out/'plan.json'), helper_sha256=sha(self.script),
             launcher_sha256=sha(self.launcher), name=name, gpus=count)
-        self.node = (self.root/'setup_node.txt').read_text().strip()
-        if not re.fullmatch(r'[A-Za-z0-9_.-]+',self.node): raise ValueError('Invalid node')
+        self.node_args = node_options()
+        self.binding.update(node_args=self.node_args)
 
     def path(self,parent):
         if not re.fullmatch(r'\d+',str(parent)): raise ValueError('Invalid predecessor job ID')
@@ -105,12 +106,13 @@ class Chain:
         script = '#!/usr/bin/env bash\nset -euo pipefail\nexec '+shlex.join(argv)+'\n'
         args = ['sbatch','--parsable','--partition='+os.environ.get('DREX_PARTITION','batch'),
             '--nodes=1','--ntasks=1','--cpus-per-task=1','--mem=512M','--gres=none','--time=00:05:00',
-            '--nodelist='+self.node,'--dependency=afterany:'+str(parent),'--kill-on-invalid-dep=yes',
+            *self.node_args,'--dependency=afterany:'+str(parent),'--kill-on-invalid-dep=yes',
             '--job-name=drex-chain-'+str(parent),'--export=ALL',
             '--output='+str(self.root/'logs'/'resume-chain-%j.log')]
         # sbatch reads the small callback from stdin, not from a mutable shell variable.
         if self.call is command:
-            result = subprocess.run(args,input=script,text=True,capture_output=True)
+            env=dict(os.environ);env.pop('SBATCH_NODELIST',None)
+            result = subprocess.run(args,input=script,text=True,capture_output=True,env=env)
             if result.returncode: raise RuntimeError('sbatch rejected callback: '+result.stderr)
             output = result.stdout
         else: output = self.call(args+['__SCRIPT__',script])

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+source "$repo/scripts/drex/slurm_options.sh"
 root=${DREX_RUNTIME_ROOT:-/scratch/pr0201/drex_runtime}
 export DREX_POOL_NAME=${DREX_POOL_NAME:-rollout_audit_pool64_v1}
 export DREX_POOL_SOURCE=${DREX_POOL_SOURCE:-table_topk_night_gpu8_v1}
@@ -19,12 +20,12 @@ stage=${1:-status}
 case "$stage" in
   connect) exec bash "$repo/scripts/drex/run_transfer.sh" connect ;;
   check|prepare)
-    node=$(cat "$root/setup_node.txt"); [[ "$node" =~ ^[A-Za-z0-9_.-]+$ ]] || exit 2
-    exec srun --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 --nodelist="$node" \
+    exec srun --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 "${DREX_NODE_ARGS[@]}" \
       --cpus-per-task=2 --mem=16G --gres=none --time=02:00:00 --export=ALL \
       bash --login "$repo/scripts/drex/run_pool_audit.sh" --inside "$stage" ;;
   --inside)
     [[ -n ${SLURM_JOB_ID:-} && -n ${SLURM_STEP_ID:-} ]] || exit 2
+    drex_require_python "$root"
     cd "$repo"
     "$root/venv/bin/python" -B -m unittest discover -s scripts/drex -p test_pool_audit.py -v
     [[ ${2:-} != check ]] || exit 0

@@ -1,4 +1,5 @@
 import ast
+import os
 from pathlib import Path
 import tempfile
 import shutil
@@ -12,6 +13,8 @@ import schedule_replacement as scheduler
 
 class SchedulerTests(unittest.TestCase):
     def setUp(self):
+        env_patch=patch.dict(os.environ,DREX_NODE="auto")
+        env_patch.start();self.addCleanup(env_patch.stop)
         self.tmp = tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name); self.name = 'replacement_gpu2_v1'
         self.out = self.root/'runs'/self.name
@@ -42,7 +45,7 @@ class SchedulerTests(unittest.TestCase):
         self.assertEqual(first['callback_job'],'8001'); self.assertEqual(self.resumes,0)
         submit = self.calls[-1][0]
         self.assertIn('--dependency=afterany:288789',submit)
-        self.assertIn('--gres=none',submit); self.assertIn('--nodelist=cn29',submit)
+        self.assertIn('--gres=none',submit); self.assertFalse(any(a.startswith('--nodelist') for a in submit))
         self.assertIn('advance',submit[-1]); self.assertNotIn('resume 2',submit[-1])
         self.logs(288789); self.chain.advance(288789)
         child = self.chain.checked(9001)

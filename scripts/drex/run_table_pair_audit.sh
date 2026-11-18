@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+source "$repo/scripts/drex/slurm_options.sh"
 root=${DREX_RUNTIME_ROOT:-$HOME/drex_runtime}
 export DREX_TABLE_PAIR_NAME=${DREX_TABLE_PAIR_NAME:-rollout_audit_table_pairs_v1}
 export DREX_TABLE_PAIR_SOURCE=${DREX_TABLE_PAIR_SOURCE:-table_topk_night_gpu8_v1}
@@ -18,12 +19,12 @@ args=(--root "$root" --name "$DREX_TABLE_PAIR_NAME" --source "$DREX_TABLE_PAIR_S
 case "$stage" in
   connect) exec bash "$repo/scripts/drex/run_transfer.sh" connect ;;
   prepare|check)
-    node=$(cat "$root/setup_node.txt"); [[ "$node" =~ ^[A-Za-z0-9_.-]+$ ]] || exit 2
-    exec srun --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 --nodelist="$node" \
+    exec srun --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 "${DREX_NODE_ARGS[@]}" \
       --cpus-per-task=2 --mem=16G --gres=none --time=01:00:00 --export=ALL \
       bash --login "$repo/scripts/drex/run_table_pair_audit.sh" --inside "$stage" ;;
   --inside)
     [[ -n ${SLURM_JOB_ID:-} && -n ${SLURM_STEP_ID:-} ]] || exit 2
+    drex_require_python "$root"
     cd "$repo"
     "$root/venv/bin/python" -B -m unittest discover -s scripts/drex -p test_table_factorial.py -v
     [[ ${2:-} != check ]] || exit

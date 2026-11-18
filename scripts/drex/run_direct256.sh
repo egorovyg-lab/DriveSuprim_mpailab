@@ -8,6 +8,7 @@ else
   root=${DREX_RUNTIME_ROOT:-/scratch/pr0201/drex_runtime}; count=${2:-2}
   name=${DREX_DIRECT256_NAME:-direct256_absolute_gpu${count}_v1}
 fi
+source "$repo/scripts/drex/slurm_options.sh"
 [[ "$count" =~ ^(1|2|4|8)$ && "$name" =~ ^direct256_[A-Za-z0-9_-]{1,64}$ ]] || exit 2
 export PYTHONDONTWRITEBYTECODE=1 TOKENIZERS_PARALLELISM=false OMP_NUM_THREADS=4 MKL_NUM_THREADS=4 OPENBLAS_NUM_THREADS=4
 out=$root/runs/$name
@@ -22,9 +23,8 @@ case "$action" in
     phase=pilot; [[ "$action" != submit-full ]] || phase=full
     limit=01:00:00; [[ "$phase" != full ]] || limit=08:00:00
     [[ "$phase" != full || -f "$out/pilot_report.json" ]] || { echo 'Successful pilot required' >&2; exit 1; }
-    node=$(cat "$root/setup_node.txt"); [[ "$node" =~ ^[A-Za-z0-9_.-]+$ ]] || exit 2
     mkdir -p "$root/logs"
-    exec sbatch --partition="${DREX_PARTITION:-batch}" --nodes=1 --nodelist="$node" --ntasks="$count" \
+    exec sbatch --partition="${DREX_PARTITION:-batch}" --nodes=1 "${DREX_NODE_ARGS[@]}" --ntasks="$count" \
       --cpus-per-task=4 --mem="$((96*count))G" --gres="gpu:$count" --time="$limit" --export=ALL \
       --chdir="$repo" --job-name="drex-direct256-$phase" --output="$root/logs/direct256-$phase-%j.log" \
       "$repo/scripts/drex/run_direct256.sh" --inside "coordinator-$phase" "$repo" "$root" "$count" "$name" ;;
@@ -34,6 +34,7 @@ upstream=$root/upstream
 [[ $(git -C "$upstream" rev-parse HEAD) == b932571901f531b2378b356fcab7d176048c2bcb && -z $(git -C "$upstream" status --porcelain) ]] || exit 1
 export PYTHONPATH="$upstream${PYTHONPATH:+:$PYTHONPATH}"
 python=$root/venv/bin/python
+drex_require_python "$root"
 case "$action" in
   coordinator-pilot|coordinator-full)
     phase=${action#coordinator-}; mkdir -p "$out"; exec 9>"$out/.execution.lock"

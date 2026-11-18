@@ -28,7 +28,7 @@ class SlurmRoutingTests(unittest.TestCase):
         self.script = Path(__file__).with_name("run_runtime.sh").resolve()
         self.env = dict(os.environ, DREX_RUNTIME_ROOT=self.posix(self.envroot),
                         DREX_TEST_LOG=self.posix(self.log), DREX_TEST_CALLS=self.posix(self.calls))
-        for name in ("SLURM_JOB_ID", "SLURM_STEP_ID", "SLURMD_NODENAME"):
+        for name in ("SLURM_JOB_ID", "SLURM_STEP_ID", "SLURMD_NODENAME", "DREX_NODE", "SBATCH_NODELIST"):
             self.env.pop(name, None)
         self.stub("srun", 'printf "%s\\n" "$@" > "$DREX_TEST_LOG"\n')
 
@@ -60,13 +60,13 @@ class SlurmRoutingTests(unittest.TestCase):
             self.assertEqual(args[-2:], ["--inside", stage])
             self.assertFalse((self.envroot / "venv").exists())
 
-    def test_metadata_and_download_use_recorded_compute_node_without_gpu(self):
+    def test_metadata_and_download_allow_any_compute_node_without_gpu(self):
         (self.envroot / "setup_node.txt").write_text("cn29\n")
         for stage in ("model-plan", "download", "night-plan", "night-report", "real-check", "real-plan", "real-report"):
             result = self.run_stage(stage)
             self.assertEqual(result.returncode, 0, result.stderr)
             args = self.log.read_text().splitlines()
-            self.assertIn("--nodelist=cn29", args)
+            self.assertFalse(any(a.startswith("--nodelist") for a in args))
             self.assertIn("--gres=none", args)
             self.assertNotIn("--gres=gpu:1", args)
 

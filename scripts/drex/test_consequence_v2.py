@@ -87,6 +87,7 @@ class V2Tests(unittest.TestCase):
         f=fixtures.SlurmRoutingTests('test_internal_mode_requires_a_real_job_step'); f.setUp(); self.addCleanup(f.doCleanups)
         repo=f.root/'checkout with spaces'; scripts=repo/'scripts/drex'; scripts.mkdir(parents=True)
         (scripts/'consequence_v2.py').write_text('# fixture\n')
+        (scripts/'slurm_options.sh').write_bytes(Path(v2.__file__).with_name('slurm_options.sh').read_bytes())
         spool=f.root/'spool/job123'; spool.mkdir(parents=True)
         copy=spool/'slurm_script'
         copy.write_bytes(Path(v2.__file__).with_name('run_consequence_v2.sh').read_bytes())

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+source "$repo/scripts/drex/slurm_options.sh"
 root=${DREX_RUNTIME_ROOT:-$HOME/drex_runtime}
 stage=${1:-status}; inside=false
 if [[ "$stage" == --inside ]]; then inside=true; stage=${2:-}; fi
@@ -23,10 +24,9 @@ PY
   exit
 fi
 case "$stage" in submit|check|run) ;; *) echo 'Usage: run_table_case_audit.sh check|submit|status' >&2; exit 2 ;; esac
-node=$(cat "$root/setup_node.txt"); [[ "$node" =~ ^[A-Za-z0-9_.-]+$ ]] || exit 2
 if [[ "$inside" == false ]]; then
   if [[ "$stage" == check ]]; then
-    exec srun --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 --nodelist="$node" \
+    exec srun --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 "${DREX_NODE_ARGS[@]}" \
       --cpus-per-task=2 --mem=16G --gres=none --time=00:15:00 --export=ALL \
       bash --login "$repo/scripts/drex/run_table_case_audit.sh" --inside check
   fi
@@ -34,13 +34,13 @@ if [[ "$inside" == false ]]; then
   printf -v command '%q ' srun --nodes=1 --ntasks=1 --cpus-per-task=2 --gres=none --kill-on-bad-exit=1 \
     bash --login "$repo/scripts/drex/run_table_case_audit.sh" --inside run
   printf '#!/usr/bin/env bash\nset -euo pipefail\nexec %s\n' "$command" | sbatch \
-    --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 --nodelist="$node" \
+    --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 "${DREX_NODE_ARGS[@]}" \
     --cpus-per-task=2 --mem=16G --gres=none --time=01:00:00 --export=ALL \
     --job-name=drex-table-case-audit --output="$root/logs/table-case-audit-%j.log"
   echo "Source: $root/runs/$source_name"; echo "Audit output: $out"; exit
 fi
 [[ -n ${SLURM_JOB_ID:-} && -n ${SLURM_STEP_ID:-} ]] || { echo 'Requires a real Slurm task step' >&2; exit 2; }
-venv=$root/venv; [[ -x "$venv/bin/python" ]] || exit 1
+venv=$root/venv; drex_require_python "$root"
 cd "$repo"; "$venv/bin/python" -c 'import numpy,PIL'
 "$venv/bin/python" -m unittest discover -s scripts/drex -p test_table_cases.py -v
 [[ "$stage" != check ]] || exit
