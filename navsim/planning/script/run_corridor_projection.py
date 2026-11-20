@@ -246,7 +246,7 @@ def initialize(root, out):
         "navsim/agents/corridor_projection.py", "navsim/planning/script/run_corridor_projection.py",
         "scripts/drivesuprim/evaluation/run_corridor_projection.sh",
         "navsim/agents/drivesuprim/drivesuprim_features.py")}
-    snapshot = dict(protocol="current_camera_corridor_projection_v1", parent=str(root),
+    snapshot = dict(protocol="current_camera_corridor_projection_v2", parent=str(root),
         parent_identity_sha256=sha(root / "identity.json"), inputs=inputs, sources=sources, cases=cases,
         output_size=list(config[2:]), calibration_contract=projection.CALIBRATION_CONTRACT,
         references=REFERENCES, python=platform.python_version(), numpy=np.__version__, pillow=pillow_version,
@@ -275,11 +275,7 @@ def audit_case(case, packet, output_size):
     observation = case["observation"]
     b = int(packet["baseline_position"])
     origin = packet["rollout_poses"][b, 0]
-    r = projection.rotation(observation["ego_rotation"])
-    yaw = np.arctan2(r[1, 0], r[0, 0])
-    if (not np.allclose(origin[:2], observation["ego_translation"][:2], atol=1e-5, rtol=0)
-            or abs(np.arctan2(np.sin(origin[2]-yaw), np.cos(origin[2]-yaw))) > 1e-5):
-        raise ValueError("Current camera ego and geometry packet origin disagree")
+    projection.require_rollout_alignment(origin, observation)
     chosen = geometry.decide(packet, "rollout")["chosen"]
     if (int(packet["candidate_ids"][chosen]) != int(case["decision"]["candidate_id"])
             or int(packet["local_indices"][chosen]) != int(case["decision"]["candidate_local"])):
@@ -432,7 +428,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("stage", choices=("plan", "pilot", "all", "report"))
     parser.add_argument("--geometry", type=Path, default=base / "corridor_geometry_v2")
-    parser.add_argument("--out", type=Path, default=base / "corridor_projection_v1")
+    parser.add_argument("--out", type=Path, default=base / "corridor_projection_v2")
     args = parser.parse_args()
     root, out = args.geometry.resolve(), args.out.resolve()
     if root == out or root in out.parents or out in root.parents:

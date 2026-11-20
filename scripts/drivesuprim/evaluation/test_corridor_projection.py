@@ -204,8 +204,22 @@ class ProjectionTests(unittest.TestCase):
             examples[0], vocab, (40, .1), backend)
         observation = projection.current_observation(frame())
         observation["ego_translation"][0] += 1
-        with self.assertRaisesRegex(ValueError, "camera ego and geometry packet origin disagree"):
+        with self.assertRaisesRegex(ValueError, r"origins disagree: xy=1 m, yaw=0 rad"):
             audit.audit_case(dict(observation=observation), packet, (2048, 512))
+
+    def test_rollout_alignment_uses_navsim_yaw_with_pitch_and_roll(self):
+        roll, pitch, yaw = .08, -.06, .9
+        cr, cp, cy = np.cos([roll, pitch, yaw])
+        sr, sp, sy = np.sin([roll, pitch, yaw])
+        rx = np.array([[1, 0, 0], [0, cr, -sr], [0, sr, cr]])
+        ry = np.array([[cp, 0, sp], [0, 1, 0], [-sp, 0, cp]])
+        rz = np.array([[cy, -sy, 0], [sy, cy, 0], [0, 0, 1]])
+        observation = dict(ego_rotation=rx @ ry @ rz, ego_translation=[4., -5., 0.])
+        errors = projection.require_rollout_alignment([4., -5., yaw], observation)
+        self.assertLess(errors["yaw_error_rad"], 1e-12)
+        self.assertGreater(errors["old_axis_heading_error_rad"], 1e-5)
+        with self.assertRaisesRegex(ValueError, "yaw=0.01 rad"):
+            projection.require_rollout_alignment([4., -5., yaw+.01], observation)
 
     def test_separate_cli_stages_resume_preserve_parent_and_image_tampering_fails(self):
         with tempfile.TemporaryDirectory(dir=str(Path.cwd())) as tmp, redirect_stdout(io.StringIO()):

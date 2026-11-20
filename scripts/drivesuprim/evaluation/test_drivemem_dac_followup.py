@@ -13,6 +13,16 @@ from test_corridor_projection import fixture
 
 
 class DacTests(unittest.TestCase):
+    def test_first_late_and_body_mask_are_reported_separately(self):
+        times = np.arange(5, dtype=float)
+        inside = np.ones((5, 4), dtype=bool)
+        inside[1, 0] = inside[3, 2] = False
+        crop, body = np.ones_like(inside), np.zeros_like(inside)
+        body[1, 0] = True
+        values = dac.full_exit_visibility(times, inside, dict(in_fov=crop, current_body_mask=body))
+        self.assertEqual(values, dict(first_exit_in_fov=False, any_exit_in_fov=True,
+                                      late_exit_in_fov=True, first_projectable_exit_s=3.))
+
     def test_unknown_replacement_corner_rejects_candidate(self):
         packet = dict(baseline_position=0, selection_scores=np.array([3., 2., 1.]))
         inside = np.ones((3, 11, 4), dtype=bool)
@@ -33,6 +43,8 @@ class DacTests(unittest.TestCase):
             self.assertEqual(report["scenes"], 3)
             self.assertEqual(report["failure_times"]["in_window"], 3)
             self.assertEqual(report["map_reference"]["safety_harm"], 3)
+            self.assertEqual(report["full_horizon_projection"]["available_failures"], 3)
+            self.assertTrue((out/"preview_full/t0.png").is_file())
             points = dac.io.load_npz(out/"window_points.npz")
             np.testing.assert_allclose(points["times_s"], np.arange(10, 21)*.1)
             self.assertEqual(points["inside_road"].shape, (3, 16, 11, 4))

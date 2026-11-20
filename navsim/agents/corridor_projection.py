@@ -67,6 +67,35 @@ def current_observation(frame):
     return result
 
 
+def rollout_alignment(origin, observation):
+    """Compare with NAVSIM's planar Rx(roll) Ry(pitch) Rz(yaw) convention."""
+    r = rotation(observation["ego_rotation"])
+    # NAVSIM Scene._build_ego_status uses Quaternion.yaw_pitch_roll[0].
+    # This yaw is derived from the first row, while the camera projection
+    # itself must still use the complete 3D rotation.
+    yaw = np.arctan2(-r[0, 1], r[0, 0])
+    axis_heading = np.arctan2(r[1, 0], r[0, 0])
+    xy = np.asarray(observation["ego_translation"], dtype=float)[:2]
+    delta = np.asarray(origin, dtype=float)
+    dpos = delta[:2] - xy
+    dyaw = delta[2] - yaw
+    daxis = delta[2] - axis_heading
+    return dict(xy_error_m=float(np.linalg.norm(dpos)),
+                yaw_error_rad=float(abs(np.arctan2(np.sin(dyaw), np.cos(dyaw)))),
+                old_axis_heading_error_rad=float(abs(np.arctan2(np.sin(daxis), np.cos(daxis)))),
+                xy_matches=bool(np.allclose(delta[:2], xy, atol=1e-5, rtol=0)))
+
+
+def require_rollout_alignment(origin, observation):
+    errors = rollout_alignment(origin, observation)
+    if not errors["xy_matches"] or errors["yaw_error_rad"] > 1e-5:
+        raise ValueError(
+            "Current camera and rollout origins disagree: "
+            f"xy={errors['xy_error_m']:.9g} m, yaw={errors['yaw_error_rad']:.9g} rad"
+        )
+    return errors
+
+
 def ground_ego_points(world_xy, observation):
     """Lift XY onto the current ego z=0 plane, preserving world X/Y.
 

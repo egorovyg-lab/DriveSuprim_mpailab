@@ -16,7 +16,7 @@ case "$stage" in
   plan|pilot|all|report)
     "${PYTHON:-python}" -u navsim/planning/script/run_corridor_projection.py "$stage" \
       --geometry "${CORRIDOR_GEOMETRY_ROOT:-${NAVSIM_EXP_ROOT}/drivemem_memory/experiments/corridor_geometry_v2}" \
-      --out "${CORRIDOR_PROJECTION_ROOT:-${NAVSIM_EXP_ROOT}/drivemem_memory/experiments/corridor_projection_v1}" "$@"
+      --out "${CORRIDOR_PROJECTION_ROOT:-${NAVSIM_EXP_ROOT}/drivemem_memory/experiments/corridor_projection_v2}" "$@"
     ;;
   *) echo "Usage: $0 check|plan|pilot|all|report [Python options]" >&2; exit 2 ;;
 esac

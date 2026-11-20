@@ -85,18 +85,17 @@ def geometry_and_projection(packet, camera_data, size):
     xy = geometry.corners(poses, dimensions)
     polygons = geometry.decode_polygons(packet["polygon_bytes"], packet["polygon_offsets"])
     inside = projection.road_membership(xy, polygons)
-    points = xy[:, window]
     origin = poses[int(packet["baseline_position"]), 0]
+    return times, window, inside, project_points(xy[:, window], inside[:, window], origin, dimensions, camera_data, size)
+
+
+def project_points(points, inside, origin, dimensions, camera_data, size):
     body = projection.current_body_mask(points, origin, dimensions)
-    result = dict(world_xy=points, inside_road=inside[:, window], current_body_mask=body,
+    result = dict(world_xy=points, inside_road=inside, current_body_mask=body,
                   in_fov=np.zeros(body.shape, dtype=bool))
     if camera_data is not None:
         observation = camera_data["observation"]
-        rotation = projection.rotation(observation["ego_rotation"])
-        yaw = np.arctan2(rotation[1, 0], rotation[0, 0])
-        if (not np.allclose(origin[:2], observation["ego_translation"][:2], atol=1e-5, rtol=0)
-                or abs(np.arctan2(np.sin(origin[2]-yaw), np.cos(origin[2]-yaw))) > 1e-5):
-            raise ValueError("Current camera and rollout origins disagree")
+        projection.require_rollout_alignment(origin, observation)
         xyz = projection.ground_ego_points(points, observation)
         sizes = {name: info["size"] for name, info in camera_data["images"].items()}
         views = projection.panorama_projection(xyz, observation["cameras"], sizes, size)
@@ -104,7 +103,7 @@ def geometry_and_projection(packet, camera_data, size):
             result["in_fov"] |= view["in_crop"]
             result["in_crop_" + name] = view["in_crop"]
             result["panorama_" + name] = view["panorama"]
-    return times, window, inside, result
+    return result
 
 
 def choose(packet, inside, projectable):
@@ -118,7 +117,8 @@ def choose(packet, inside, projectable):
     return (baseline if clear[baseline] else first, covered if witness else baseline, eligible, witness)
 
 
-def render_case(out, token, camera_data, projection_data, baseline, replacement, size):
+def render_case(out, token, camera_data, projection_data, baseline, replacement, size,
+                directory="preview", kind="1-2 s"):
     positions = [baseline] if baseline == replacement else [baseline, replacement]
     values = {key: value[positions] for key, value in projection_data.items()}
     actions = []
@@ -128,9 +128,20 @@ def render_case(out, token, camera_data, projection_data, baseline, replacement,
                             first_failure_step=int(bad_steps[0]) if len(bad_steps) else -1))
     for info in camera_data["images"].values():
         info["sha256"] = io.sha(info["path"])
-    relative = f"preview/{token}.png"
-    camera.render(dict(token=token, kind="1-2 s", **camera_data), values, actions, size, out / relative)
+    relative = f"{directory}/{token}.png"
+    camera.render(dict(token=token, kind=kind, **camera_data), values, actions, size, out / relative)
     return relative
+
+
+def full_exit_visibility(times, inside, data):
+    outside = ~inside
+    exit_steps = np.flatnonzero(outside.any(axis=-1))
+    projected = outside & data["in_fov"] & ~data["current_body_mask"]
+    projected_steps = np.flatnonzero(projected.any(axis=-1))
+    return dict(first_exit_in_fov=bool(projected[exit_steps[0]].any()) if len(exit_steps) else False,
+                any_exit_in_fov=bool(len(projected_steps)),
+                late_exit_in_fov=bool(projected[times > WINDOW[1]+1e-8].any()),
+                first_projectable_exit_s=float(times[projected_steps[0]]) if len(projected_steps) else None)
 
 
 def scene_row(token, session, packet, times, window, inside, data, labels, issue):
@@ -194,11 +205,12 @@ def run(root, out):
     index = io.read(root / "packet_index.json")
     if set(index) != set(metadata) or set(by_token) != set(metadata):
         raise ValueError("Incomplete frozen cohort")
-    snapshot = dict(protocol="drivemem_dac_window_1_2_v1", geometry=str(root), window=list(WINDOW),
+    snapshot = dict(protocol="drivemem_dac_window_1_2_v2", geometry=str(root), window=list(WINDOW),
                     geometry_report_sha256=io.sha(root/"report.json"), metadata_bindings=bindings,
                     camera_inputs_digest=io.model.digest(dict(records=records, blocked=blocked, output_size=size)),
                     code_sha256={str(p): io.sha(p) for p in map(Path, (__file__, projection.__file__, camera.__file__))})
     controls = {c["token"] for c in camera.select_cases(metadata, decisions) if c["kind"] == "matched_control"}
+    reference_ids = {decision["token"]: decision["candidate_id"] for decision in decisions}
     with io.locked(out):
         if not (out/"identity.json").exists() and any(p.name != ".run.lock" for p in out.iterdir()):
             raise ValueError("Nonempty output without audit identity")
@@ -211,6 +223,7 @@ def run(root, out):
                     raise ValueError("Reviewed camera image changed: " + path)
             return io.read(out/"summary.json")
         rows, points, review_rows, artifacts, preview_inputs = [], defaultdict(list), [], {}, {}
+        full_failure_rows = []
         saved_times = None
         for token in sorted(metadata):
             path = root/"packets"/(token+".npz")
@@ -223,6 +236,9 @@ def run(root, out):
             if int(example["sample"]["selected_local"]) != int(local[int(packet["baseline_position"])]):
                 raise ValueError(f"Frozen baseline differs: {token}")
             camera_data = records.get(token)
+            baseline = int(packet["baseline_position"])
+            origin = packet["rollout_poses"][baseline, 0]
+            alignment = projection.rollout_alignment(origin, camera_data["observation"]) if camera_data else {}
             try:
                 times, window, inside, data = geometry_and_projection(packet, camera_data, size)
             except ValueError as exc:
@@ -239,13 +255,32 @@ def run(root, out):
             if not np.array_equal(inside.all(axis=(1, 2)), labels[:, DAC_COLUMN] == 1):
                 raise ValueError(f"Full DAC parity failed: {token}")
             row, choice = scene_row(token, metadata[token]["session_id"], packet, times, window, inside, data, labels, blocked.get(token, ""))
+            row.update(alignment)
             rows.append(row)
             points["candidate_ids"].append(ids)
             points["inside_road"].append(data["inside_road"])
             points["in_fov"].append(data["in_fov"])
             points["under_current_body"].append(data["current_body_mask"])
+            if row["full_dac_failure"]:
+                visibility = dict(token=token, first_failure_s=row["first_failure_s"], camera_issue=row["camera_issue"],
+                                  camera_available=camera_data is not None, **alignment)
+                if camera_data:
+                    match = np.flatnonzero(ids == reference_ids[token])
+                    if len(match) != 1:
+                        raise ValueError(f"Full-horizon geometry decision does not match candidates: {token}")
+                    poses = packet["rollout_poses"][[baseline, int(match[0])]]
+                    dimensions = packet["vehicle_dimensions"]
+                    full_data = project_points(geometry.corners(poses, dimensions), inside[[baseline, int(match[0])]],
+                                               origin, dimensions, camera_data, size)
+                    visibility.update(full_exit_visibility(times, inside[baseline],
+                                      {key: value[0] for key, value in full_data.items()}))
+                    filename = render_case(out, token, camera_data, full_data, 0, int(match[0] != baseline), size,
+                                           directory="preview_full", kind="Full rollout")
+                    artifacts[filename] = io.sha(out/filename)
+                    visibility["preview"] = filename
+                full_failure_rows.append(visibility)
             if camera_data and (row["full_dac_failure"] or token in controls):
-                filename = render_case(out, token, camera_data, data, int(packet["baseline_position"]), choice, size)
+                filename = render_case(out, token, camera_data, data, baseline, choice, size)
                 artifacts[filename] = io.sha(out/filename)
                 preview_inputs.update({v["path"]: v["sha256"] for v in camera_data["images"].values()})
                 if row["fov_replaced"]:
@@ -262,6 +297,13 @@ def run(root, out):
         reference = summarize(frame, "fov")
         report = dict(status="complete", scenes=len(frame), sessions=int(frame.session_id.nunique()), window_s=list(WINDOW),
                       full_baseline_DAC_failures=int(frame.full_dac_failure.sum()),
+                      full_horizon_projection=dict(
+                          available_failures=sum(r["camera_available"] for r in full_failure_rows),
+                          blocked_failures=sum(not r["camera_available"] for r in full_failure_rows),
+                          first_exit_in_fov=sum(r.get("first_exit_in_fov", False) for r in full_failure_rows),
+                          any_exit_in_fov=sum(r.get("any_exit_in_fov", False) for r in full_failure_rows),
+                          late_exit_in_fov=sum(r.get("late_exit_in_fov", False) for r in full_failure_rows),
+                          per_failure=full_failure_rows),
                       failure_times={key: int(frame[key].sum()) for key in ("before_window", "in_window", "after_window")},
                       baseline_projectable_exit=int(frame.baseline_projectable_exit.sum()), blocked_camera_scenes=blocked,
                       projectable_points=int((np.stack(points["in_fov"]) & ~np.stack(points["under_current_body"])).sum()),
@@ -311,7 +353,7 @@ def main():
     base = Path(os.environ.get("NAVSIM_EXP_ROOT", "/workspace/exp_v2")) / "drivemem_memory/experiments"
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--geometry", type=Path, default=base/"corridor_geometry_v2")
-    parser.add_argument("--out", type=Path, default=base/"drivemem_dac_window_v1")
+    parser.add_argument("--out", type=Path, default=base/"drivemem_dac_window_v2")
     parser.add_argument("--review", type=Path)
     args = parser.parse_args()
     result = review(args.out, args.review) if args.review else run(args.geometry, args.out)
