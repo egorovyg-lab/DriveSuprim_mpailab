@@ -112,7 +112,9 @@ class SlurmTests(unittest.TestCase):
         self.addCleanup(shell.doCleanups)
         shell.script = Path(pw.__file__).with_name('run_pointwise.sh').resolve()
         shell.env['DREX_POINTWISE_NAME'] = 'pointwise_fixture'
-        shell.stub('sbatch', 'printf "%s\\n" "$@" > "$DREX_TEST_LOG"\n')
+        shell.stub('sbatch', 'printf "%s\\n" "$@" > "$DREX_TEST_LOG"\n'
+                             'while [[ "$1" == --* ]]; do shift; done\n'
+                             '[[ -f "$1" && "$2" == --inside ]]\n')
         for replicas in ('1', '2', '4', '8'):
             with self.subTest(replicas=replicas):
                 result = shell.run_stage('submit-night', replicas)
@@ -121,9 +123,13 @@ class SlurmTests(unittest.TestCase):
                 self.assertIn('--nodes=1', args)
                 self.assertIn(f'--gres=gpu:{replicas}', args)
                 self.assertFalse(any(arg.startswith('--nodelist=') for arg in args))
+                self.assertEqual(args[-6:], ['--inside', 'coordinator-night',
+                    shell.posix(shell.script.parents[2]), shell.posix(shell.envroot), replicas, 'pointwise_fixture'])
 
         shell.fake_setup()
-        shell.stub('srun', 'printf "%s\\n" "srun $*" >> "$DREX_TEST_CALLS"\n')
+        shell.stub('srun', 'printf "%s\\n" "srun $*" >> "$DREX_TEST_CALLS"\n'
+                           'while [[ "$1" == --* ]]; do shift; done\n'
+                           '[[ "$1" == bash && -f "$2" && "$3" == --inside ]]\n')
         result = shell.run_stage('--inside', 'coordinator-night', shell.posix(shell.script.parents[2]),
                                  shell.posix(shell.envroot), '4', 'pointwise_fixture')
         self.assertEqual(result.returncode, 0, result.stderr)

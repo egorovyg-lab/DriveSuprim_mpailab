@@ -35,7 +35,13 @@ case "$action" in
     fi
     root=$(cd "$root" && pwd)
     (cd "$root" && mkdir -p logs)
-    exec sbatch --partition="${DREX_PARTITION:-batch}" --nodes=1 "${DREX_NODE_ARGS[@]}" +      --ntasks="$replicas" --cpus-per-task=4 --mem="$((96*replicas))G" --gres="gpu:$replicas" +      --time="$limit" --export=ALL --chdir="$repo" --job-name="drex-pointwise-$phase" +      --output="$root/logs/pointwise-$phase-%j.log" +      "$launcher" --inside "coordinator-$phase" "$repo" "$root" "$replicas" "$name" ;;
+    submit_options=(
+      --partition="${DREX_PARTITION:-batch}" --nodes=1 "${DREX_NODE_ARGS[@]}"
+      --ntasks="$replicas" --cpus-per-task=4 --mem="$((96*replicas))G" --gres="gpu:$replicas"
+      --time="$limit" --export=ALL --chdir="$repo" --job-name="drex-pointwise-$phase"
+      --output="$root/logs/pointwise-$phase-%j.log"
+    )
+    exec sbatch "${submit_options[@]}" "$launcher" --inside "coordinator-$phase" "$repo" "$root" "$replicas" "$name" ;;
 esac
 [[ -n ${SLURM_JOB_ID:-} ]] || exit 2
 upstream="$root/upstream"
@@ -57,7 +63,11 @@ case "$action" in
     if [[ "$action" == coordinator-night ]]; then phases=(pilot full); fi
     for phase in "${phases[@]}"; do
       export DREX_GROUP_STEP_TOKEN="$(date -u +%s%N)-${BASHPID}"
-      srun --nodes=1 --ntasks="$replicas" --cpus-per-task=4 --gres="gpu:$replicas" --gpus-per-task=1 +        --gpu-bind=single:1 --kill-on-bad-exit=1 --output="$root/logs/pointwise-worker-$phase-%j-%t.log" +        bash "$launcher" --inside "worker-$phase" "$repo" "$root" "$replicas" "$name"
+      step_options=(
+        --nodes=1 --ntasks="$replicas" --cpus-per-task=4 --gres="gpu:$replicas" --gpus-per-task=1
+        --gpu-bind=single:1 --kill-on-bad-exit=1 --output="$root/logs/pointwise-worker-$phase-%j-%t.log"
+      )
+      srun "${step_options[@]}" bash "$launcher" --inside "worker-$phase" "$repo" "$root" "$replicas" "$name"
       "$python" -u "$module" collect "${args[@]}" --phase "$phase"
     done ;;
   worker-pilot|worker-full)
