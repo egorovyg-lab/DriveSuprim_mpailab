@@ -5,9 +5,9 @@ from tempfile import TemporaryDirectory
 from threading import Event, get_ident
 from unittest.mock import Mock, patch
 
-from .__main__ import main, run_episode
+from .__main__ import SUITES, main, run_episode
 from .camera import FRAME_SIZE
-from .driver import DrexMax, OBSERVATIONS, driving_request, reference
+from .driver import DrexMax, driving_request, reference
 from .simulation import Action, SCENARIOS, Scenario, Vehicle, World
 
 
@@ -105,7 +105,7 @@ class DriveTests(unittest.TestCase):
             if event["event"] == "step" and event["tick"] == 13:
                 release_slow_reply.set()
 
-        report = run_episode(World(Scenario(100.0)), choose, record, 19, realtime=True)
+        report = run_episode(World(Scenario(100.0)), choose, record, 19, realtime=True, observation="camera-pair")
         slow_reply = next(event for event in trace if event["event"] == "decision" and event["request_tick"] == 5)
         self.assertEqual(slow_reply["status"], "late")
         self.assertEqual(report["decision_deadline_misses"], 1)
@@ -118,6 +118,11 @@ class DriveTests(unittest.TestCase):
                           and event["tick"] == slow_reply["tick"] + 1)
         self.assertEqual(after_late["action"], "stop")
         self.assertEqual(after_late["source"], "fallback")
+        self.assertEqual([len(row["images"]) for row in requests], [1, 2, 2])
+        self.assertIs(requests[0]["images"][0], requests[1]["images"][0])
+        self.assertIsNot(requests[1]["images"][1], requests[2]["images"][0])
+        self.assertEqual(report["paired_requests"], 2)
+        self.assertEqual(report["paired_decisions_applied"], 1)
 
     def test_realtime_warmup_uses_the_inference_thread_and_discards_action(self):
         calls = []
@@ -169,27 +174,34 @@ class DriveTests(unittest.TestCase):
         self.assertIn((35, 246, 92), [color for _, color in green.getcolors()])
 
     def test_suite_loads_model_once_and_records_all_episodes_and_frames(self):
-        with TemporaryDirectory() as tmp:
-            output = Path(tmp) / "suite"
-            args = ["drex_drive", "--suite", "--max-seconds", "1", "--model", tmp, "--out", str(output)]
-            with patch("sys.argv", args), patch("builtins.print"):
-                with patch("scripts.drex_drive.__main__.DrexMax", return_value=lambda _: (Action.WAIT, None)) as model:
-                    self.assertEqual(main(), 1)
-                    model.assert_called_once()
-            suite = json.loads((output / "suite.json").read_text(encoding="utf-8"))
-            self.assertEqual([(case["scenario"], case["observation"]) for case in suite["cases"]],
-                             [(scenario, condition) for scenario in SCENARIOS for condition in OBSERVATIONS])
-            for case in suite["cases"]:
-                case_path = (output / case["report"]).parent
-                trace = (case_path / "trace.jsonl").read_text(encoding="utf-8").splitlines()
-                image_paths = json.loads(trace[0])["request"].get("images", [])
-                self.assertEqual(len(image_paths), int(case["observation"] != "state"))
-                for image_path in image_paths:
-                    self.assertTrue((case_path / image_path).is_file())
+        for suite_name, (scenarios, conditions) in SUITES.items():
+            with self.subTest(suite=suite_name), TemporaryDirectory() as tmp:
+                output = Path(tmp) / "suite"
+                args = ["drex_drive", "--suite", suite_name, "--max-seconds", "1", "--model", tmp, "--out", str(output)]
+                with patch("sys.argv", args), patch("builtins.print"):
+                    with patch("scripts.drex_drive.__main__.DrexMax", return_value=lambda _: (Action.WAIT, None)) as model:
+                        self.assertEqual(main(), 1)
+                        model.assert_called_once()
+                suite = json.loads((output / "suite.json").read_text(encoding="utf-8"))
+                self.assertEqual([(case["scenario"], case["observation"]) for case in suite["cases"]],
+                                 [(scenario, condition) for scenario in scenarios for condition in conditions])
+                for case in suite["cases"]:
+                    case_path = (output / case["report"]).parent
+                    trace = (case_path / "trace.jsonl").read_text(encoding="utf-8").splitlines()
+                    requests = [event for event in map(json.loads, trace) if "request" in event]
+                    first_frame = requests[0]["request"].get("images", [])
+                    self.assertEqual(len(first_frame), int(case["observation"] != "state"))
+                    for image_path in first_frame:
+                        self.assertTrue((case_path / image_path).is_file())
+                    if case["observation"] == "camera-pair":
+                        older_frame, current_frame = requests[1]["request"]["images"]
+                        self.assertEqual(requests[1]["frame_ticks"], [0, 5])
+                        self.assertEqual(older_frame, first_frame[0])
+                        self.assertTrue((case_path / current_frame).is_file())
 
     def test_drex_camera_request_checks_native_pixel_inputs(self):
         driver = DrexMax.__new__(DrexMax)
-        driver.vision_verified = False
+        driver.verified_frame_counts = set()
         driver.model = Mock()
         prepared = driver.model.prepare.return_value
         prepared.inputs = {}
@@ -197,11 +209,16 @@ class DriveTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "camera pixel inputs"):
             driver(row)
         driver.model.predict.assert_not_called()
-        prepared.inputs = {"pixel_values": object()}
+        prepared.inputs = {"pixel_values": object(), "image_grid_thw": [[1, 32, 20]]}
         driver.model.predict.return_value = [[1.0, 0.0, 0.0, 0.0, 0.0]]
         self.assertEqual(driver(row)[0], Action.PROCEED)
         self.assertEqual(driver(row)[0], Action.PROCEED)
         self.assertEqual(driver.model.prepare.call_count, 2)
+        pair = {**row, "images": row["images"] * 2}
+        with self.assertRaisesRegex(RuntimeError, "2 frames"):
+            driver(pair)
+        prepared.inputs["image_grid_thw"] *= 2
+        self.assertEqual(driver(pair)[0], Action.PROCEED)
 
 
 if __name__ == "__main__":

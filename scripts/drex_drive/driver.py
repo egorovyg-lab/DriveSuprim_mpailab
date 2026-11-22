@@ -14,7 +14,7 @@ CRITERIA = {
     Action.STOP.value: "Brake at 3 m/s² down to a full stop.",
     Action.WAIT.value: "Remain stopped until you can proceed.",
 }
-OBSERVATIONS = ("state", "state-camera", "camera")
+OBSERVATIONS = ("state", "state-camera", "camera", "camera-pair")
 
 
 def request_for(state: dict) -> dict:
@@ -33,17 +33,25 @@ def request_for(state: dict) -> dict:
     }
 
 
-def driving_request(world: World, previous: Action, previous_speed: float | None, observation: str) -> dict:
+def driving_request(world: World, previous: Action, previous_speed: float | None, observation: str,
+                    images: list | None = None) -> dict:
     state = world.observe(previous, previous_speed)
-    if observation == "camera":
+    if observation in ("camera", "camera-pair"):
         del state["traffic_light"], state["lead_vehicle"]
     row = request_for(state)
     if observation != "state":
-        row["images"] = [render(world)]
-        row["question"]["instructions"] += (
-            " The image is the current forward view. Look for the traffic signal, its white stop "
-            "line and the lead vehicle in that view."
-        )
+        row["images"] = images if images is not None else [render(world)]
+        if len(row["images"]) == 2:
+            row["question"]["instructions"] += (
+                f" Image 1 is the forward view {DECISION_PERIOD_S:g} seconds earlier. Image 2 is the current "
+                "forward view. Compare the lead vehicle's apparent size and brake lights to judge whether "
+                "the gap is closing. Read the current traffic signal and its white stop line from image 2."
+            )
+        else:
+            row["question"]["instructions"] += (
+                " The image is the current forward view. Look for the traffic signal, its white stop "
+                "line and the lead vehicle in that view."
+            )
     return row
 
 
@@ -55,13 +63,17 @@ class DrexMax:
         self.model = DecisionModel(weights, device="cuda:0")
         if self.model.readout.weight.dtype != torch.bfloat16:
             raise RuntimeError("Expected the BF16 Drex Max readout")
-        self.vision_verified = False
+        self.verified_frame_counts: set[int] = set()
 
     def __call__(self, request: dict) -> tuple[Action, dict[str, float]]:
-        if request.get("images") and not self.vision_verified:
-            if "pixel_values" not in self.model.prepare([request], max_length=2048).inputs:
-                raise RuntimeError("Drex Max preprocessing did not produce camera pixel inputs")
-            self.vision_verified = True
+        frame_count = len(request.get("images", ()))
+        if frame_count and frame_count not in self.verified_frame_counts:
+            inputs = self.model.prepare([request], max_length=2048).inputs
+            boxes = inputs.get("image_grid_thw")
+            if "pixel_values" not in inputs or boxes is None or len(boxes) != frame_count:
+                raise RuntimeError(f"Drex Max preprocessing did not produce camera pixel inputs for {frame_count} frames")
+            self.verified_frame_counts.add(frame_count)
+            del inputs, boxes
         raw = self.model.predict([request], batch_size=1, max_length=2048)[0]
         values = [float(value) for value in raw]
         keys = request["question"]["criteria"]

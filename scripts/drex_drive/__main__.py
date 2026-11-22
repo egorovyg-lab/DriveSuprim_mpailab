@@ -8,10 +8,16 @@ from math import ceil
 from pathlib import Path
 from time import perf_counter, sleep
 
-from .camera import FRAME_SIZE
+from .camera import FRAME_SIZE, CameraHistory, render
 from .driver import DrexMax, OBSERVATIONS, driving_request, reference
 from .realtime import LiveDriver, ask
-from .simulation import Action, DECISION_PERIOD_S, DECISION_STEPS, SCENARIOS, STEP_S, World
+from .simulation import Action, BRAKING_SCENARIOS, DECISION_PERIOD_S, DECISION_STEPS, SCENARIOS, STEP_S, World
+
+
+SUITES = {
+    "observations": (("route", "red_light", "lead_brakes"), ("state", "state-camera", "camera")),
+    "braking": (tuple(BRAKING_SCENARIOS), ("camera", "camera-pair", "state-camera")),
+}
 
 
 class WarmupFailed(RuntimeError):
@@ -46,9 +52,17 @@ def run_episode(
 
 def _warmup(world: World, decide, observation: str) -> float:
     start = perf_counter()
-    reply = ask(decide, driving_request(world, Action.WAIT, None, observation))
-    if reply.error is not None:
-        raise WarmupFailed(reply.error)
+    frames = None
+    if observation == "camera-pair":
+        frame = render(world)
+        frames = [frame, frame.copy()]
+    rows = [driving_request(world, Action.WAIT, None, observation)]
+    if frames is not None:
+        rows.append(driving_request(world, Action.WAIT, None, observation, frames))
+    for row in rows:
+        reply = ask(decide, row)
+        if reply.error is not None:
+            raise WarmupFailed(reply.error)
     return perf_counter() - start
 
 
@@ -86,6 +100,11 @@ def _drive(world: World, decide, record, max_ticks: int, live: LiveDriver | None
     peak_jerk = 0.0
     outcome = "time_limit"
     started = perf_counter()
+    history = CameraHistory() if live is None and observation == "camera-pair" else None
+    brake_window = world.scenario.lead_brake_window_s
+    brake_gap = None
+    brake_emergency_ticks = 0
+    first_driver_brake_s = None
 
     for tick in range(max_ticks):
         last_source = source
@@ -97,7 +116,8 @@ def _drive(world: World, decide, record, max_ticks: int, live: LiveDriver | None
             tick_lag_s.append(max(0.0, perf_counter() - scheduled_s))
             action, source = live.step(world)
         elif tick % DECISION_STEPS == 0:
-            row = driving_request(world, action, previous_speed, observation)
+            frames = history.capture(world) if history is not None else None
+            row = driving_request(world, action, previous_speed, observation, frames)
             previous_speed = world.ego.speed_mps
             start = perf_counter()
             reply = ask(decide, row)
@@ -111,6 +131,7 @@ def _drive(world: World, decide, record, max_ticks: int, live: LiveDriver | None
                 "probabilities": reply.probabilities, "error": reply.error, "wall_seconds": timing_s[-1],
             })
 
+        step_start_s = world.time_s
         emergency, acceleration = world.step(action)
         emergency_ticks += int(emergency)
         fallback_ticks += int(source == "fallback" and not emergency)
@@ -127,6 +148,12 @@ def _drive(world: World, decide, record, max_ticks: int, live: LiveDriver | None
         gap = world.gap_m
         if gap is not None:
             min_gap = gap if min_gap is None else min(min_gap, gap)
+        if brake_window is not None and brake_window[0] <= step_start_s < brake_window[1]:
+            brake_emergency_ticks += int(emergency)
+            if gap is not None:
+                brake_gap = gap if brake_gap is None else min(brake_gap, gap)
+            if first_driver_brake_s is None and source == "driver" and not emergency and acceleration < -1e-6:
+                first_driver_brake_s = round(step_start_s - brake_window[0], 9)
         peak_jerk = max(peak_jerk, abs(acceleration - previous_acceleration) / STEP_S)
         previous_acceleration = acceleration
         ended = world.outcome()
@@ -180,6 +207,11 @@ def _drive(world: World, decide, record, max_ticks: int, live: LiveDriver | None
         "decision_count": len(timing_s),
         "decision_errors": fault_count,
         "minimum_lead_gap_m": None if min_gap is None else round(min_gap, 3),
+        "lead_braking_phase": None if brake_window is None else {
+            "minimum_gap_m": None if brake_gap is None else round(brake_gap, 3),
+            "emergency_brake_ticks": brake_emergency_ticks,
+            "first_driver_brake_offset_s": first_driver_brake_s,
+        },
         "peak_abs_jerk_mps3": round(peak_jerk, 3),
         "decision_first_wall_s": timing_s[0] if timing_s else None,
         "decision_p95_wall_s": percentile(timing_s, 0.95),
@@ -202,17 +234,25 @@ def run_case(out: Path, scenario: str, observation: str, choose, args, max_ticks
     frames = out / "frames"
     if observation != "state":
         frames.mkdir()
+    world = World(SCENARIOS[scenario])
+    initial_gap = world.gap_m
     with (out / "trace.jsonl").open("x", encoding="utf-8", buffering=1) as trace:
         def record(event: dict) -> None:
             row = event.get("request")
             if row is not None and "images" in row:
-                relative = Path("frames") / f"{event['tick']:04d}.png"
-                row["images"][0].copy().save(out / relative, compress_level=1)
-                event = {**event, "request": {**row, "images": [relative.as_posix()]}}
+                tick = event["tick"]
+                frame_ticks = [tick - DECISION_STEPS, tick] if len(row["images"]) == 2 else [tick]
+                paths = []
+                for frame_tick, frame in zip(frame_ticks, row["images"], strict=True):
+                    relative = Path("frames") / f"{frame_tick:04d}.png"
+                    if not (out / relative).exists():
+                        frame.copy().save(out / relative, compress_level=1)
+                    paths.append(relative.as_posix())
+                event = {**event, "frame_ticks": frame_ticks, "request": {**row, "images": paths}}
             trace.write(json.dumps(event, ensure_ascii=False, allow_nan=False) + "\n")
 
         try:
-            result = run_episode(World(SCENARIOS[scenario]), choose, record, max_ticks,
+            result = run_episode(world, choose, record, max_ticks,
                                  realtime=args.mode == "realtime", warmup=args.warmup,
                                  injected_timeouts=injected_timeouts, observation=observation)
         except WarmupFailed as exc:
@@ -220,6 +260,7 @@ def run_case(out: Path, scenario: str, observation: str, choose, args, max_ticks
 
     report = {"scenario": scenario, "observation": observation, "driver": args.driver, "mode": args.mode,
               "camera_size_px": FRAME_SIZE if observation != "state" else None,
+              "initial_lead_gap_m": initial_gap, "lead_brake_window_s": world.scenario.lead_brake_window_s,
               "model_path": str(model_path) if model_path is not None else None,
               "model_load_wall_s": load_seconds if model_path is not None else None, **result}
     print(write_report(out / "report.json", report), flush=True)
@@ -230,10 +271,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scenario", choices=SCENARIOS, default="route")
     parser.add_argument("--observation", choices=OBSERVATIONS, default="state")
-    parser.add_argument("--suite", action="store_true", help="Run every scenario with each observation mode")
+    parser.add_argument("--suite", nargs="?", const="observations", choices=SUITES,
+                        help="Run the original observation suite or the one-frame vs two-frame braking suite")
     parser.add_argument("--driver", choices=("drex", "reference"), default="drex")
     parser.add_argument("--mode", choices=("synchronous", "realtime"), default="synchronous")
-    parser.add_argument("--warmup", action="store_true", help="Run one discarded model call before the episode")
+    parser.add_argument("--warmup", action="store_true", help="Warm up each input shape before the episode")
     parser.add_argument("--model", type=Path, help="Path to locally prepared Drex Max v1 weights")
     parser.add_argument("--out", type=Path, required=True, help="New directory for the trace and report")
     parser.add_argument("--max-seconds", type=int, default=60, help="Limit in simulated seconds")
@@ -244,7 +286,7 @@ def main() -> int:
         parser.error("--max-seconds must be positive")
     if args.out.exists():
         parser.error("--out must point to a new directory")
-    if args.driver == "reference" and (args.observation == "camera" or args.suite):
+    if args.driver == "reference" and (args.observation in ("camera", "camera-pair") or args.suite):
         parser.error("The camera-only condition requires --driver drex")
     max_ticks = round(args.max_seconds / STEP_S)
     injected_timeouts = dict(args.inject_timeout)
@@ -265,12 +307,11 @@ def main() -> int:
         choose = DrexMax(model_path)
     load_seconds = perf_counter() - load_started
 
-    cases = [(scenario, observation) for scenario in SCENARIOS for observation in OBSERVATIONS] if args.suite else [
-        (args.scenario, args.observation),
-    ]
+    scenarios, observations = SUITES[args.suite] if args.suite else ((args.scenario,), (args.observation,))
+    cases = [(scenario, observation) for scenario in scenarios for observation in observations]
     if args.suite:
         args.out.mkdir(parents=True, exist_ok=False)
-    suite_summary = {"expected_cases": len(cases), "model_load_wall_s": load_seconds, "cases": []}
+    suite_summary = {"suite": args.suite, "expected_cases": len(cases), "model_load_wall_s": load_seconds, "cases": []}
     passed = True
     for scenario, observation in cases:
         out = args.out / f"{scenario}-{observation}" if args.suite else args.out
@@ -281,7 +322,9 @@ def main() -> int:
         if args.suite:
             summary_fields = ("scenario", "observation", "outcome", "clean_finish", "sim_time_s", "red_crossings",
                               "emergency_brake_ticks", "minimum_lead_gap_m", "fallback_ticks", "decision_applied",
-                              "decision_deadline_misses", "decision_applied_p95_wall_s", "capture_p95_wall_s", "error")
+                              "initial_lead_gap_m", "lead_brake_window_s", "lead_braking_phase", "paired_requests",
+                              "paired_decisions_applied", "decision_deadline_misses", "decision_applied_p95_wall_s",
+                              "capture_p95_wall_s", "error")
             summary = {key: report[key] for key in summary_fields if key in report}
             summary.update(passed=case_passed, report=f"{out.name}/report.json")
             suite_summary["cases"].append(summary)

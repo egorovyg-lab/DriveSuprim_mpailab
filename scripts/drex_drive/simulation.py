@@ -46,10 +46,18 @@ class Scenario:
     lead_brake_window_s: tuple[float, float] | None = None
 
 
+BRAKING_SCENARIOS = {
+    "lead_brakes": Scenario(85.0, lead_start_m=15.0, lead_brake_window_s=(2.0, 7.0)),
+    "lead_brakes_close": Scenario(85.0, lead_start_m=12.0, lead_brake_window_s=(2.0, 7.0)),
+    "lead_brakes_late": Scenario(85.0, lead_start_m=15.0, lead_brake_window_s=(4.0, 9.0)),
+    "lead_brakes_close_late": Scenario(85.0, lead_start_m=12.0, lead_brake_window_s=(4.0, 9.0)),
+}
+
+
 SCENARIOS = {
     "route": Scenario(100.0, stop_line_m=46.0, green_after_s=17.0, lead_start_m=17.0),
     "red_light": Scenario(70.0, stop_line_m=31.0, green_after_s=11.0),
-    "lead_brakes": Scenario(85.0, lead_start_m=15.0, lead_brake_window_s=(2.0, 7.0)),
+    **BRAKING_SCENARIOS,
 }
 
 

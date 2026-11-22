@@ -18,12 +18,12 @@ case "$variant" in
   warm) args=(--warmup) ;;
   cold) args=() ;;
   suite) args=(--warmup --suite) ;;
-  *) printf 'Usage: %s [warm|cold|suite] [route|red_light|lead_brakes] [OPTIONS]\n' "$0" >&2; exit 2 ;;
+  *) printf 'Usage: %s [warm|cold|suite] [SCENARIO|observations|braking] [OPTIONS]\n' "$0" >&2; exit 2 ;;
 esac
 if [[ $variant != suite ]]; then
   scenario=${1:-route}
   case "$scenario" in
-    route|red_light|lead_brakes) ;;
+    route|red_light|lead_brakes|lead_brakes_close|lead_brakes_late|lead_brakes_close_late) ;;
     *) printf 'Unknown scenario: %s\n' "$scenario" >&2; exit 2 ;;
   esac
   args+=(--scenario "$scenario")

@@ -1,6 +1,6 @@
 """Deterministic pinhole rendering of the longitudinal simulator's road."""
 
-from .simulation import World
+from .simulation import DECISION_STEPS, World
 
 
 FRAME_SIZE = (512, 320)
@@ -9,6 +9,18 @@ FOCAL_PIXELS = 340
 CAMERA_HEIGHT_M = 1.5
 CAMERA_BEHIND_FRONT_M = 1.5
 LANE_HALF_WIDTH_M = 1.8
+
+
+class CameraHistory:
+    def __init__(self) -> None:
+        self.frame = None
+        self.tick: int | None = None
+
+    def capture(self, world: World) -> list:
+        frame = render(world)
+        images = [self.frame, frame] if self.tick == world.tick - DECISION_STEPS else [frame]
+        self.frame, self.tick = frame, world.tick
+        return images
 
 
 def _project(x_m: float, height_m: float, depth_m: float) -> tuple[int, int]:

@@ -4,6 +4,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from time import perf_counter, sleep
 
+from .camera import CameraHistory
 from .driver import driving_request
 from .simulation import Action, DECISION_PERIOD_S, DECISION_STEPS, STEP_S, World
 
@@ -37,6 +38,7 @@ class Pending:
     tick: int
     submitted_s: float
     future: Future
+    frame_count: int
     expired: bool = False
 
     @property
@@ -65,7 +67,10 @@ class LiveDriver:
         self.injected_timeouts = injected_timeouts
         self.injection_status = dict.fromkeys(injected_timeouts, "not_submitted")
         self.observation = observation
+        self.history = CameraHistory() if observation == "camera-pair" else None
         self.capture_seconds: list[float] = []
+        self.paired_requests = 0
+        self.paired_decisions_applied = 0
 
     def step(self, world: World) -> tuple[Action, str]:
         pending = self.pending
@@ -90,12 +95,15 @@ class LiveDriver:
         if world.tick % DECISION_STEPS == 0:
             if self.pending is None:
                 issued = perf_counter()
-                row = driving_request(world, self.action, self.previous_speed, self.observation)
+                frames = self.history.capture(world) if self.history is not None else None
+                row = driving_request(world, self.action, self.previous_speed, self.observation, frames)
                 self.capture_seconds.append(perf_counter() - issued)
                 self.previous_speed = world.ego.speed_mps
                 extra_delay = self.injected_timeouts.get(world.tick, 0)
                 future = self.worker.submit(timed_ask, self.decide, row, extra_delay)
-                self.pending = Pending(world.tick, issued, future)
+                frame_count = len(row.get("images", ()))
+                self.pending = Pending(world.tick, issued, future, frame_count)
+                self.paired_requests += int(frame_count == 2)
                 if extra_delay:
                     self.injection_status[world.tick] = "submitted"
                 self.submitted += 1
@@ -103,6 +111,8 @@ class LiveDriver:
                              "deadline_seconds": DECISION_PERIOD_S, "extra_delay_ms": extra_delay,
                              "capture_wall_seconds": self.capture_seconds[-1], "request": row})
             else:
+                if self.history is not None:
+                    self.history.capture(world)
                 self.busy_slots += 1
                 self.record({"event": "decision_slot_busy", "tick": world.tick, "request_tick": self.pending.tick})
         return self.action, self.source
@@ -125,6 +135,7 @@ class LiveDriver:
             self.action, self.source = reply.action, "driver"
             self.valid_until_tick = tick + DECISION_STEPS
             self.applied_ages_s.append(age_s)
+            self.paired_decisions_applied += int(pending.frame_count == 2)
             status = "applied"
         self.record({"event": "decision", "status": status, "tick": tick, "request_tick": pending.tick,
                      "action": reply.action.value, "probabilities": reply.probabilities, "error": reply.error,
@@ -139,6 +150,8 @@ class LiveDriver:
                 "decision_applied": len(self.applied_ages_s), "decision_deadline_misses": self.deadline_misses,
                 "decision_slots_busy": self.busy_slots, "decision_late_replies": self.late_replies,
                 "decision_unfinished_at_end": unfinished,
+                "paired_requests": self.paired_requests,
+                "paired_decisions_applied": self.paired_decisions_applied,
                 "injected_timeouts": [
                     {"request_tick": tick, "sim_time_s": round(tick * STEP_S, 9),
                      "extra_delay_ms": self.injected_timeouts[tick], "status": status}
