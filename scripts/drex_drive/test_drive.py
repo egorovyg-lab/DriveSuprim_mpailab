@@ -1,3 +1,4 @@
+import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -5,7 +6,8 @@ from threading import Event, get_ident
 from unittest.mock import Mock, patch
 
 from .__main__ import main, run_episode
-from .driver import DrexMax, reference
+from .camera import FRAME_SIZE
+from .driver import DrexMax, OBSERVATIONS, driving_request, reference
 from .simulation import Action, SCENARIOS, Scenario, Vehicle, World
 
 
@@ -148,6 +150,58 @@ class DriveTests(unittest.TestCase):
         recovered = next(event for event in trace if event["event"] == "fallback_recovered")
         step = next(event for event in trace if event["event"] == "step" and event["tick"] == recovered["tick"] + 1)
         self.assertEqual(step["source"], "driver")
+
+    def test_camera_request_hides_structured_traffic_and_shows_signal_changes(self):
+        world = World(SCENARIOS["route"])
+        world.ego = Vehicle(37.0, 0.0)
+        state = driving_request(world, Action.WAIT, None, "state")
+        mixed = driving_request(world, Action.WAIT, None, "state-camera")
+        vision = driving_request(world, Action.WAIT, None, "camera")
+        self.assertNotIn("images", state)
+        self.assertEqual(state["state"], mixed["state"])
+        self.assertEqual(set(state["state"]) - set(vision["state"]), {"traffic_light", "lead_vehicle"})
+        red = vision["images"][0]
+        self.assertEqual(red.size, FRAME_SIZE)
+        world.tick = 170
+        green = driving_request(world, Action.WAIT, None, "camera")["images"][0]
+        self.assertNotEqual(red.tobytes(), green.tobytes())
+        self.assertIn((255, 37, 33), [color for _, color in red.getcolors()])
+        self.assertIn((35, 246, 92), [color for _, color in green.getcolors()])
+
+    def test_suite_loads_model_once_and_records_all_episodes_and_frames(self):
+        with TemporaryDirectory() as tmp:
+            output = Path(tmp) / "suite"
+            args = ["drex_drive", "--suite", "--max-seconds", "1", "--model", tmp, "--out", str(output)]
+            with patch("sys.argv", args), patch("builtins.print"):
+                with patch("scripts.drex_drive.__main__.DrexMax", return_value=lambda _: (Action.WAIT, None)) as model:
+                    self.assertEqual(main(), 1)
+                    model.assert_called_once()
+            suite = json.loads((output / "suite.json").read_text(encoding="utf-8"))
+            self.assertEqual([(case["scenario"], case["observation"]) for case in suite["cases"]],
+                             [(scenario, condition) for scenario in SCENARIOS for condition in OBSERVATIONS])
+            for case in suite["cases"]:
+                case_path = (output / case["report"]).parent
+                trace = (case_path / "trace.jsonl").read_text(encoding="utf-8").splitlines()
+                image_paths = json.loads(trace[0])["request"].get("images", [])
+                self.assertEqual(len(image_paths), int(case["observation"] != "state"))
+                for image_path in image_paths:
+                    self.assertTrue((case_path / image_path).is_file())
+
+    def test_drex_camera_request_checks_native_pixel_inputs(self):
+        driver = DrexMax.__new__(DrexMax)
+        driver.vision_verified = False
+        driver.model = Mock()
+        prepared = driver.model.prepare.return_value
+        prepared.inputs = {}
+        row = driving_request(World(SCENARIOS["route"]), Action.WAIT, None, "camera")
+        with self.assertRaisesRegex(RuntimeError, "camera pixel inputs"):
+            driver(row)
+        driver.model.predict.assert_not_called()
+        prepared.inputs = {"pixel_values": object()}
+        driver.model.predict.return_value = [[1.0, 0.0, 0.0, 0.0, 0.0]]
+        self.assertEqual(driver(row)[0], Action.PROCEED)
+        self.assertEqual(driver(row)[0], Action.PROCEED)
+        self.assertEqual(driver.model.prepare.call_count, 2)
 
 
 if __name__ == "__main__":

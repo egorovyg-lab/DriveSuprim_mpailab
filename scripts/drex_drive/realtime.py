@@ -4,7 +4,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from time import perf_counter, sleep
 
-from .driver import request_for
+from .driver import driving_request
 from .simulation import Action, DECISION_PERIOD_S, DECISION_STEPS, STEP_S, World
 
 
@@ -45,7 +45,8 @@ class Pending:
 
 
 class LiveDriver:
-    def __init__(self, decide, worker: ThreadPoolExecutor, record, injected_timeouts: dict[int, int]) -> None:
+    def __init__(self, decide, worker: ThreadPoolExecutor, record, injected_timeouts: dict[int, int],
+                 observation: str) -> None:
         self.decide = decide
         self.worker = worker
         self.record = record
@@ -63,6 +64,8 @@ class LiveDriver:
         self.late_replies = 0
         self.injected_timeouts = injected_timeouts
         self.injection_status = dict.fromkeys(injected_timeouts, "not_submitted")
+        self.observation = observation
+        self.capture_seconds: list[float] = []
 
     def step(self, world: World) -> tuple[Action, str]:
         pending = self.pending
@@ -86,9 +89,10 @@ class LiveDriver:
 
         if world.tick % DECISION_STEPS == 0:
             if self.pending is None:
-                row = request_for(world.observe(self.action, self.previous_speed))
-                self.previous_speed = world.ego.speed_mps
                 issued = perf_counter()
+                row = driving_request(world, self.action, self.previous_speed, self.observation)
+                self.capture_seconds.append(perf_counter() - issued)
+                self.previous_speed = world.ego.speed_mps
                 extra_delay = self.injected_timeouts.get(world.tick, 0)
                 future = self.worker.submit(timed_ask, self.decide, row, extra_delay)
                 self.pending = Pending(world.tick, issued, future)
@@ -96,7 +100,8 @@ class LiveDriver:
                     self.injection_status[world.tick] = "submitted"
                 self.submitted += 1
                 self.record({"event": "decision_requested", "tick": world.tick, "sim_time_s": world.time_s,
-                             "deadline_seconds": DECISION_PERIOD_S, "extra_delay_ms": extra_delay, "request": row})
+                             "deadline_seconds": DECISION_PERIOD_S, "extra_delay_ms": extra_delay,
+                             "capture_wall_seconds": self.capture_seconds[-1], "request": row})
             else:
                 self.busy_slots += 1
                 self.record({"event": "decision_slot_busy", "tick": world.tick, "request_tick": self.pending.tick})

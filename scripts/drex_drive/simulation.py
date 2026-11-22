@@ -70,6 +70,7 @@ class World:
     scenario: Scenario
     ego: Vehicle = field(default_factory=lambda: Vehicle(0.0, 0.0))
     lead: Vehicle | None = field(init=False)
+    lead_braking: bool = field(default=False, init=False)
     tick: int = 0
     red_crossings: int = 0
 
@@ -139,6 +140,7 @@ class World:
             remaining = max(0.0, line - 2.0 - self.lead.front_m)
             target = min(target, sqrt(2 * LEAD_BRAKE_MPS2 * remaining))
         acceleration = max(-LEAD_BRAKE_MPS2, min(ACCEL_MPS2, (target - self.lead.speed_mps) / STEP_S))
+        self.lead_braking = acceleration < -1e-6 or target == 0.0
         self.lead = self.lead.advance(acceleration, self.scenario.lead_speed_mps)
 
     def outcome(self) -> str | None:

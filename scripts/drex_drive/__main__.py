@@ -8,9 +8,14 @@ from math import ceil
 from pathlib import Path
 from time import perf_counter, sleep
 
-from .driver import DrexMax, reference, request_for
+from .camera import FRAME_SIZE
+from .driver import DrexMax, OBSERVATIONS, driving_request, reference
 from .realtime import LiveDriver, ask
 from .simulation import Action, DECISION_PERIOD_S, DECISION_STEPS, SCENARIOS, STEP_S, World
+
+
+class WarmupFailed(RuntimeError):
+    pass
 
 
 def run_episode(
@@ -22,27 +27,28 @@ def run_episode(
     realtime: bool = False,
     warmup: bool = False,
     injected_timeouts: dict[int, int] | None = None,
+    observation: str = "state",
 ) -> dict:
     if max_ticks <= 0:
         raise ValueError("max_ticks must be positive")
     if realtime:
         with ThreadPoolExecutor(max_workers=1) as worker:
-            warmup_seconds = worker.submit(_warmup, world, decide).result() if warmup else None
-            live = LiveDriver(decide, worker, record, injected_timeouts or {})
-            report = _drive(world, decide, record, max_ticks, live)
+            warmup_seconds = worker.submit(_warmup, world, decide, observation).result() if warmup else None
+            live = LiveDriver(decide, worker, record, injected_timeouts or {}, observation)
+            report = _drive(world, decide, record, max_ticks, live, observation)
     else:
         if injected_timeouts:
             raise ValueError("Injected timeouts require realtime mode")
-        warmup_seconds = _warmup(world, decide) if warmup else None
-        report = _drive(world, decide, record, max_ticks, None)
+        warmup_seconds = _warmup(world, decide, observation) if warmup else None
+        report = _drive(world, decide, record, max_ticks, None, observation)
     return {"warmup_wall_s": warmup_seconds, **report}
 
 
-def _warmup(world: World, decide) -> float:
+def _warmup(world: World, decide, observation: str) -> float:
     start = perf_counter()
-    reply = ask(decide, request_for(world.observe(Action.WAIT, None)))
+    reply = ask(decide, driving_request(world, Action.WAIT, None, observation))
     if reply.error is not None:
-        raise RuntimeError(f"Warmup failed: {reply.error}")
+        raise WarmupFailed(reply.error)
     return perf_counter() - start
 
 
@@ -62,7 +68,7 @@ def parse_timeout(value: str) -> tuple[int, int]:
     return at_ms // round(STEP_S * 1000), extra_ms
 
 
-def _drive(world: World, decide, record, max_ticks: int, live: LiveDriver | None) -> dict:
+def _drive(world: World, decide, record, max_ticks: int, live: LiveDriver | None, observation: str) -> dict:
     action = Action.WAIT
     previous_speed = None
     source = "driver"
@@ -91,7 +97,7 @@ def _drive(world: World, decide, record, max_ticks: int, live: LiveDriver | None
             tick_lag_s.append(max(0.0, perf_counter() - scheduled_s))
             action, source = live.step(world)
         elif tick % DECISION_STEPS == 0:
-            row = request_for(world.observe(action, previous_speed))
+            row = driving_request(world, action, previous_speed, observation)
             previous_speed = world.ego.speed_mps
             start = perf_counter()
             reply = ask(decide, row)
@@ -145,6 +151,7 @@ def _drive(world: World, decide, record, max_ticks: int, live: LiveDriver | None
         live_stats.update(
             decision_deadline_wall_s=DECISION_STEPS * STEP_S,
             decision_applied_p95_wall_s=percentile(live.applied_ages_s, 0.95),
+            capture_p95_wall_s=percentile(live.capture_seconds, 0.95),
             tick_lag_max_wall_s=max(tick_lag_s),
             tick_lag_p95_wall_s=percentile(tick_lag_s, 0.95),
         )
@@ -181,9 +188,49 @@ def _drive(world: World, decide, record, max_ticks: int, live: LiveDriver | None
     }
 
 
+def write_report(path: Path, report: dict) -> str:
+    payload = json.dumps(report, indent=2, allow_nan=False)
+    staging = path.with_suffix(".tmp")
+    staging.write_text(payload + "\n", encoding="utf-8")
+    staging.replace(path)
+    return payload
+
+
+def run_case(out: Path, scenario: str, observation: str, choose, args, max_ticks: int,
+             injected_timeouts: dict[int, int], model_path: Path | None, load_seconds: float) -> dict:
+    out.mkdir(parents=True, exist_ok=False)
+    frames = out / "frames"
+    if observation != "state":
+        frames.mkdir()
+    with (out / "trace.jsonl").open("x", encoding="utf-8", buffering=1) as trace:
+        def record(event: dict) -> None:
+            row = event.get("request")
+            if row is not None and "images" in row:
+                relative = Path("frames") / f"{event['tick']:04d}.png"
+                row["images"][0].copy().save(out / relative, compress_level=1)
+                event = {**event, "request": {**row, "images": [relative.as_posix()]}}
+            trace.write(json.dumps(event, ensure_ascii=False, allow_nan=False) + "\n")
+
+        try:
+            result = run_episode(World(SCENARIOS[scenario]), choose, record, max_ticks,
+                                 realtime=args.mode == "realtime", warmup=args.warmup,
+                                 injected_timeouts=injected_timeouts, observation=observation)
+        except WarmupFailed as exc:
+            result = {"outcome": "warmup_error", "clean_finish": False, "error": str(exc)}
+
+    report = {"scenario": scenario, "observation": observation, "driver": args.driver, "mode": args.mode,
+              "camera_size_px": FRAME_SIZE if observation != "state" else None,
+              "model_path": str(model_path) if model_path is not None else None,
+              "model_load_wall_s": load_seconds if model_path is not None else None, **result}
+    print(write_report(out / "report.json", report), flush=True)
+    return report
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scenario", choices=SCENARIOS, default="route")
+    parser.add_argument("--observation", choices=OBSERVATIONS, default="state")
+    parser.add_argument("--suite", action="store_true", help="Run every scenario with each observation mode")
     parser.add_argument("--driver", choices=("drex", "reference"), default="drex")
     parser.add_argument("--mode", choices=("synchronous", "realtime"), default="synchronous")
     parser.add_argument("--warmup", action="store_true", help="Run one discarded model call before the episode")
@@ -197,6 +244,8 @@ def main() -> int:
         parser.error("--max-seconds must be positive")
     if args.out.exists():
         parser.error("--out must point to a new directory")
+    if args.driver == "reference" and (args.observation == "camera" or args.suite):
+        parser.error("The camera-only condition requires --driver drex")
     max_ticks = round(args.max_seconds / STEP_S)
     injected_timeouts = dict(args.inject_timeout)
     if injected_timeouts and args.mode != "realtime":
@@ -216,20 +265,31 @@ def main() -> int:
         choose = DrexMax(model_path)
     load_seconds = perf_counter() - load_started
 
-    args.out.mkdir(parents=True, exist_ok=False)
-    with (args.out / "trace.jsonl").open("x", encoding="utf-8", buffering=1) as trace:
-        def record(event: dict) -> None:
-            trace.write(json.dumps(event, ensure_ascii=False, allow_nan=False) + "\n")
-
-        result = run_episode(World(SCENARIOS[args.scenario]), choose, record, max_ticks,
-                             realtime=args.mode == "realtime", warmup=args.warmup, injected_timeouts=injected_timeouts)
-    report = {"scenario": args.scenario, "driver": args.driver, "mode": args.mode,
-              "model_path": str(model_path) if model_path is not None else None,
-              "model_load_wall_s": load_seconds if model_path is not None else None, **result}
-    payload = json.dumps(report, indent=2, allow_nan=False)
-    (args.out / "report.json").write_text(payload + "\n", encoding="utf-8")
-    print(payload)
-    return 0 if report.get("latency_stress_pass", report["clean_finish"]) else 1
+    cases = [(scenario, observation) for scenario in SCENARIOS for observation in OBSERVATIONS] if args.suite else [
+        (args.scenario, args.observation),
+    ]
+    if args.suite:
+        args.out.mkdir(parents=True, exist_ok=False)
+    suite_summary = {"expected_cases": len(cases), "model_load_wall_s": load_seconds, "cases": []}
+    passed = True
+    for scenario, observation in cases:
+        out = args.out / f"{scenario}-{observation}" if args.suite else args.out
+        report = run_case(out, scenario, observation, choose, args, max_ticks, injected_timeouts,
+                          model_path, load_seconds)
+        case_passed = report.get("latency_stress_pass", report["clean_finish"])
+        passed = passed and case_passed
+        if args.suite:
+            summary_fields = ("scenario", "observation", "outcome", "clean_finish", "sim_time_s", "red_crossings",
+                              "emergency_brake_ticks", "minimum_lead_gap_m", "fallback_ticks", "decision_applied",
+                              "decision_deadline_misses", "decision_applied_p95_wall_s", "capture_p95_wall_s", "error")
+            summary = {key: report[key] for key in summary_fields if key in report}
+            summary.update(passed=case_passed, report=f"{out.name}/report.json")
+            suite_summary["cases"].append(summary)
+            write_report(args.out / "suite.json", suite_summary)
+    if args.suite:
+        passed_count = sum(case["passed"] for case in suite_summary["cases"])
+        print(f"Completed {len(cases)} cases. Passed: {passed_count}. Summary: {args.out / 'suite.json'}")
+    return 0 if passed else 1
 
 
 if __name__ == "__main__":

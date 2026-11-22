@@ -3,7 +3,8 @@
 from math import isclose, isfinite
 from pathlib import Path
 
-from .simulation import ACCEL_MPS2, Action, BRAKE_MPS2, DECISION_PERIOD_S, GOAL_TOLERANCE_M
+from .camera import render
+from .simulation import ACCEL_MPS2, Action, BRAKE_MPS2, DECISION_PERIOD_S, GOAL_TOLERANCE_M, World
 
 
 CRITERIA = {
@@ -13,6 +14,7 @@ CRITERIA = {
     Action.STOP.value: "Brake at 3 m/s² down to a full stop.",
     Action.WAIT.value: "Remain stopped until you can proceed.",
 }
+OBSERVATIONS = ("state", "state-camera", "camera")
 
 
 def request_for(state: dict) -> dict:
@@ -31,6 +33,20 @@ def request_for(state: dict) -> dict:
     }
 
 
+def driving_request(world: World, previous: Action, previous_speed: float | None, observation: str) -> dict:
+    state = world.observe(previous, previous_speed)
+    if observation == "camera":
+        del state["traffic_light"], state["lead_vehicle"]
+    row = request_for(state)
+    if observation != "state":
+        row["images"] = [render(world)]
+        row["question"]["instructions"] += (
+            " The image is the current forward view. Look for the traffic signal, its white stop "
+            "line and the lead vehicle in that view."
+        )
+    return row
+
+
 class DrexMax:
     def __init__(self, weights: Path) -> None:
         import torch
@@ -39,8 +55,13 @@ class DrexMax:
         self.model = DecisionModel(weights, device="cuda:0")
         if self.model.readout.weight.dtype != torch.bfloat16:
             raise RuntimeError("Expected the BF16 Drex Max readout")
+        self.vision_verified = False
 
     def __call__(self, request: dict) -> tuple[Action, dict[str, float]]:
+        if request.get("images") and not self.vision_verified:
+            if "pixel_values" not in self.model.prepare([request], max_length=2048).inputs:
+                raise RuntimeError("Drex Max preprocessing did not produce camera pixel inputs")
+            self.vision_verified = True
         raw = self.model.predict([request], batch_size=1, max_length=2048)[0]
         values = [float(value) for value in raw]
         keys = request["question"]["criteria"]
