@@ -1,6 +1,7 @@
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from threading import Event, get_ident
 from unittest.mock import Mock, patch
 
 from .__main__ import main, run_episode
@@ -83,6 +84,54 @@ class DriveTests(unittest.TestCase):
                     with self.assertRaises(SystemExit):
                         main()
                     self.assertEqual((output / "report.json").read_bytes(), original)
+
+    def test_realtime_keeps_moving_and_discards_expired_reply(self):
+        release_slow_reply = Event()
+        trace = []
+        requests = []
+
+        def choose(row):
+            requests.append(row)
+            if len(requests) == 2:
+                if not release_slow_reply.wait(timeout=3):
+                    raise RuntimeError("test did not release the delayed reply")
+                return Action.PROCEED, None
+            return (Action.PROCEED if len(requests) == 1 else Action.STOP), None
+
+        def record(event):
+            trace.append(event)
+            if event["event"] == "step" and event["tick"] == 13:
+                release_slow_reply.set()
+
+        report = run_episode(World(Scenario(100.0)), choose, record, 19, realtime=True)
+        slow_reply = next(event for event in trace if event["event"] == "decision" and event["request_tick"] == 5)
+        self.assertEqual(slow_reply["status"], "late")
+        self.assertEqual(report["decision_deadline_misses"], 1)
+        self.assertEqual(report["decision_late_replies"], 1)
+        self.assertGreaterEqual(report["decision_slots_busy"], 1)
+        self.assertGreater(report["fallback_ticks"], 0)
+        moving_steps = [event for event in trace if event["event"] == "step" and event["tick"] in (6, 7)]
+        self.assertGreater(moving_steps[1]["ego_front_m"], moving_steps[0]["ego_front_m"])
+        after_late = next(event for event in trace if event["event"] == "step"
+                          and event["tick"] == slow_reply["tick"] + 1)
+        self.assertEqual(after_late["action"], "stop")
+        self.assertEqual(after_late["source"], "fallback")
+
+    def test_realtime_warmup_uses_the_inference_thread_and_discards_action(self):
+        calls = []
+        trace = []
+
+        def choose(_):
+            calls.append(get_ident())
+            return (Action.PROCEED if len(calls) == 1 else Action.WAIT), None
+
+        report = run_episode(World(Scenario(100.0)), choose, trace.append, 4, realtime=True, warmup=True)
+        self.assertEqual(calls, [calls[0], calls[0]])
+        self.assertIsNotNone(report["warmup_wall_s"])
+        self.assertEqual(report["decision_count"], 1)
+        self.assertEqual(report["decision_applied"], 1)
+        self.assertEqual(report["decision_deadline_misses"], 0)
+        self.assertEqual(trace[-1]["ego_front_m"], 0.0)
 
 
 if __name__ == "__main__":

@@ -2,12 +2,14 @@
 
 import argparse
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 import json
 from math import ceil
 from pathlib import Path
-from time import perf_counter
+from time import perf_counter, sleep
 
 from .driver import DrexMax, reference, request_for
+from .realtime import LiveDriver, ask
 from .simulation import Action, DECISION_STEPS, SCENARIOS, STEP_S, World
 
 
@@ -16,9 +18,35 @@ def run_episode(
     decide: Callable,
     record: Callable[[dict], None],
     max_ticks: int,
+    *,
+    realtime: bool = False,
+    warmup: bool = False,
 ) -> dict:
     if max_ticks <= 0:
         raise ValueError("max_ticks must be positive")
+    if realtime:
+        with ThreadPoolExecutor(max_workers=1) as worker:
+            warmup_seconds = worker.submit(_warmup, world, decide).result() if warmup else None
+            report = _drive(world, decide, record, max_ticks, LiveDriver(decide, worker, record))
+    else:
+        warmup_seconds = _warmup(world, decide) if warmup else None
+        report = _drive(world, decide, record, max_ticks, None)
+    return {"warmup_wall_s": warmup_seconds, **report}
+
+
+def _warmup(world: World, decide) -> float:
+    start = perf_counter()
+    reply = ask(decide, request_for(world.observe(Action.WAIT, None)))
+    if reply.error is not None:
+        raise RuntimeError(f"Warmup failed: {reply.error}")
+    return perf_counter() - start
+
+
+def percentile(values: list[float], q: float) -> float | None:
+    return sorted(values)[ceil(q * len(values)) - 1] if values else None
+
+
+def _drive(world: World, decide, record, max_ticks: int, live: LiveDriver | None) -> dict:
     action = Action.WAIT
     previous_speed = None
     source = "driver"
@@ -26,37 +54,44 @@ def run_episode(
     fault_count = 0
     emergency_ticks = 0
     fallback_ticks = 0
+    startup_wait_ticks = 0
+    fallback_activations = 0
+    tick_lag_s = []
     min_gap = world.gap_m
     previous_acceleration = 0.0
     peak_jerk = 0.0
     outcome = "time_limit"
+    started = perf_counter()
 
     for tick in range(max_ticks):
-        if tick % DECISION_STEPS == 0:
+        last_source = source
+        if live is not None:
+            scheduled_s = started + tick * STEP_S
+            wait_s = scheduled_s - perf_counter()
+            if wait_s > 0:
+                sleep(wait_s)
+            tick_lag_s.append(max(0.0, perf_counter() - scheduled_s))
+            action, source = live.step(world)
+        elif tick % DECISION_STEPS == 0:
             row = request_for(world.observe(action, previous_speed))
             previous_speed = world.ego.speed_mps
             start = perf_counter()
-            source = "driver"
-            error = None
-            try:
-                action, probabilities = decide(row)
-                if not isinstance(action, Action):
-                    raise ValueError(f"Unknown action {action!r}")
-            except Exception as exc:
-                action, probabilities = Action.STOP, None
-                error = f"{type(exc).__name__}: {exc}"
-                source = "fallback"
-                fault_count += 1
+            reply = ask(decide, row)
+            action = reply.action
+            source = "fallback" if reply.error is not None else "driver"
+            fault_count += int(reply.error is not None)
             timing_s.append(perf_counter() - start)
             record({
                 "event": "decision", "tick": world.tick, "sim_time_s": world.time_s,
                 "request": row, "action": action.value, "source": source,
-                "probabilities": probabilities, "error": error, "wall_seconds": timing_s[-1],
+                "probabilities": reply.probabilities, "error": reply.error, "wall_seconds": timing_s[-1],
             })
 
         emergency, acceleration = world.step(action)
         emergency_ticks += int(emergency)
         fallback_ticks += int(source == "fallback" and not emergency)
+        startup_wait_ticks += int(source == "startup_wait" and not emergency)
+        fallback_activations += int(source == "fallback" and last_source != "fallback")
         gap = world.gap_m
         if gap is not None:
             min_gap = gap if min_gap is None else min(min_gap, gap)
@@ -69,28 +104,45 @@ def run_episode(
             "ego_front_m": round(world.ego.front_m, 4), "ego_speed_mps": round(world.ego.speed_mps, 4),
             "acceleration_mps2": round(acceleration, 4), "lead_gap_m": gap,
             "red_crossings": world.red_crossings, "outcome": ended,
+            **({"tick_lag_wall_s": tick_lag_s[-1]} if live is not None else {}),
         })
         if ended is not None:
             outcome = ended
             break
 
-    ordered = sorted(timing_s)
+    episode_seconds = perf_counter() - started
+    live_stats = {}
+    if live is not None:
+        live_stats = live.finish(world.tick)
+        timing_s = live.response_seconds
+        fault_count = live.errors
+        live_stats.update(
+            decision_deadline_wall_s=DECISION_STEPS * STEP_S,
+            decision_applied_p95_wall_s=percentile(live.applied_ages_s, 0.95),
+            tick_lag_max_wall_s=max(tick_lag_s),
+            tick_lag_p95_wall_s=percentile(tick_lag_s, 0.95),
+        )
     return {
         "outcome": outcome,
-        "clean_finish": outcome == "finished" and not (world.red_crossings or emergency_ticks or fault_count),
+        "clean_finish": outcome == "finished" and not (world.red_crossings or emergency_ticks or fault_count
+                                                         or fallback_activations),
         "sim_time_s": world.time_s,
+        "episode_wall_s": episode_seconds,
         "ego_distance_m": round(world.ego.front_m, 3),
         "red_crossings": world.red_crossings,
         "emergency_brake_ticks": emergency_ticks,
         "fallback_ticks": fallback_ticks,
-        "driver_control_fraction": 1 - (emergency_ticks + fallback_ticks) / (tick + 1),
+        "fallback_activations": fallback_activations,
+        "startup_wait_ticks": startup_wait_ticks,
+        "driver_control_fraction": 1 - (emergency_ticks + fallback_ticks + startup_wait_ticks) / (tick + 1),
         "decision_count": len(timing_s),
         "decision_errors": fault_count,
         "minimum_lead_gap_m": None if min_gap is None else round(min_gap, 3),
         "peak_abs_jerk_mps3": round(peak_jerk, 3),
-        "decision_first_wall_s": timing_s[0],
-        "decision_p95_wall_s": ordered[ceil(0.95 * len(ordered)) - 1],
-        "decision_p99_wall_s": ordered[ceil(0.99 * len(ordered)) - 1],
+        "decision_first_wall_s": timing_s[0] if timing_s else None,
+        "decision_p95_wall_s": percentile(timing_s, 0.95),
+        "decision_p99_wall_s": percentile(timing_s, 0.99),
+        **live_stats,
     }
 
 
@@ -98,6 +150,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scenario", choices=SCENARIOS, default="route")
     parser.add_argument("--driver", choices=("drex", "reference"), default="drex")
+    parser.add_argument("--mode", choices=("synchronous", "realtime"), default="synchronous")
+    parser.add_argument("--warmup", action="store_true", help="Run one discarded model call before the episode")
     parser.add_argument("--model", type=Path, help="Path to locally prepared Drex Max v1 weights")
     parser.add_argument("--out", type=Path, required=True, help="New directory for the trace and report")
     parser.add_argument("--max-seconds", type=int, default=60, help="Limit in simulated seconds")
@@ -122,8 +176,9 @@ def main() -> int:
         def record(event: dict) -> None:
             trace.write(json.dumps(event, ensure_ascii=False, allow_nan=False) + "\n")
 
-        result = run_episode(World(SCENARIOS[args.scenario]), choose, record, round(args.max_seconds / STEP_S))
-    report = {"scenario": args.scenario, "driver": args.driver, "mode": "synchronous",
+        result = run_episode(World(SCENARIOS[args.scenario]), choose, record, round(args.max_seconds / STEP_S),
+                             realtime=args.mode == "realtime", warmup=args.warmup)
+    report = {"scenario": args.scenario, "driver": args.driver, "mode": args.mode,
               "model_path": str(model_path) if model_path is not None else None,
               "model_load_wall_s": load_seconds if model_path is not None else None, **result}
     payload = json.dumps(report, indent=2, allow_nan=False)
