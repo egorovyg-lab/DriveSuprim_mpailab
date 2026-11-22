@@ -14,13 +14,16 @@ variant=${1:-warm}
 case "$variant" in
   warm) args=(--warmup) ;;
   cold) args=() ;;
-  *) printf 'Usage: %s [warm|cold] [route|red_light|lead_brakes]\n' "$0" >&2; exit 2 ;;
+  *) printf 'Usage: %s [warm|cold] [route|red_light|lead_brakes] [--inject-timeout SIM_MS:EXTRA_WALL_MS ...]\n' "$0" >&2; exit 2 ;;
 esac
 scenario=${2:-route}
 case "$scenario" in
   route|red_light|lead_brakes) ;;
   *) printf 'Unknown scenario: %s\n' "$scenario" >&2; exit 2 ;;
 esac
+if (( $# > 2 )); then
+  args+=("${@:3}")
+fi
 
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 runtime=${DREX_RUNTIME_ROOT:-/scratch/pr0201/drex_runtime}

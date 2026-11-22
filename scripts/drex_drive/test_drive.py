@@ -133,6 +133,22 @@ class DriveTests(unittest.TestCase):
         self.assertEqual(report["decision_deadline_misses"], 0)
         self.assertEqual(trace[-1]["ego_front_m"], 0.0)
 
+    def test_injected_timeout_discards_reply_and_records_recovery(self):
+        trace = []
+        report = run_episode(World(Scenario(100.0)), lambda _: (Action.PROCEED, None), trace.append, 20,
+                             realtime=True, injected_timeouts={5: 650})
+        self.assertEqual(report["injected_timeouts"], [
+            {"request_tick": 5, "sim_time_s": 0.5, "extra_delay_ms": 650, "status": "discarded"},
+        ])
+        self.assertEqual(report["decision_deadline_misses"], 1)
+        self.assertEqual(report["fallback_activations"], 1)
+        self.assertEqual(len(report["fallback_recoveries_wall_s"]), 1)
+        self.assertGreater(report["fallback_recoveries_wall_s"][0], 0.5)
+        self.assertFalse(report["latency_stress_pass"])
+        recovered = next(event for event in trace if event["event"] == "fallback_recovered")
+        step = next(event for event in trace if event["event"] == "step" and event["tick"] == recovered["tick"] + 1)
+        self.assertEqual(step["source"], "driver")
+
 
 if __name__ == "__main__":
     unittest.main()
