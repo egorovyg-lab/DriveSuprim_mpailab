@@ -9,7 +9,7 @@ from pathlib import Path
 from time import perf_counter, sleep
 
 from .camera import FRAME_SIZE, CameraHistory, render
-from .driver import DrexMax, OBSERVATIONS, driving_request, reference
+from .driver import DrexMax, OBSERVATIONS, STRUCTURED_OBSERVATIONS, driving_request, reference
 from .realtime import LiveDriver, ask
 from .simulation import Action, BRAKING_SCENARIOS, DECISION_PERIOD_S, DECISION_STEPS, SCENARIOS, STEP_S, World
 
@@ -17,6 +17,7 @@ from .simulation import Action, BRAKING_SCENARIOS, DECISION_PERIOD_S, DECISION_S
 SUITES = {
     "observations": (("route", "red_light", "lead_brakes"), ("state", "state-camera", "camera")),
     "braking": (tuple(BRAKING_SCENARIOS), ("camera", "camera-pair", "state-camera")),
+    "radar": (tuple(BRAKING_SCENARIOS), ("camera", "camera-range", "camera-radar", "state-camera")),
 }
 
 
@@ -272,7 +273,7 @@ def main() -> int:
     parser.add_argument("--scenario", choices=SCENARIOS, default="route")
     parser.add_argument("--observation", choices=OBSERVATIONS, default="state")
     parser.add_argument("--suite", nargs="?", const="observations", choices=SUITES,
-                        help="Run the original observation suite or the one-frame vs two-frame braking suite")
+                        help="Run a predefined comparison of observation modes")
     parser.add_argument("--driver", choices=("drex", "reference"), default="drex")
     parser.add_argument("--mode", choices=("synchronous", "realtime"), default="synchronous")
     parser.add_argument("--warmup", action="store_true", help="Warm up each input shape before the episode")
@@ -286,8 +287,8 @@ def main() -> int:
         parser.error("--max-seconds must be positive")
     if args.out.exists():
         parser.error("--out must point to a new directory")
-    if args.driver == "reference" and (args.observation in ("camera", "camera-pair") or args.suite):
-        parser.error("The camera-only condition requires --driver drex")
+    if args.driver == "reference" and (args.observation not in STRUCTURED_OBSERVATIONS or args.suite):
+        parser.error("The reference driver requires structured observations from state or state-camera")
     max_ticks = round(args.max_seconds / STEP_S)
     injected_timeouts = dict(args.inject_timeout)
     if injected_timeouts and args.mode != "realtime":

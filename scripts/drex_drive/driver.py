@@ -14,7 +14,9 @@ CRITERIA = {
     Action.STOP.value: "Brake at 3 m/s² down to a full stop.",
     Action.WAIT.value: "Remain stopped until you can proceed.",
 }
-OBSERVATIONS = ("state", "state-camera", "camera", "camera-pair")
+STRUCTURED_OBSERVATIONS = ("state", "state-camera")
+RADAR_OBSERVATIONS = ("camera-range", "camera-radar")
+OBSERVATIONS = (*STRUCTURED_OBSERVATIONS, "camera", "camera-pair", *RADAR_OBSERVATIONS)
 
 
 def request_for(state: dict) -> dict:
@@ -36,8 +38,16 @@ def request_for(state: dict) -> dict:
 def driving_request(world: World, previous: Action, previous_speed: float | None, observation: str,
                     images: list | None = None) -> dict:
     state = world.observe(previous, previous_speed)
-    if observation in ("camera", "camera-pair"):
+    if observation not in STRUCTURED_OBSERVATIONS:
         del state["traffic_light"], state["lead_vehicle"]
+    if observation in RADAR_OBSERVATIONS:
+        gap = world.gap_m
+        target = None
+        if world.lead is not None and gap is not None:
+            target = {"range_m": round(gap, 2)}
+            if observation == "camera-radar":
+                target["closing_speed_mps"] = round(world.ego.speed_mps - world.lead.speed_mps, 2)
+        state["lead_radar"] = target
     row = request_for(state)
     if observation != "state":
         row["images"] = images if images is not None else [render(world)]
@@ -52,6 +62,12 @@ def driving_request(world: World, previous: Action, previous_speed: float | None
                 " The image is the current forward view. Look for the traffic signal, its white stop "
                 "line and the lead vehicle in that view."
             )
+    if observation in RADAR_OBSERVATIONS:
+        row["question"]["instructions"] += (
+            " When available, lead_radar reports the bumper-to-bumper range to the lead vehicle in your lane."
+        )
+    if observation == "camera-radar":
+        row["question"]["instructions"] += " A positive closing_speed_mps means that range is shrinking."
     return row
 
 

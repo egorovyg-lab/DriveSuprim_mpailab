@@ -173,6 +173,26 @@ class DriveTests(unittest.TestCase):
         self.assertIn((255, 37, 33), [color for _, color in red.getcolors()])
         self.assertIn((35, 246, 92), [color for _, color in green.getcolors()])
 
+    def test_radar_modes_add_only_requested_signals_to_the_camera_request(self):
+        world = World(SCENARIOS["lead_brakes"])
+        world.ego = Vehicle(3.0, 4.5)
+        world.lead = Vehicle(15.0, 3.0)
+        camera = driving_request(world, Action.MAINTAIN, 4.0, "camera")
+        range_only = driving_request(world, Action.MAINTAIN, 4.0, "camera-range")
+        radar = driving_request(world, Action.MAINTAIN, 4.0, "camera-radar")
+        self.assertEqual(range_only["state"], {**camera["state"], "lead_radar": {"range_m": 7.5}})
+        self.assertEqual(radar["state"], {
+            **camera["state"], "lead_radar": {"range_m": 7.5, "closing_speed_mps": 1.5},
+        })
+        self.assertEqual(len(radar["images"]), 1)
+        self.assertEqual(radar["images"][0].tobytes(), camera["images"][0].tobytes())
+        world.lead = Vehicle(15.0, 6.0)
+        receding = driving_request(world, Action.MAINTAIN, 4.0, "camera-radar")
+        self.assertEqual(receding["state"]["lead_radar"]["closing_speed_mps"], -1.5)
+        world.lead = None
+        no_target = driving_request(world, Action.MAINTAIN, 4.0, "camera-radar")
+        self.assertIsNone(no_target["state"]["lead_radar"])
+
     def test_suite_loads_model_once_and_records_all_episodes_and_frames(self):
         for suite_name, (scenarios, conditions) in SUITES.items():
             with self.subTest(suite=suite_name), TemporaryDirectory() as tmp:
