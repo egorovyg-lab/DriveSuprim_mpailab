@@ -34,6 +34,32 @@ slurm_args=(--partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 --gres=g
             --mem=96G --time=00:30:00 --chdir="$repo" --output="$runtime/logs/straight-%j.log")
 
 case "${1:-}" in
+  fresh-test)
+    export DREX_STRAIGHT_NAME=${DREX_STRAIGHT_NAME:-navsim-straight-fresh-v1}
+    export DREX_STRAIGHT_PROMPT=baseline DREX_STRAIGHT_OBSERVATION=action-effects
+    out=$runtime/runs/$DREX_STRAIGHT_NAME
+    pilot=$runtime/runs/navsim-straight-train-v1/observations.json
+    [[ -s "$pilot" ]] || { echo 'Original TRAIN observations are required for DriveSuprim parity' >&2; exit 2; }
+    mkdir -p "$out"
+    exec 8>"$out/.comparison.lock"
+    flock -n 8 || { echo 'This comparison is already running' >&2; exit 1; }
+    script="$repo/scripts/drex_drive/straight.sh"
+    module=scripts.drex_drive.navsim_straight
+    bash "$script" connect
+    prepared=0
+    python3 -m "$module" bridge-fresh-prepare --out "$out" || prepared=$?
+    if (( prepared == 3 )); then
+      cat "$out/report.json"
+      exit 0
+    fi
+    (( prepared == 0 )) || exit "$prepared"
+    if [[ ! -s "$out/predictions.json" ]]; then
+      if ! bash "$script" submit --wait; then
+        [[ -s "$out/predictions.json" ]] || exit 1
+      fi
+    fi
+    python3 -m "$module" bridge-fresh-score --out "$out" --pilot-observations "$pilot" \
+      --prompt-variant baseline --observation-variant action-effects ;;
   next-tests)
     out=$runtime/runs/${DREX_STRAIGHT_NAME:-navsim-straight-extra-inputs-v1}
     original=$runtime/runs/navsim-straight-train-v1/observations.json
@@ -125,5 +151,5 @@ case "${1:-}" in
       score_args+=(--observation-variant "$DREX_STRAIGHT_OBSERVATION")
     fi
     python3 -m scripts.drex_drive.navsim_straight bridge-score "${score_args[@]}" ;;
-  *) printf 'Usage: %s connect|prepare|submit|score|progress-test|forecast-test|next-tests\n' "$0" >&2; exit 2 ;;
+  *) printf 'Usage: %s connect|prepare|submit|score|progress-test|forecast-test|next-tests|fresh-test\n' "$0" >&2; exit 2 ;;
 esac

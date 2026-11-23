@@ -8,11 +8,49 @@ from tempfile import TemporaryDirectory
 import numpy as np
 
 from .driver import Action
-from .navsim_straight import (EXTRA_INPUT_VARIANTS, PROTOCOL, SPEED_CAP, build_plan, digest, past_leader_speeds,
-                             predict_suite, read, score, straight_observation, summarize_inputs, write)
+from .navsim_straight import (EXTRA_INPUT_VARIANTS, HOLDOUT_PROTOCOL, PROTOCOL, SPEED_CAP, build_plan, digest,
+                             fresh_report, holdout_records, past_leader_speeds, predict, predict_suite, read,
+                             score, straight_observation, summarize_inputs, write)
 
 
 class StraightPlanTests(unittest.TestCase):
+    def test_holdout_rejects_a_session_seen_in_the_original_audit(self):
+        held = dict(token="a", session_id="hold", timestamp_us=10, role="holdout")
+        train = dict(token="b", session_id="train", timestamp_us=20, role="train")
+        selection = dict(records=[train, held], legacy_training_records=[], fresh_holdout_sessions=["hold"])
+        self.assertEqual(holdout_records(selection, [train]), [held])
+        with self.assertRaisesRegex(RuntimeError, "overlap"):
+            holdout_records(selection, [dict(token="different-frame", session_id="hold")])
+
+    def test_holdout_prediction_accepts_only_the_frozen_input(self):
+        scene = dict(token="example", speed_mps=4.0, leaders=[])
+        plan = dict(protocol=HOLDOUT_PROTOCOL, speed_cap_mps=SPEED_CAP, scenes=[scene])
+        with TemporaryDirectory() as root:
+            output = Path(root) / "predictions.json"
+            with self.assertRaisesRegex(ValueError, "fixed"):
+                predict(plan, Path(root), output, "progress", "action-effects")
+            with self.assertRaisesRegex(ValueError, "fixed"):
+                predict(plan, Path(root), output, "baseline", "gap-forecast")
+            choose = Mock(return_value=(Action.MAINTAIN, None))
+            self.assertFalse(predict(plan, Path(root), output, "baseline", "action-effects", model=(choose, 0.0)))
+            self.assertEqual(read(output)["observation_sha256"], digest(plan))
+            self.assertEqual(choose.call_count, 8)
+
+    def test_fresh_report_weights_eligible_sessions_equally_and_counts_safety_losses(self):
+        scenes = [dict(token=token, session_id=session) for token, session in zip("abc", ("x", "x", "y"))]
+        plan = dict(reserved_sessions=["x", "y", "z"], reserved_scenes=10, scenes=scenes,
+                    rejected={"intersection": 7}, teacher_checkpoint_sha256="frozen")
+        rows = []
+        for scene, pdm, collision in zip(scenes, (.9, .9, .4), (1.0, 1.0, 0.0)):
+            rows.append(dict(**scene, ds=dict(pdm_score=.8), drex=dict(pdm_score=pdm),
+                             delta=dict(pdm_score=pdm - .8, no_at_fault_collisions=collision - 1.0)))
+        report = fresh_report(plan, ("pdm_score", "no_at_fault_collisions"), ("no_at_fault_collisions",), rows, [], "pilot")
+        self.assertAlmostEqual(report["mean_delta"]["pdm_score"], -1 / 15)
+        self.assertAlmostEqual(report["mean_delta_equal_session"]["pdm_score"], -.15)
+        self.assertEqual((report["pdm_wins"], report["pdm_losses"]), (2, 1))
+        self.assertEqual(report["safety_regressions"], {"no_at_fault_collisions": 1})
+        self.assertIsNone(report["sessions"][2]["mean_delta"])
+
     def test_straight_filter_uses_current_tracks_and_static_road(self):
         layers = SimpleNamespace(INTERSECTION="intersection", ROADBLOCK="roadblock", DRIVABLE_AREA="drivable",
                                  CARPARK_AREA="carpark")

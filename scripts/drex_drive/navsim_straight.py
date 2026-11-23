@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 from contextlib import redirect_stdout
 from hashlib import sha256
 import json
@@ -23,6 +24,7 @@ SPEED_CAP = 10.0
 ACCEL_CAP = 2.0
 HORIZON = POSES * STEP
 PROTOCOL = "navsim-straight-train-v1"
+HOLDOUT_PROTOCOL = "navsim-straight-fresh-v1"
 BASE_INSTRUCTIONS = (
     "Choose the longitudinal action for the next 0.5 seconds on a straight road. Maintain a clear gap "
     "while making forward progress within the speed limit. There is no destination stop in this horizon. "
@@ -185,7 +187,6 @@ def source_context(package, source):
 
 
 def prepare(package, source, repo, limit):
-    from collections import Counter
     from rollout_replay import bound_context
 
     records, candidates, source_id = source_context(package, source)
@@ -324,8 +325,10 @@ def load_drex(weights):
 
 
 def predict(plan, weights, out, prompt_variant="baseline", observation_variant="radar", history=None, model=None):
-    if plan["protocol"] != PROTOCOL or plan["speed_cap_mps"] != SPEED_CAP or not plan["scenes"]:
+    if plan["protocol"] not in (PROTOCOL, HOLDOUT_PROTOCOL) or plan["speed_cap_mps"] != SPEED_CAP or not plan["scenes"]:
         raise ValueError("Unsupported or empty straight-scene package")
+    if plan["protocol"] == HOLDOUT_PROTOCOL and (prompt_variant, observation_variant) != ("baseline", "action-effects"):
+        raise ValueError("Fresh holdout is fixed to baseline prompt and action-effects")
     histories = histories_by_scene(plan, history) if observation_variant == "leader-history" else None
     choose, load_seconds = model if model is not None else load_drex(weights)
     report = {"observation_sha256": digest(plan), "prompt_variant": prompt_variant,
@@ -389,6 +392,16 @@ def raw_score(path, poses, template, keys):
     return {key: float(frame.iloc[0][key]) for key in keys}
 
 
+def checked_straight_poses(prediction):
+    import numpy as np
+
+    poses = np.asarray(prediction["poses"], dtype=float)
+    if (poses.shape != (POSES, 3) or not np.isfinite(poses).all() or np.any(poses[:, 1:] != 0)
+            or np.any(np.diff(poses[:, 0], prepend=0) < 0) or poses[-1, 0] > SPEED_CAP * HORIZON + 1e-8):
+        raise ValueError(f"Invalid straight trajectory for {prediction['token']}")
+    return poses
+
+
 def score(package, source, repo, payload):
     import numpy as np
     import real_data
@@ -431,10 +444,7 @@ def score(package, source, repo, payload):
         anchor = next(c for c in candidates[token] if c["candidate_local"] == sample["baseline_local"])
         if list(keys) != anchor["metric_keys"]:
             raise RuntimeError(f"DriveSuprim metric columns changed for {token}")
-        poses = np.asarray(prediction["poses"], dtype=float)
-        if (poses.shape != (POSES, 3) or not np.isfinite(poses).all() or np.any(poses[:, 1:] != 0)
-                or np.any(np.diff(poses[:, 0], prepend=0) < 0) or poses[-1, 0] > SPEED_CAP * HORIZON + 1e-8):
-            raise ValueError(f"Invalid straight trajectory for {token}")
+        poses = checked_straight_poses(prediction)
         baseline = raw_score(cache, vocab[anchor["candidate_vocab"]], template, keys)
         if not np.allclose(list(baseline.values()), anchor["expected_raw"], atol=1e-8, rtol=1e-7):
             raise RuntimeError(f"DriveSuprim anchor parity failed for {token}")
@@ -448,6 +458,227 @@ def score(package, source, repo, payload):
             "mean_delta": {key: mean(row["delta"][key] for row in compared) for key in keys} if compared else None,
             "safety_regressions": {key: sum(row["delta"][key] < -1e-8 for row in compared) for key in real_data.SAFETY},
             "cases": compared}
+
+
+def holdout_records(selection, audit_records):
+    holdout = [row for row in selection["records"] if row["role"] == "holdout"]
+    prior = ([row for row in selection["records"] if row["role"] == "train"]
+             + selection["legacy_training_records"] + audit_records)
+    sessions = set(selection["fresh_holdout_sessions"])
+    tokens = {row["token"] for row in holdout}
+    if (not holdout or any(row["role"] not in ("train", "holdout") for row in selection["records"])
+            or {row["session_id"] for row in holdout} != sessions or len(tokens) != len(holdout)
+            or any(row["session_id"] in sessions or row["token"] in tokens for row in prior)):
+        raise RuntimeError("Invalid holdout membership or overlap with prior training scenes")
+    return sorted(holdout, key=lambda row: (row["session_id"], row["timestamp_us"], row["token"]))
+
+
+def fresh_context(args):
+    from download import prepare_selector_dataset as acquisition
+    from navsim.planning.script.run_selector_collection import cfg_from_source
+    from transfer import sha
+
+    audit_records, candidates, anchor_id = source_context(args.package, args.source)
+    acquisition_plan, requests = acquisition.verify(args.acquisition)
+    selection = read(args.acquisition / "selection.json")
+    selected = holdout_records(selection, audit_records)
+    config_path = Path(acquisition_plan["options"]["source"]) / "identity.json"
+    template = read(config_path)
+    cfg = cfg_from_source(template)
+    current_maps = os.environ.get("NUPLAN_MAPS_ROOT")
+    if current_maps and Path(current_maps).resolve() != Path(template["map_root"]).resolve():
+        raise RuntimeError("Map root differs from original DriveSuprim configuration")
+    os.environ["NUPLAN_MAPS_ROOT"] = template["map_root"]
+    metadata = {
+        "protocol": HOLDOUT_PROTOCOL, "anchor_identity_sha256": anchor_id,
+        "acquisition_sha256": sha(args.acquisition / "acquisition_plan.json"),
+        "teacher_config_sha256": sha(config_path), "teacher_checkpoint_sha256": template["checkpoint_sha256"],
+        "speed_cap_mps": SPEED_CAP, "reserved_scenes": len(selected),
+        "reserved_sessions": sorted(selection["fresh_holdout_sessions"]),
+    }
+    logs = {row["log_name"] for row in selected}
+    split = {"records": selected, "log_sha256": {
+        log: requests["log_hashes"][str(Path(cfg.navsim_log_path) / (log + ".pkl"))] for log in sorted(logs)}}
+    return (cfg, template, metadata, split, requests, candidates)
+
+
+def fresh_prepare(args):
+    import fcntl
+    from navsim.planning.script.run_drivemem_memory import build_cache
+
+    cfg, _, metadata, split, requests, _ = fresh_context(args)
+    args.cache_root.mkdir(parents=True, exist_ok=True)
+    with (args.cache_root / ".lock").open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        frozen_split = args.cache_root / "splits.json"
+        frozen_plan = args.cache_root / "observations.json"
+        binding = {"metadata": metadata, **split}
+        if not frozen_split.exists():
+            write(frozen_split, binding)
+        elif read(frozen_split) != binding:
+            raise RuntimeError("Astra holdout cache root belongs to another acquisition or protocol")
+        if frozen_plan.exists():
+            return read(frozen_plan)
+        build_cache(cfg, args.cache_root)
+        caches = read(args.cache_root / "cache_index.json")
+        selected, selected_rows, rejected = [], [], Counter()
+        for row in split["records"]:
+            token = row["token"]
+            cache = caches[token]
+            observation, reason = straight_observation(load_cache(cache))
+            if reason is not None:
+                rejected[reason] += 1
+                continue
+            selected.append({"token": token, "session_id": row["session_id"], "cache_sha256": cache["sha256"],
+                             **observation})
+            selected_rows.append(row)
+        plan = {**metadata, "scenes": selected, "rejected": dict(rejected)}
+        if selected:
+            verify_fresh_images(args, requests, cfg, selected_rows)
+        write(frozen_plan, plan)
+        return plan
+
+
+def native_ds_predictions(cfg, rows):
+    import torch
+    from hydra.utils import instantiate
+    from torch.utils.data import DataLoader
+    from navsim.common.dataloader import SceneLoader
+    from navsim.planning.script.run_drivemem_oracle_pilot import on_device
+    from navsim.planning.training.dataset_ssl import DatasetSSL
+
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA is required on Astra to regenerate original DriveSuprim predictions")
+    if cfg.agent.config.training or cfg.agent.config.inference.model != "teacher":
+        raise RuntimeError("Original DriveSuprim evaluation teacher required")
+    agent = instantiate(cfg.agent)
+    agent.initialize()
+    agent.eval()
+    agent.to("cuda")
+    agent._config.inference.export_candidates = False
+    predictions = {}
+    for log in sorted({row["log_name"] for row in rows}):
+        scene_filter = instantiate(cfg.train_test_split.scene_filter)
+        scene_filter.log_names = [log]
+        scene_filter.tokens = [row["token"] for row in rows if row["log_name"] == log]
+        loader = SceneLoader(Path(cfg.navsim_log_path), Path(cfg.original_sensor_path), scene_filter,
+                             sensor_config=agent.get_sensor_config())
+        if set(loader.tokens) != set(scene_filter.tokens):
+            raise RuntimeError(f"DriveSuprim input membership changed in {log}")
+        dataset = DatasetSSL(loader, agent.get_feature_builders(), agent.get_target_builders(),
+                             cfg=cfg.agent.config, cache_path=None, append_token_to_batch=True)
+        for batch in DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0):
+            token = str(batch[2][0])
+            with torch.no_grad():
+                prediction, _ = agent.forward(on_device(batch, "cuda"))
+            predictions[token] = prediction["final_traj"].cpu().numpy()[0].copy()
+    return predictions
+
+
+def verify_fresh_images(args, requests, cfg, rows):
+    from download import prepare_selector_dataset as acquisition
+    from transfer import sha
+
+    root = Path(cfg.original_sensor_path)
+    if root.resolve() != Path(requests["sensor_root"]).resolve():
+        raise RuntimeError("Original DriveSuprim camera root differs from the frozen acquisition")
+    receipts = read(args.acquisition / "installed_images.json")
+    relative_paths = set()
+    for log in sorted({row["log_name"] for row in rows}):
+        path = Path(cfg.navsim_log_path) / (log + ".pkl")
+        if sha(path) != requests["log_hashes"][str(path)]:
+            raise RuntimeError(f"Source log changed for {log}")
+        frames, positions = acquisition.load_frames(path)
+        for row in rows:
+            if row["log_name"] == log:
+                relative_paths.update(acquisition.camera_paths(frames, positions[row["token"]]))
+    for relative in sorted(relative_paths):
+        path = acquisition.checked_target(root, relative)
+        info = receipts.get(relative)
+        if not info or not path.is_file() or path.stat().st_size != info["size"] or sha(path) != info["sha256"]:
+            raise RuntimeError(f"Frozen camera data missing or changed: {relative}")
+
+
+def fresh_score(args, payload):
+    import numpy as np
+    import real_data
+    from rollout_replay import bound_context
+    from transfer import sha
+
+    cfg, teacher, metadata, split, requests, candidates = fresh_context(args)
+    plan, predictions = payload["plan"], payload["predictions"]
+    pilot_token = payload["pilot_token"]
+    tokens = [row["token"] for row in plan["scenes"]]
+    if (plan != read(args.cache_root / "observations.json") or any(plan[k] != v for k, v in metadata.items())
+            or not tokens or tokens != [row["token"] for row in predictions["cases"]]
+            or predictions["observation_sha256"] != digest(plan)
+            or (predictions["prompt_variant"], predictions["observation_variant"]) != ("baseline", "action-effects")):
+        raise RuntimeError("Fresh holdout observations or predictions do not match the frozen protocol")
+    if sha(Path(cfg.agent.checkpoint_path)) != teacher["checkpoint_sha256"]:
+        raise RuntimeError("Original DriveSuprim checkpoint changed")
+    for relative, expected in teacher["sources"].items():
+        if sha(args.repo / relative) != expected:
+            raise RuntimeError(f"Original DriveSuprim source changed: {relative}")
+
+    manifest, pilot_scenes, vocab, template, old_caches = bound_context(args.package, args.repo, [candidates[pilot_token][0]])
+    keys = ("pdm_score", *real_data.METRICS)
+    pilot_sample = real_data.load_inputs(args.package, pilot_token, manifest, vocab)
+    pilot = next(row for row in candidates[pilot_token] if row["candidate_local"] == pilot_sample["baseline_local"])
+    if list(keys) != pilot["metric_keys"]:
+        raise RuntimeError("Original DriveSuprim metric columns changed")
+    pilot_row = {"token": pilot_token, "log_name": pilot_scenes[pilot_token]["log_name"]}
+    token_set = set(tokens)
+    selected = [row for row in split["records"] if row["token"] in token_set]
+    verify_fresh_images(args, requests, cfg, selected)
+    native = native_ds_predictions(cfg, [pilot_row, *selected])
+    if not np.allclose(native[pilot_token], vocab[pilot["candidate_vocab"]], rtol=0, atol=1e-6):
+        raise RuntimeError("Recomputed DriveSuprim trajectory differs from the archived pilot baseline")
+    reproduced = raw_score(old_caches[pilot_token], native[pilot_token], template, keys)
+    if not np.allclose(list(reproduced.values()), pilot["expected_raw"], atol=1e-8, rtol=1e-7):
+        raise RuntimeError("Recomputed DriveSuprim scores differ from the archived pilot baseline")
+
+    caches = read(args.cache_root / "cache_index.json")
+    compared, failed = [], []
+    for record, prediction in zip(plan["scenes"], predictions["cases"]):
+        token = record["token"]
+        cache = caches[token]
+        if sha(Path(cache["path"])) != record["cache_sha256"]:
+            raise RuntimeError(f"Fresh cache changed for {token}")
+        if "error" in prediction:
+            failed.append({"token": token, "error": prediction["error"]})
+            continue
+        baseline = raw_score(cache, native[token], template, keys)
+        drex = raw_score(cache, checked_straight_poses(prediction), template, keys)
+        compared.append({"token": token, "session_id": record["session_id"], "ds": baseline, "drex": drex,
+                         "delta": {key: drex[key] - baseline[key] for key in keys}})
+    return fresh_report(plan, keys, real_data.SAFETY, compared, failed, pilot_token)
+
+
+def fresh_report(plan, keys, safety, compared, failed, pilot_token):
+    sessions = []
+    for session in plan["reserved_sessions"]:
+        rows = [row for row in compared if row["session_id"] == session]
+        sessions.append({"session_id": session,
+                         "eligible_scenes": sum(row["session_id"] == session for row in plan["scenes"]),
+                         "compared_scenes": len(rows),
+                         "mean_delta": {key: mean(row["delta"][key] for row in rows) for key in keys} if rows else None})
+    observed = [row for row in sessions if row["compared_scenes"]]
+    differences = [row["delta"]["pdm_score"] for row in compared]
+    return {"protocol": HOLDOUT_PROTOCOL, "prompt_variant": "baseline", "observation_variant": "action-effects",
+            "observation_sha256": digest(plan), "reserved_scenes": plan["reserved_scenes"],
+            "planned_scenes": len(plan["scenes"]), "compared_scenes": len(compared),
+            "prediction_failures": failed, "eligibility_rejections": plan["rejected"],
+            "teacher_checkpoint_sha256": plan["teacher_checkpoint_sha256"], "baseline_parity_token": pilot_token,
+            "mean_delta": {key: mean(row["delta"][key] for row in compared) for key in keys} if compared else None,
+            "mean_delta_equal_session": {
+                key: mean(row["mean_delta"][key] for row in observed) for key in keys} if observed else None,
+            "mean_pdm": {method: mean(row[method]["pdm_score"] for row in compared)
+                         for method in ("ds", "drex")} if compared else None,
+            "pdm_wins": sum(delta > 1e-8 for delta in differences),
+            "pdm_losses": sum(delta < -1e-8 for delta in differences),
+            "pdm_ties": sum(abs(delta) <= 1e-8 for delta in differences),
+            "safety_regressions": {key: sum(row["delta"][key] < -1e-8 for row in compared) for key in safety},
+            "sessions": sessions, "cases": compared}
 
 
 def summarize_inputs(root, reference_report):
@@ -492,10 +723,16 @@ def on_astra(stage, args, payload=None):
     control = os.environ.get("DREX_TRANSFER_CONTROL", str(Path.home() / ".ssh/drex-astra-transfer.sock"))
     host = os.environ.get("DREX_ASTRA_HOST", "egorov@93.180.62.99")
     port = os.environ.get("DREX_ASTRA_PORT", "27434")
+    gpu = os.environ.get("DREX_ASTRA_DS_GPU", "0") if stage == "fresh-score" else ""
     remote = ["docker", "exec", "-i", "-w", repo, container, "env", f"PYTHONPATH={source}/tools:{repo}",
-              "CUDA_VISIBLE_DEVICES=", "OMP_NUM_THREADS=2", "OPENBLAS_NUM_THREADS=2", "MKL_NUM_THREADS=2",
+              f"CUDA_VISIBLE_DEVICES={gpu}", "OMP_NUM_THREADS=2", "OPENBLAS_NUM_THREADS=2", "MKL_NUM_THREADS=2",
               "python", "-B", "-c", Path(__file__).read_text(encoding="utf-8"), stage,
               "--package", package, "--source", source, "--repo", repo, "--limit", str(args.limit)]
+    if stage in ("fresh-prepare", "fresh-score"):
+        root = "/workspace/exp_v2/drivemem_memory"
+        acquisition = os.environ.get("DREX_ASTRA_ACQUISITION", f"{root}/selector_data_expansion_v2")
+        cache_root = os.environ.get("DREX_ASTRA_FRESH_CACHE", f"{root}/{HOLDOUT_PROTOCOL}")
+        remote.extend(["--acquisition", acquisition, "--cache-root", cache_root])
     finished = subprocess.run(["ssh", "-T", "-S", control, "-o", "BatchMode=yes", "-p", port, "--", host,
                                shlex.join(remote)], input=json.dumps(payload) if payload is not None else "",
                               text=True, encoding="utf-8", stdout=subprocess.PIPE, check=True)
@@ -505,12 +742,16 @@ def on_astra(stage, args, payload=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("stage", choices=("prepare", "predict", "score", "history", "predict-suite",
+                                          "fresh-prepare", "fresh-score", "bridge-fresh-prepare", "bridge-fresh-score",
                                           "bridge-prepare", "bridge-score", "bridge-history", "summarize-inputs"))
     parser.add_argument("--package", type=Path)
     parser.add_argument("--source", type=Path)
     parser.add_argument("--repo", type=Path)
     parser.add_argument("--out", type=Path)
+    parser.add_argument("--acquisition", type=Path)
+    parser.add_argument("--cache-root", type=Path)
     parser.add_argument("--weights", type=Path)
+    parser.add_argument("--pilot-observations", type=Path)
     parser.add_argument("--reference-report", type=Path)
     parser.add_argument("--prompt-variant", choices=PROMPT_VARIANTS)
     parser.add_argument("--observation-variant", choices=OBSERVATION_VARIANTS)
@@ -518,14 +759,20 @@ def main():
     args = parser.parse_args()
     if args.limit < 1:
         parser.error("--limit must be positive")
-    if args.stage in ("prepare", "score", "history"):
+    if args.stage in ("prepare", "score", "history", "fresh-prepare", "fresh-score"):
         if None in (args.package, args.source, args.repo):
             parser.error("Astra stages require --package, --source and --repo")
+        if args.stage in ("fresh-prepare", "fresh-score") and None in (args.acquisition, args.cache_root):
+            parser.error("Fresh Astra stages require --acquisition and --cache-root")
         with redirect_stdout(sys.stderr):
             if args.stage == "prepare":
                 result = prepare(args.package, args.source, args.repo, args.limit)
             elif args.stage == "history":
                 result = export_history(args.package, args.source, args.repo, json.load(sys.stdin))
+            elif args.stage == "fresh-prepare":
+                result = fresh_prepare(args)
+            elif args.stage == "fresh-score":
+                result = fresh_score(args, json.load(sys.stdin))
             else:
                 result = score(args.package, args.source, args.repo, json.load(sys.stdin))
         print(json.dumps(result, allow_nan=False))
@@ -547,6 +794,22 @@ def main():
     predictions = args.out / "predictions.json"
     summary = args.out / "report.json"
     history_path = args.out / "history.json"
+    if args.stage == "bridge-fresh-prepare":
+        args.out.mkdir(parents=True, exist_ok=True)
+        result = on_astra("fresh-prepare", args)
+        if observations.exists() and read(observations) != result:
+            parser.error("Saved observations do not match the frozen Astra cohort")
+        if not observations.exists():
+            write(observations, result)
+        print(f"Eligible straight scenes: {len(result['scenes'])}/{result['reserved_scenes']}. Observations: {observations}")
+        print("Eligibility rejections:", result["rejected"])
+        if not result["scenes"]:
+            report = {"protocol": HOLDOUT_PROTOCOL, "status": "no_eligible_scenes", "compared_scenes": 0,
+                      "reserved_scenes": result["reserved_scenes"], "reserved_sessions": result["reserved_sessions"],
+                      "eligibility_rejections": result["rejected"]}
+            write(summary, report)
+            return 3
+        return 0
     if args.stage == "bridge-prepare":
         if observations.exists():
             parser.error("Use a new run name to prepare a different cohort")
@@ -580,11 +843,18 @@ def main():
     payload = {"plan": plan, "predictions": output}
     if output.get("observation_variant") == "leader-history":
         payload["history"] = read(history_path)
-    result = on_astra("score", args, payload)
+    if args.stage == "bridge-fresh-score":
+        if args.pilot_observations is None:
+            parser.error("--pilot-observations must point to the original TRAIN observations")
+        pilot = read(args.pilot_observations)
+        if pilot["protocol"] != PROTOCOL or pilot["anchor_identity_sha256"] != plan["anchor_identity_sha256"]:
+            parser.error("Original TRAIN pilot anchor differs from the fresh cohort's reference")
+        payload["pilot_token"] = pilot["scenes"][0]["token"]
+    result = on_astra("fresh-score" if args.stage == "bridge-fresh-score" else "score", args, payload)
     write(summary, result)
     print(json.dumps({key: value for key, value in result.items() if key != "cases"}, indent=2))
     print(f"Paired scores: {summary}")
-    return int(result["compared_scenes"] == 0)
+    return int(result["compared_scenes"] == 0 or (args.stage == "bridge-fresh-score" and result["prediction_failures"]))
 
 
 if __name__ == "__main__":
