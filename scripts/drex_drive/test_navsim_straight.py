@@ -8,12 +8,45 @@ from tempfile import TemporaryDirectory
 import numpy as np
 
 from .driver import Action, DrexMax
-from .navsim_straight import (EXTRA_INPUT_VARIANTS, HOLDOUT_PROTOCOL, PROTOCOL, SPEED_CAP, build_plan, digest,
+from .navsim_straight import (ACTION_PROBES, EXTRA_INPUT_VARIANTS, HOLDOUT_PROTOCOL, PROTOCOL, SPEED_CAP, build_plan, digest,
                              fresh_report, holdout_records, main, on_astra, past_leader_speeds, predict, predict_suite,
-                             read, score, straight_observation, summarize_actions, summarize_inputs, write)
+                             prepare_action_probes, read, score, straight_observation, summarize_actions, summarize_inputs,
+                             write)
 
 
 class StraightPlanTests(unittest.TestCase):
+    def test_action_probes_replace_only_the_specified_command(self):
+        scenes = [dict(token=token, speed_mps=2.0, leaders=[]) for token in ("control", *ACTION_PROBES)]
+        plan = dict(protocol=HOLDOUT_PROTOCOL, speed_cap_mps=SPEED_CAP, scenes=scenes)
+        binding = dict(observation_sha256=digest(plan), prompt_variant="baseline", observation_variant="action-effects")
+        originals = []
+        for scene in scenes:
+            actions = ["maintain"] * 8
+            if scene["token"] in ACTION_PROBES:
+                index, before, _ = ACTION_PROBES[scene["token"]]
+                actions[index] = before
+            commands = iter(actions)
+            originals.append(build_plan(scene, lambda _: (next(commands), None), observation_variant="action-effects"))
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            report = root / "report.json"
+            write(root / "observations.json", plan)
+            write(report, dict(**binding, protocol=HOLDOUT_PROTOCOL, compared_scenes=4, prediction_failures=[]))
+            write(root / "predictions.json", dict(**binding, cases=originals))
+            payload = prepare_action_probes(report)
+            self.assertIsNone(payload["cases"][0]["probe"])
+            for case in payload["cases"][1:]:
+                index, before, after = ACTION_PROBES[case["token"]]
+                probe = case["probe"]
+                self.assertEqual((probe["decision_index"], probe["time_s"], probe["before"], probe["after"]),
+                                 (index, index * 0.5, before, after))
+                self.assertEqual(probe["poses"][:index * 5], case["poses"][:index * 5])
+                self.assertGreater(probe["poses"][-1][0], case["poses"][-1][0])
+            originals[1]["poses"][-1][0] += 1.0
+            write(root / "predictions.json", dict(**binding, cases=originals))
+            with self.assertRaisesRegex(RuntimeError, "Archived command replay differs"):
+                prepare_action_probes(report)
+
     def test_fresh_score_exits_successfully_after_writing_a_complete_report(self):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)

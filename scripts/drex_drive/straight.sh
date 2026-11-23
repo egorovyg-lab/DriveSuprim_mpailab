@@ -35,6 +35,18 @@ slurm_args=(--partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 --gres=g
             --mem=96G --time=00:30:00 --chdir="$repo" --output="$runtime/logs/straight-%j.log")
 
 case "${1:-}" in
+  action-probes)
+    reference=$runtime/runs/navsim-straight-fresh-v1
+    out=$runtime/runs/${DREX_STRAIGHT_NAME:-navsim-straight-action-probes-v1}
+    [[ -s "$reference/observations.json" && -s "$reference/predictions.json" && -s "$reference/report.json" ]] ||
+      { echo 'Complete the original fresh-test before running action-probes' >&2; exit 2; }
+    mkdir -p "$out"
+    [[ ! "$out" -ef "$reference" ]] || { echo 'Use a separate output directory for action-probes' >&2; exit 2; }
+    exec 8>"$out/.comparison.lock"
+    flock -n 8 || { echo 'Action probe scoring is already running' >&2; exit 1; }
+    bash "$repo/scripts/drex_drive/straight.sh" connect
+    python3 -m scripts.drex_drive.navsim_straight bridge-action-probes --out "$out" \
+      --reference-report "$reference/report.json" ;;
   fresh-test|fresh-score|gentle-test)
     reference=$runtime/runs/navsim-straight-fresh-v1
     export DREX_STRAIGHT_ACTIONS=standard
@@ -176,5 +188,5 @@ case "${1:-}" in
       score_args+=(--observation-variant "$DREX_STRAIGHT_OBSERVATION")
     fi
     python3 -m scripts.drex_drive.navsim_straight bridge-score "${score_args[@]}" ;;
-  *) printf 'Usage: %s connect|prepare|submit|score|progress-test|forecast-test|next-tests|fresh-test|fresh-score|gentle-test\n' "$0" >&2; exit 2 ;;
+  *) printf 'Usage: %s connect|prepare|submit|score|progress-test|forecast-test|next-tests|fresh-test|fresh-score|gentle-test|action-probes\n' "$0" >&2; exit 2 ;;
 esac

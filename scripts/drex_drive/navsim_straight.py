@@ -25,6 +25,12 @@ ACCEL_CAP = 2.0
 HORIZON = POSES * STEP
 PROTOCOL = "navsim-straight-train-v1"
 HOLDOUT_PROTOCOL = "navsim-straight-fresh-v1"
+ACTION_PROBE_PROTOCOL = "navsim-straight-action-probes-v1"
+ACTION_PROBES = {
+    "98ad6d2817355b99": (1, "maintain", "proceed"),
+    "9f64bdb900585e9c": (3, "slow", "maintain"),
+    "3643e0160ea75932": (0, "slow", "maintain"),
+}
 BASE_INSTRUCTIONS = (
     "Choose the longitudinal action for the next 0.5 seconds on a straight road. Maintain a clear gap "
     "while making forward progress within the speed limit. There is no destination stop in this horizon. "
@@ -701,6 +707,105 @@ def fresh_report(plan, keys, safety, compared, failed, pilot_token):
             "sessions": sessions, "cases": compared}
 
 
+def prepare_action_probes(reference_report):
+    reference_root = reference_report.parent
+    plan = read(reference_root / "observations.json")
+    predictions = read(reference_root / "predictions.json")
+    reference = read(reference_report)
+    tokens = [record["token"] for record in plan["scenes"]]
+    if (plan["protocol"] != HOLDOUT_PROTOCOL or reference["protocol"] != HOLDOUT_PROTOCOL
+            or plan["speed_cap_mps"] != SPEED_CAP or len(tokens) != len(set(tokens))
+            or not set(ACTION_PROBES).issubset(tokens)
+            or tokens != [row["token"] for row in predictions["cases"]]
+            or reference["compared_scenes"] != len(tokens) or reference["prediction_failures"]
+            or any(document.get("action_variant", "standard") != "standard"
+                   or document["observation_sha256"] != digest(plan)
+                   or (document["prompt_variant"], document["observation_variant"]) != ("baseline", "action-effects")
+                   for document in (predictions, reference))):
+        raise RuntimeError("Action probes require the completed standard action-effects experiment")
+
+    cases = []
+    for record, original in zip(plan["scenes"], predictions["cases"]):
+        token = record["token"]
+        actions = [decision["action"] for decision in original["decisions"]]
+        if len(actions) != POSES // ACTION_STEPS:
+            raise RuntimeError(f"Incomplete archived command sequence for {token}")
+        commands = iter(actions)
+        replay = build_plan(record, lambda _: (next(commands), None), observation_variant="action-effects")
+        if replay["poses"] != original["poses"]:
+            raise RuntimeError(f"Archived command replay differs for {token}")
+        probe = None
+        if token in ACTION_PROBES:
+            index, before, after = ACTION_PROBES[token]
+            if actions[index] != before:
+                raise RuntimeError(f"Archived action changed at {index * ACTION_STEPS * STEP:g} s for {token}")
+            actions[index] = after
+            commands = iter(actions)
+            changed = build_plan(record, lambda _: (next(commands), None), observation_variant="action-effects")
+            probe = {"decision_index": index, "time_s": index * ACTION_STEPS * STEP, "before": before,
+                     "after": after, "poses": changed["poses"]}
+        cases.append({"token": token, "poses": original["poses"], "probe": probe})
+    return {"plan": plan, "reference": reference, "cases": cases}
+
+
+def score_action_probes(args, payload):
+    import real_data
+    from math import isclose
+    from rollout_replay import bound_context
+    from transfer import sha
+
+    plan, reference = payload["plan"], payload["reference"]
+    archive, candidates, anchor_id = source_context(args.package, args.source)
+    tokens = [row["token"] for row in plan["scenes"]]
+    if (plan != read(args.cache_root / "observations.json") or plan["anchor_identity_sha256"] != anchor_id
+            or reference["observation_sha256"] != digest(plan)
+            or reference["teacher_checkpoint_sha256"] != plan["teacher_checkpoint_sha256"]
+            or any(tokens != [row["token"] for row in rows] for rows in (payload["cases"], reference["cases"]))):
+        raise RuntimeError("Action probes do not match the frozen Astra cohort")
+    anchor_token = reference["baseline_parity_token"]
+    if anchor_token not in {row["token"] for row in archive}:
+        raise RuntimeError("Original TRAIN scorer reference is missing")
+    _, _, _, template, _ = bound_context(args.package, args.repo, [candidates[anchor_token][0]])
+    keys = ("pdm_score", *real_data.METRICS)
+    caches = read(args.cache_root / "cache_index.json")
+    compared = []
+    for record, case, scores in zip(plan["scenes"], payload["cases"], reference["cases"]):
+        token = record["token"]
+        cache = caches[token]
+        if sha(Path(cache["path"])) != record["cache_sha256"]:
+            raise RuntimeError(f"Metric cache changed for {token}")
+        original = raw_score(cache, checked_straight_poses(case), template, keys)
+        if any(not isclose(original[key], scores["drex"][key], rel_tol=1e-7, abs_tol=1e-8) for key in keys):
+            raise RuntimeError(f"Archived Drex PDM components did not reproduce for {token}")
+        probe = case["probe"]
+        if token in ACTION_PROBES:
+            if probe is None or (probe["decision_index"], probe["before"], probe["after"]) != ACTION_PROBES[token]:
+                raise RuntimeError(f"Unexpected command replacement for {token}")
+            changed = raw_score(cache, checked_straight_poses({"token": token, **probe}), template, keys)
+        else:
+            if probe is not None:
+                raise RuntimeError(f"Unexpected change to control scene {token}")
+            changed = original
+        delta = {key: changed[key] - original[key] for key in keys}
+        compared.append({"token": token, "session_id": record["session_id"],
+                         "edit": None if probe is None else {key: val for key, val in probe.items() if key != "poses"},
+                         "original_distance_m": case["poses"][-1][0],
+                         "edited_distance_m": (probe or case)["poses"][-1][0],
+                         "ds_archived": scores["ds"], "original_drex": original, "edited_drex": changed,
+                         "delta_vs_original": delta, "delta_vs_ds": {key: changed[key] - scores["ds"][key] for key in keys}})
+    edited = [row for row in compared if row["edit"] is not None]
+    return {"protocol": ACTION_PROBE_PROTOCOL, "observation_sha256": digest(plan),
+            "reproduced_original_scenes": len(compared), "edited_scenes": len(edited),
+            "mean_pdm": {name: mean(row[name]["pdm_score"] for row in compared)
+                         for name in ("ds_archived", "original_drex", "edited_drex")},
+            "mean_delta_on_edited_scenes": {key: mean(row["delta_vs_original"][key] for row in edited) for key in keys},
+            "mean_delta_on_all_scenes": {key: mean(row["delta_vs_original"][key] for row in compared) for key in keys},
+            "safety_regressions_vs_original": {
+                key: sum(row["delta_vs_original"][key] < -1e-8 for row in edited) for key in real_data.SAFETY},
+            "comfort_regressions_vs_original": sum(row["delta_vs_original"]["history_comfort"] < -1e-8 for row in edited),
+            "cases": compared}
+
+
 def summarize_inputs(root, reference_report):
     reference = read(reference_report)
     by_token = {case["token"]: case for case in reference["cases"]}
@@ -803,11 +908,13 @@ def on_astra(stage, args, payload=None):
               f"CUDA_VISIBLE_DEVICES={gpu}", "OMP_NUM_THREADS=2", "OPENBLAS_NUM_THREADS=2", "MKL_NUM_THREADS=2",
               "python", "-B", "-c", Path(__file__).read_text(encoding="utf-8"), stage,
               "--package", package, "--source", source, "--repo", repo, "--limit", str(args.limit)]
-    if stage in ("fresh-prepare", "fresh-score"):
+    if stage in ("fresh-prepare", "fresh-score", "score-action-probes"):
         root = "/workspace/exp_v2/drivemem_memory"
-        acquisition = os.environ.get("DREX_ASTRA_ACQUISITION", f"{root}/selector_data_expansion_v2")
         cache_root = os.environ.get("DREX_ASTRA_FRESH_CACHE", f"{root}/{HOLDOUT_PROTOCOL}")
-        remote.extend(["--acquisition", acquisition, "--cache-root", cache_root])
+        remote.extend(["--cache-root", cache_root])
+        if stage != "score-action-probes":
+            acquisition = os.environ.get("DREX_ASTRA_ACQUISITION", f"{root}/selector_data_expansion_v2")
+            remote.extend(["--acquisition", acquisition])
     if stage == "fresh-score":
         remote.extend(["--ds-device", ds_device])
     finished = subprocess.run(["ssh", "-T", "-S", control, "-o", "BatchMode=yes", "-p", port, "--", host,
@@ -823,7 +930,7 @@ def main():
     parser.add_argument("stage", choices=("prepare", "predict", "score", "history", "predict-suite",
                                           "fresh-prepare", "fresh-score", "bridge-fresh-prepare", "bridge-fresh-score",
                                           "bridge-prepare", "bridge-score", "bridge-history", "summarize-inputs",
-                                          "summarize-actions"))
+                                          "summarize-actions", "score-action-probes", "bridge-action-probes"))
     parser.add_argument("--package", type=Path)
     parser.add_argument("--source", type=Path)
     parser.add_argument("--repo", type=Path)
@@ -841,11 +948,13 @@ def main():
     args = parser.parse_args()
     if args.limit < 1:
         parser.error("--limit must be positive")
-    if args.stage in ("prepare", "score", "history", "fresh-prepare", "fresh-score"):
+    if args.stage in ("prepare", "score", "history", "fresh-prepare", "fresh-score", "score-action-probes"):
         if None in (args.package, args.source, args.repo):
             parser.error("Astra stages require --package, --source and --repo")
         if args.stage in ("fresh-prepare", "fresh-score") and None in (args.acquisition, args.cache_root):
             parser.error("Fresh Astra stages require --acquisition and --cache-root")
+        if args.stage == "score-action-probes" and args.cache_root is None:
+            parser.error("Action probes require the existing Astra --cache-root")
         with redirect_stdout(sys.stderr):
             if args.stage == "prepare":
                 result = prepare(args.package, args.source, args.repo, args.limit)
@@ -855,12 +964,25 @@ def main():
                 result = fresh_prepare(args)
             elif args.stage == "fresh-score":
                 result = fresh_score(args, json.load(sys.stdin))
+            elif args.stage == "score-action-probes":
+                result = score_action_probes(args, json.load(sys.stdin))
             else:
                 result = score(args.package, args.source, args.repo, json.load(sys.stdin))
         print(json.dumps(result, allow_nan=False))
         return 0
     if args.out is None:
         parser.error("--out must point to the experiment directory")
+    if args.stage == "bridge-action-probes":
+        if args.reference_report is None:
+            parser.error("--reference-report must point to the completed standard action-effects report")
+        payload = prepare_action_probes(args.reference_report)
+        result = on_astra("score-action-probes", args, payload)
+        args.out.mkdir(parents=True, exist_ok=True)
+        report = args.out / "report.json"
+        write(report, result)
+        print(json.dumps({key: value for key, value in result.items() if key != "cases"}, indent=2))
+        print(f"Action probes scored on Astra: {report}")
+        return 0
     if args.stage == "summarize-actions":
         if args.reference_report is None:
             parser.error("--reference-report must point to the completed standard action-effects report")
