@@ -9,11 +9,20 @@ import numpy as np
 
 from .driver import Action
 from .navsim_straight import (EXTRA_INPUT_VARIANTS, HOLDOUT_PROTOCOL, PROTOCOL, SPEED_CAP, build_plan, digest,
-                             fresh_report, holdout_records, past_leader_speeds, predict, predict_suite, read,
-                             score, straight_observation, summarize_inputs, write)
+                             fresh_report, holdout_records, on_astra, past_leader_speeds, predict, predict_suite,
+                             read, score, straight_observation, summarize_inputs, write)
 
 
 class StraightPlanTests(unittest.TestCase):
+    def test_fresh_score_passes_an_explicit_cpu_device_to_astra(self):
+        path = "scripts.drex_drive.navsim_straight.subprocess.run"
+        with patch.dict("os.environ", {"DREX_ASTRA_DS_DEVICE": "cpu", "DREX_ASTRA_DS_GPU": "2"}):
+            with patch(path, return_value=SimpleNamespace(stdout="{}", returncode=0)) as run:
+                self.assertEqual(on_astra("fresh-score", SimpleNamespace(limit=8)), {})
+        remote = run.call_args.args[0][-1]
+        self.assertIn("--ds-device cpu", remote)
+        self.assertNotIn("CUDA_VISIBLE_DEVICES=2", remote)
+
     def test_holdout_rejects_a_session_seen_in_the_original_audit(self):
         held = dict(token="a", session_id="hold", timestamp_us=10, role="holdout")
         train = dict(token="b", session_id="train", timestamp_us=20, role="train")

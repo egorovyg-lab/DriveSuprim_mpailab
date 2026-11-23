@@ -539,7 +539,7 @@ def fresh_prepare(args):
         return plan
 
 
-def native_ds_predictions(cfg, rows):
+def native_ds_predictions(cfg, rows, device):
     import torch
     from hydra.utils import instantiate
     from torch.utils.data import DataLoader
@@ -547,14 +547,15 @@ def native_ds_predictions(cfg, rows):
     from navsim.planning.script.run_drivemem_oracle_pilot import on_device
     from navsim.planning.training.dataset_ssl import DatasetSSL
 
-    if not torch.cuda.is_available():
-        raise RuntimeError("CUDA is required on Astra to regenerate original DriveSuprim predictions")
+    if device == "cuda" and not torch.cuda.is_available():
+        raise RuntimeError("CUDA is unavailable in the Astra container. Retry with DREX_ASTRA_DS_DEVICE=cpu "
+                           "or restore GPU access")
     if cfg.agent.config.training or cfg.agent.config.inference.model != "teacher":
         raise RuntimeError("Original DriveSuprim evaluation teacher required")
     agent = instantiate(cfg.agent)
     agent.initialize()
     agent.eval()
-    agent.to("cuda")
+    agent.to(device)
     agent._config.inference.export_candidates = False
     predictions = {}
     for log in sorted({row["log_name"] for row in rows}):
@@ -570,7 +571,7 @@ def native_ds_predictions(cfg, rows):
         for batch in DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0):
             token = str(batch[2][0])
             with torch.no_grad():
-                prediction, _ = agent.forward(on_device(batch, "cuda"))
+                prediction, _ = agent.forward(on_device(batch, device))
             predictions[token] = prediction["final_traj"].cpu().numpy()[0].copy()
     return predictions
 
@@ -630,7 +631,7 @@ def fresh_score(args, payload):
     token_set = set(tokens)
     selected = [row for row in split["records"] if row["token"] in token_set]
     verify_fresh_images(args, requests, cfg, selected)
-    native = native_ds_predictions(cfg, [pilot_row, *selected])
+    native = native_ds_predictions(cfg, [pilot_row, *selected], args.ds_device)
     if not np.allclose(native[pilot_token], vocab[pilot["candidate_vocab"]], rtol=0, atol=1e-6):
         raise RuntimeError("Recomputed DriveSuprim trajectory differs from the archived pilot baseline")
     reproduced = raw_score(old_caches[pilot_token], native[pilot_token], template, keys)
@@ -651,7 +652,8 @@ def fresh_score(args, payload):
         drex = raw_score(cache, checked_straight_poses(prediction), template, keys)
         compared.append({"token": token, "session_id": record["session_id"], "ds": baseline, "drex": drex,
                          "delta": {key: drex[key] - baseline[key] for key in keys}})
-    return fresh_report(plan, keys, real_data.SAFETY, compared, failed, pilot_token)
+    result = fresh_report(plan, keys, real_data.SAFETY, compared, failed, pilot_token)
+    return {**result, "ds_inference_device": args.ds_device}
 
 
 def fresh_report(plan, keys, safety, compared, failed, pilot_token):
@@ -723,7 +725,8 @@ def on_astra(stage, args, payload=None):
     control = os.environ.get("DREX_TRANSFER_CONTROL", str(Path.home() / ".ssh/drex-astra-transfer.sock"))
     host = os.environ.get("DREX_ASTRA_HOST", "egorov@93.180.62.99")
     port = os.environ.get("DREX_ASTRA_PORT", "27434")
-    gpu = os.environ.get("DREX_ASTRA_DS_GPU", "0") if stage == "fresh-score" else ""
+    ds_device = os.environ.get("DREX_ASTRA_DS_DEVICE", "cuda")
+    gpu = os.environ.get("DREX_ASTRA_DS_GPU", "0") if stage == "fresh-score" and ds_device == "cuda" else ""
     remote = ["docker", "exec", "-i", "-w", repo, container, "env", f"PYTHONPATH={source}/tools:{repo}",
               f"CUDA_VISIBLE_DEVICES={gpu}", "OMP_NUM_THREADS=2", "OPENBLAS_NUM_THREADS=2", "MKL_NUM_THREADS=2",
               "python", "-B", "-c", Path(__file__).read_text(encoding="utf-8"), stage,
@@ -733,9 +736,13 @@ def on_astra(stage, args, payload=None):
         acquisition = os.environ.get("DREX_ASTRA_ACQUISITION", f"{root}/selector_data_expansion_v2")
         cache_root = os.environ.get("DREX_ASTRA_FRESH_CACHE", f"{root}/{HOLDOUT_PROTOCOL}")
         remote.extend(["--acquisition", acquisition, "--cache-root", cache_root])
+    if stage == "fresh-score":
+        remote.extend(["--ds-device", ds_device])
     finished = subprocess.run(["ssh", "-T", "-S", control, "-o", "BatchMode=yes", "-p", port, "--", host,
                                shlex.join(remote)], input=json.dumps(payload) if payload is not None else "",
-                              text=True, encoding="utf-8", stdout=subprocess.PIPE, check=True)
+                              text=True, encoding="utf-8", stdout=subprocess.PIPE)
+    if finished.returncode:
+        raise SystemExit(f"Astra stage {stage} failed with exit status {finished.returncode}. See stderr above.")
     return json.loads(finished.stdout)
 
 
@@ -750,6 +757,7 @@ def main():
     parser.add_argument("--out", type=Path)
     parser.add_argument("--acquisition", type=Path)
     parser.add_argument("--cache-root", type=Path)
+    parser.add_argument("--ds-device", choices=("cuda", "cpu"), default="cuda")
     parser.add_argument("--weights", type=Path)
     parser.add_argument("--pilot-observations", type=Path)
     parser.add_argument("--reference-report", type=Path)

@@ -34,7 +34,7 @@ slurm_args=(--partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 --gres=g
             --mem=96G --time=00:30:00 --chdir="$repo" --output="$runtime/logs/straight-%j.log")
 
 case "${1:-}" in
-  fresh-test)
+  fresh-test|fresh-score)
     export DREX_STRAIGHT_NAME=${DREX_STRAIGHT_NAME:-navsim-straight-fresh-v1}
     export DREX_STRAIGHT_PROMPT=baseline DREX_STRAIGHT_OBSERVATION=action-effects
     out=$runtime/runs/$DREX_STRAIGHT_NAME
@@ -46,18 +46,22 @@ case "${1:-}" in
     script="$repo/scripts/drex_drive/straight.sh"
     module=scripts.drex_drive.navsim_straight
     bash "$script" connect
-    prepared=0
-    python3 -m "$module" bridge-fresh-prepare --out "$out" || prepared=$?
-    if (( prepared == 3 )); then
-      cat "$out/report.json"
-      exit 0
-    fi
-    (( prepared == 0 )) || exit "$prepared"
-    if [[ ! -s "$out/predictions.json" ]]; then
-      if ! bash "$script" submit --wait; then
-        [[ -s "$out/predictions.json" ]] || exit 1
+    if [[ $1 == fresh-test ]]; then
+      prepared=0
+      python3 -m "$module" bridge-fresh-prepare --out "$out" || prepared=$?
+      if (( prepared == 3 )); then
+        cat "$out/report.json"
+        exit 0
+      fi
+      (( prepared == 0 )) || exit "$prepared"
+      if [[ ! -s "$out/predictions.json" ]]; then
+        if ! bash "$script" submit --wait; then
+          [[ -s "$out/predictions.json" ]] || exit 1
+        fi
       fi
     fi
+    [[ -s "$out/observations.json" && -s "$out/predictions.json" ]] ||
+      { echo 'Run fresh-test first to prepare observations and Drex predictions' >&2; exit 2; }
     python3 -m "$module" bridge-fresh-score --out "$out" --pilot-observations "$pilot" \
       --prompt-variant baseline --observation-variant action-effects ;;
   next-tests)
@@ -151,5 +155,5 @@ case "${1:-}" in
       score_args+=(--observation-variant "$DREX_STRAIGHT_OBSERVATION")
     fi
     python3 -m scripts.drex_drive.navsim_straight bridge-score "${score_args[@]}" ;;
-  *) printf 'Usage: %s connect|prepare|submit|score|progress-test|forecast-test|next-tests|fresh-test\n' "$0" >&2; exit 2 ;;
+  *) printf 'Usage: %s connect|prepare|submit|score|progress-test|forecast-test|next-tests|fresh-test|fresh-score\n' "$0" >&2; exit 2 ;;
 esac
