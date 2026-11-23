@@ -37,6 +37,7 @@ PROMPT_VARIANTS = {
         "at each decision."
     ),
 }
+OBSERVATION_VARIANTS = ("radar", "gap-forecast")
 
 
 def digest(value):
@@ -196,7 +197,7 @@ def prepare(package, source, repo, limit):
             "rejected": dict(rejected), "scenes": rows, "speed_cap_mps": SPEED_CAP}
 
 
-def build_plan(record, choose, prompt_variant="baseline"):
+def build_plan(record, choose, prompt_variant="baseline", observation_variant="radar"):
     from .driver import request_for
     from .simulation import ACCELERATION, Action, Vehicle
 
@@ -207,10 +208,14 @@ def build_plan(record, choose, prompt_variant="baseline"):
     for step in range(0, POSES, ACTION_STEPS):
         elapsed = round(step * STEP, 9)
         lead = min(record["leaders"], key=lambda a: a["gap_m"] + elapsed * a["speed_mps"], default=None)
-        radar = None if lead is None else {
-            "range_m": round(lead["gap_m"] + elapsed * lead["speed_mps"] - ego.front_m, 2),
-            "closing_speed_mps": round(ego.speed_mps - lead["speed_mps"], 2),
-        }
+        radar = None
+        if lead is not None:
+            gap = lead["gap_m"] + elapsed * lead["speed_mps"] - ego.front_m
+            closing_speed = ego.speed_mps - lead["speed_mps"]
+            radar = {"range_m": round(gap, 2), "closing_speed_mps": round(closing_speed, 2)}
+            if observation_variant == "gap-forecast":
+                radar["gap_if_maintain_1s_m"] = round(gap - closing_speed, 2)
+                radar["gap_if_maintain_2s_m"] = round(gap - 2 * closing_speed, 2)
         row = request_for({"ego_speed_mps": round(ego.speed_mps, 2), "previous_ego_speed_mps": previous_speed,
                            "speed_limit_mps": SPEED_CAP, "lead_radar": radar, "previous_action": previous_action.value})
         row["question"]["instructions"] = BASE_INSTRUCTIONS + PROMPT_VARIANTS[prompt_variant]
@@ -225,18 +230,19 @@ def build_plan(record, choose, prompt_variant="baseline"):
     return {"token": record["token"], "poses": poses, "decisions": decisions}
 
 
-def predict(plan, weights, out, prompt_variant="baseline"):
+def predict(plan, weights, out, prompt_variant="baseline", observation_variant="radar"):
     from .driver import DrexMax
 
     if plan["protocol"] != PROTOCOL or plan["speed_cap_mps"] != SPEED_CAP or not plan["scenes"]:
         raise ValueError("Unsupported or empty straight-scene package")
     started = perf_counter()
     choose = DrexMax(weights)
-    report = {"observation_sha256": digest(plan), "prompt_variant": prompt_variant, "model_path": str(weights),
+    report = {"observation_sha256": digest(plan), "prompt_variant": prompt_variant,
+              "observation_variant": observation_variant, "model_path": str(weights),
               "model_load_wall_s": perf_counter() - started, "cases": []}
     for record in plan["scenes"]:
         try:
-            outcome = build_plan(record, choose, prompt_variant)
+            outcome = build_plan(record, choose, prompt_variant, observation_variant)
         except (ValueError, RuntimeError) as exc:
             outcome = {"token": record["token"], "error": f"{type(exc).__name__}: {exc}"}
         report["cases"].append(outcome)
@@ -272,8 +278,10 @@ def score(package, source, repo, payload):
 
     plan, predictions = payload["plan"], payload["predictions"]
     prompt_variant = predictions.get("prompt_variant", "baseline")
+    observation_variant = predictions.get("observation_variant", "radar")
     _, candidates, source_id = source_context(package, source)
-    if (plan["protocol"] != PROTOCOL or prompt_variant not in PROMPT_VARIANTS or plan["anchor_identity_sha256"] != source_id
+    if (plan["protocol"] != PROTOCOL or prompt_variant not in PROMPT_VARIANTS
+            or observation_variant not in OBSERVATION_VARIANTS or plan["anchor_identity_sha256"] != source_id
             or predictions["observation_sha256"] != digest(plan)
             or [s["token"] for s in plan["scenes"]] != [c["token"] for c in predictions["cases"]]):
         raise RuntimeError("Observation, prediction or original audit identity differs")
@@ -306,7 +314,8 @@ def score(package, source, repo, payload):
         drex = raw_score(cache, poses, template, keys)
         compared.append({"token": token, "session_id": record["session_id"], "ds": baseline, "drex": drex,
                          "delta": {key: drex[key] - baseline[key] for key in keys}})
-    return {"protocol": PROTOCOL, "prompt_variant": prompt_variant, "observation_sha256": digest(plan),
+    return {"protocol": PROTOCOL, "prompt_variant": prompt_variant, "observation_variant": observation_variant,
+            "observation_sha256": digest(plan),
             "planned_scenes": len(plan["scenes"]), "compared_scenes": len(compared),
             "prediction_failures": failed,
             "mean_delta": {key: mean(row["delta"][key] for row in compared) for key in keys} if compared else None,
@@ -340,7 +349,8 @@ def main():
     parser.add_argument("--repo", type=Path)
     parser.add_argument("--out", type=Path)
     parser.add_argument("--weights", type=Path)
-    parser.add_argument("--prompt-variant", choices=PROMPT_VARIANTS, default="baseline")
+    parser.add_argument("--prompt-variant", choices=PROMPT_VARIANTS)
+    parser.add_argument("--observation-variant", choices=OBSERVATION_VARIANTS)
     parser.add_argument("--limit", type=int, default=8)
     args = parser.parse_args()
     if args.limit < 1:
@@ -372,10 +382,15 @@ def main():
             parser.error("--weights must point to the Drex Max weights directory")
         if predictions.exists():
             parser.error("Use a new run name to write a different prediction file")
-        return int(predict(read(observations), args.weights, predictions, args.prompt_variant))
+        return int(predict(read(observations), args.weights, predictions,
+                           args.prompt_variant or "baseline", args.observation_variant or "radar"))
     plan, output = read(observations), read(predictions)
     if len(plan["scenes"]) != len(output["cases"]):
         parser.error("Run scoring after the GPU job has written all planned case results")
+    if args.prompt_variant and output.get("prompt_variant", "baseline") != args.prompt_variant:
+        parser.error("The saved predictions use a different prompt variant")
+    if args.observation_variant and output.get("observation_variant", "radar") != args.observation_variant:
+        parser.error("The saved predictions use a different observation variant")
     result = on_astra("score", args, {"plan": plan, "predictions": output})
     write(summary, result)
     print(json.dumps({key: value for key, value in result.items() if key != "cases"}, indent=2))

@@ -77,6 +77,23 @@ class StraightPlanTests(unittest.TestCase):
             self.assertIn("Prefer maintain", amended)
             self.assertEqual({**new_question, "instructions": old_question["instructions"]}, old_question)
 
+    def test_gap_forecast_adds_only_two_fields_without_changing_the_prompt(self):
+        record = {"token": "example", "speed_mps": 4.0, "leaders": [{"gap_m": 3.0, "speed_mps": 2.0}]}
+        choose = Mock(return_value=(Action.MAINTAIN, None))
+        before = build_plan(record, choose)
+        after = build_plan(record, choose, observation_variant="gap-forecast")
+        self.assertEqual(before["poses"], after["poses"])
+        for index, (original, augmented) in enumerate(zip(before["decisions"], after["decisions"])):
+            old_row, new_row = original["request"], augmented["request"]
+            self.assertEqual(new_row["question"], old_row["question"])
+            self.assertEqual(new_row["state"], {**old_row["state"], "lead_radar": {
+                **old_row["state"]["lead_radar"],
+                "gap_if_maintain_1s_m": 1.0 - index,
+                "gap_if_maintain_2s_m": -1.0 - index,
+            }})
+        empty_road = build_plan({**record, "leaders": []}, choose, observation_variant="gap-forecast")
+        self.assertIsNone(empty_road["decisions"][0]["request"]["state"]["lead_radar"])
+
     def test_paired_scoring_verifies_original_ds_anchor(self):
         record = {"token": "example", "session_id": "session", "cache_sha256": "cache", "speed_mps": 4.0, "leaders": []}
         plan = {"protocol": PROTOCOL, "anchor_identity_sha256": "original", "scenes": [record]}

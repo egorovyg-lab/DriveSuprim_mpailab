@@ -5,11 +5,13 @@ if [[ ${1:-} == --worker ]]; then
   runtime=$2
   out=$3
   prompt=${4:-baseline}
+  observation=${5:-radar}
   exec 9>"$out/.predict.lock"
   flock -n 9 || { echo 'Prediction is already running for this run' >&2; exit 1; }
   export PYTHONPATH="$runtime/upstream"
   exec srun --ntasks=1 "$runtime/venv/bin/python" -m scripts.drex_drive.navsim_straight predict \
-    --out "$out" --weights "$runtime/models/drex-max-v1" --prompt-variant "$prompt"
+    --out "$out" --weights "$runtime/models/drex-max-v1" --prompt-variant "$prompt" \
+    --observation-variant "$observation"
 fi
 
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
@@ -21,15 +23,20 @@ host=${DREX_ASTRA_HOST:-egorov@93.180.62.99}
 port=${DREX_ASTRA_PORT:-27434}
 
 case "${1:-}" in
-  progress-test)
-    export DREX_STRAIGHT_NAME=${DREX_STRAIGHT_NAME:-navsim-straight-progress-v1}
-    export DREX_STRAIGHT_PROMPT=progress
+  progress-test|forecast-test)
+    if [[ $1 == forecast-test ]]; then
+      export DREX_STRAIGHT_NAME=${DREX_STRAIGHT_NAME:-navsim-straight-gap-forecast-v1}
+      export DREX_STRAIGHT_PROMPT=baseline DREX_STRAIGHT_OBSERVATION=gap-forecast
+    else
+      export DREX_STRAIGHT_NAME=${DREX_STRAIGHT_NAME:-navsim-straight-progress-v1}
+      export DREX_STRAIGHT_PROMPT=progress DREX_STRAIGHT_OBSERVATION=radar
+    fi
     out=$runtime/runs/$DREX_STRAIGHT_NAME
     original=$runtime/runs/navsim-straight-train-v1/observations.json
     [[ -s "$original" ]] || { echo 'Original straight-scene observations are missing' >&2; exit 2; }
     mkdir -p "$out"
-    exec 8>"$out/.progress-test.lock"
-    flock -n 8 || { echo 'The prompt comparison is already running' >&2; exit 1; }
+    exec 8>"$out/.comparison.lock"
+    flock -n 8 || { echo 'This comparison is already running' >&2; exit 1; }
     if [[ ! -e "$out/observations.json" ]]; then
       cp -- "$original" "$out/observations.json"
     fi
@@ -61,8 +68,15 @@ case "${1:-}" in
       --nodes=1 --ntasks=1 --gres=gpu:1 --cpus-per-task=4 --mem=96G --time=00:30:00 \
       --chdir="$repo" --output="$runtime/logs/straight-%j.log" \
       "${wait_args[@]}" "$repo/scripts/drex_drive/straight.sh" --worker "$runtime" "$out" \
-      "${DREX_STRAIGHT_PROMPT:-baseline}" ;;
+      "${DREX_STRAIGHT_PROMPT:-baseline}" "${DREX_STRAIGHT_OBSERVATION:-radar}" ;;
   score)
-    python3 -m scripts.drex_drive.navsim_straight bridge-score --out "$out" ;;
-  *) printf 'Usage: %s connect|prepare|submit|score|progress-test\n' "$0" >&2; exit 2 ;;
+    score_args=(--out "$out")
+    if [[ -n ${DREX_STRAIGHT_PROMPT:-} ]]; then
+      score_args+=(--prompt-variant "$DREX_STRAIGHT_PROMPT")
+    fi
+    if [[ -n ${DREX_STRAIGHT_OBSERVATION:-} ]]; then
+      score_args+=(--observation-variant "$DREX_STRAIGHT_OBSERVATION")
+    fi
+    python3 -m scripts.drex_drive.navsim_straight bridge-score "${score_args[@]}" ;;
+  *) printf 'Usage: %s connect|prepare|submit|score|progress-test|forecast-test\n' "$0" >&2; exit 2 ;;
 esac
