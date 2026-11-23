@@ -82,6 +82,10 @@ class DrexMax:
         self.verified_frame_counts: set[int] = set()
 
     def __call__(self, request: dict) -> tuple[Action, dict[str, float]]:
+        choice, probabilities = self.choose(request)
+        return Action(choice), probabilities
+
+    def choose(self, request: dict) -> tuple[str, dict[str, float]]:
         frame_count = len(request.get("images", ()))
         if frame_count and frame_count not in self.verified_frame_counts:
             inputs = self.model.prepare([request], max_length=2048).inputs
@@ -97,7 +101,7 @@ class DrexMax:
                 or not isclose(sum(values), 1.0, rel_tol=0.0, abs_tol=1e-5)):
             raise ValueError("Drex Max returned an invalid choice distribution")
         probabilities = dict(zip(keys, values))
-        return Action(max(probabilities, key=probabilities.__getitem__)), probabilities
+        return max(probabilities, key=probabilities.__getitem__), probabilities
 
 
 def reference(request: dict) -> tuple[Action, None]:

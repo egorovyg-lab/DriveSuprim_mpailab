@@ -15,12 +15,13 @@ if [[ ${1:-} == --worker ]]; then
   out=$3
   prompt=${4:-baseline}
   observation=${5:-radar}
+  actions=${6:-standard}
   exec 9>"$out/.predict.lock"
   flock -n 9 || { echo 'Prediction is already running for this run' >&2; exit 1; }
   export PYTHONPATH="$runtime/upstream"
   exec srun --ntasks=1 "$runtime/venv/bin/python" -m scripts.drex_drive.navsim_straight predict \
     --out "$out" --weights "$runtime/models/drex-max-v1" --prompt-variant "$prompt" \
-    --observation-variant "$observation"
+    --observation-variant "$observation" --action-variant "$actions"
 fi
 
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
@@ -34,8 +35,16 @@ slurm_args=(--partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 --gres=g
             --mem=96G --time=00:30:00 --chdir="$repo" --output="$runtime/logs/straight-%j.log")
 
 case "${1:-}" in
-  fresh-test|fresh-score)
-    export DREX_STRAIGHT_NAME=${DREX_STRAIGHT_NAME:-navsim-straight-fresh-v1}
+  fresh-test|fresh-score|gentle-test)
+    reference=$runtime/runs/navsim-straight-fresh-v1
+    export DREX_STRAIGHT_ACTIONS=standard
+    if [[ $1 == gentle-test ]]; then
+      export DREX_STRAIGHT_NAME=${DREX_STRAIGHT_NAME:-navsim-straight-gentle-v1}
+      export DREX_STRAIGHT_ACTIONS=gentle
+      export DREX_ASTRA_DS_DEVICE=${DREX_ASTRA_DS_DEVICE:-cpu}
+    else
+      export DREX_STRAIGHT_NAME=${DREX_STRAIGHT_NAME:-navsim-straight-fresh-v1}
+    fi
     export DREX_STRAIGHT_PROMPT=baseline DREX_STRAIGHT_OBSERVATION=action-effects
     out=$runtime/runs/$DREX_STRAIGHT_NAME
     pilot=$runtime/runs/navsim-straight-train-v1/observations.json
@@ -54,16 +63,28 @@ case "${1:-}" in
         exit 0
       fi
       (( prepared == 0 )) || exit "$prepared"
-      if [[ ! -s "$out/predictions.json" ]]; then
-        if ! bash "$script" submit --wait; then
-          [[ -s "$out/predictions.json" ]] || exit 1
-        fi
+    elif [[ $1 == gentle-test ]]; then
+      [[ -s "$reference/observations.json" && -s "$reference/predictions.json" && -s "$reference/report.json" ]] ||
+        { echo 'Complete the original fresh-test before running gentle-test' >&2; exit 2; }
+      [[ ! "$out" -ef "$reference" ]] || { echo 'Use a separate output directory for gentle-test' >&2; exit 2; }
+      if [[ ! -e "$out/observations.json" ]]; then
+        cp -- "$reference/observations.json" "$out/observations.json"
+      fi
+      cmp -s "$reference/observations.json" "$out/observations.json" ||
+        { echo 'The gentle test observations differ from the original cohort' >&2; exit 2; }
+    fi
+    if [[ $1 != fresh-score && ! -s "$out/predictions.json" ]]; then
+      if ! bash "$script" submit --wait; then
+        [[ -s "$out/predictions.json" ]] || exit 1
       fi
     fi
     [[ -s "$out/observations.json" && -s "$out/predictions.json" ]] ||
       { echo 'Run fresh-test first to prepare observations and Drex predictions' >&2; exit 2; }
     python3 -m "$module" bridge-fresh-score --out "$out" --pilot-observations "$pilot" \
-      --prompt-variant baseline --observation-variant action-effects ;;
+      --prompt-variant baseline --observation-variant action-effects --action-variant "$DREX_STRAIGHT_ACTIONS"
+    if [[ $1 == gentle-test ]]; then
+      python3 -m "$module" summarize-actions --out "$out" --reference-report "$reference/report.json"
+    fi ;;
   next-tests)
     out=$runtime/runs/${DREX_STRAIGHT_NAME:-navsim-straight-extra-inputs-v1}
     original=$runtime/runs/navsim-straight-train-v1/observations.json
@@ -145,7 +166,7 @@ case "${1:-}" in
     fi
     exec sbatch --job-name=drex-navsim-straight "${slurm_args[@]}" "${wait_args[@]}" \
       "$repo/scripts/drex_drive/straight.sh" --worker "$runtime" "$out" \
-      "${DREX_STRAIGHT_PROMPT:-baseline}" "${DREX_STRAIGHT_OBSERVATION:-radar}" ;;
+      "${DREX_STRAIGHT_PROMPT:-baseline}" "${DREX_STRAIGHT_OBSERVATION:-radar}" "${DREX_STRAIGHT_ACTIONS:-standard}" ;;
   score)
     score_args=(--out "$out")
     if [[ -n ${DREX_STRAIGHT_PROMPT:-} ]]; then
@@ -155,5 +176,5 @@ case "${1:-}" in
       score_args+=(--observation-variant "$DREX_STRAIGHT_OBSERVATION")
     fi
     python3 -m scripts.drex_drive.navsim_straight bridge-score "${score_args[@]}" ;;
-  *) printf 'Usage: %s connect|prepare|submit|score|progress-test|forecast-test|next-tests|fresh-test|fresh-score\n' "$0" >&2; exit 2 ;;
+  *) printf 'Usage: %s connect|prepare|submit|score|progress-test|forecast-test|next-tests|fresh-test|fresh-score|gentle-test\n' "$0" >&2; exit 2 ;;
 esac

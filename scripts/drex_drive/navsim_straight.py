@@ -41,6 +41,11 @@ PROMPT_VARIANTS = {
 }
 EXTRA_INPUT_VARIANTS = ("leader-history", "action-effects")
 OBSERVATION_VARIANTS = ("radar", "gap-forecast", *EXTRA_INPUT_VARIANTS)
+ACTION_VARIANTS = ("standard", "gentle")
+GENTLE_ACTIONS = {
+    "gentle_proceed": (1.0, "Increase speed gently at 1 m/s²."),
+    "gentle_slow": (-0.75, "Reduce speed gently at 0.75 m/s²."),
+}
 PREVIEW_SECONDS = 2.0
 
 
@@ -249,31 +254,32 @@ def histories_by_scene(plan, history):
     return {r["token"]: r["leader_history"] for r in history["scenes"]}
 
 
-def action_effects(ego, gap, lead_speed):
-    from .simulation import ACCELERATION, Action
-
+def action_effects(ego, gap, lead_speed, accelerations):
     previews = {}
-    for action, acceleration in ACCELERATION.items():
+    for action, acceleration in accelerations.items():
         simulated = ego
         min_gap = gap
         for step in range(round(PREVIEW_SECONDS / STEP)):
-            requested = acceleration if step < ACTION_STEPS else ACCELERATION[Action.MAINTAIN]
+            requested = acceleration if step < ACTION_STEPS else accelerations["maintain"]
             simulated = simulated.advance(requested, SPEED_CAP)
             if gap is not None:
                 next_gap = gap + (step + 1) * STEP * lead_speed - (simulated.front_m - ego.front_m)
                 min_gap = min(min_gap, next_gap)
-        previews[action.value] = {"progress_m": round(simulated.front_m - ego.front_m, 2),
-                                 "minimum_gap_m": None if min_gap is None else round(min_gap, 2)}
+        previews[action] = {"progress_m": round(simulated.front_m - ego.front_m, 2),
+                            "minimum_gap_m": None if min_gap is None else round(min_gap, 2)}
     return previews
 
 
-def build_plan(record, choose, prompt_variant="baseline", observation_variant="radar"):
+def build_plan(record, choose, prompt_variant="baseline", observation_variant="radar", action_variant="standard"):
     from .driver import request_for
     from .simulation import ACCELERATION, Action, Vehicle
 
+    extra_actions = GENTLE_ACTIONS if action_variant == "gentle" else {}
+    accelerations = {action.value: acceleration for action, acceleration in ACCELERATION.items()}
+    accelerations.update({name: acceleration for name, (acceleration, _) in extra_actions.items()})
     ego = Vehicle(0.0, record["speed_mps"])
     poses, decisions = [], []
-    previous_action = Action.MAINTAIN
+    previous_action = Action.MAINTAIN.value
     previous_speed = None
     leaders = record["leaders"]
     histories = record.get("leader_history")
@@ -300,19 +306,24 @@ def build_plan(record, choose, prompt_variant="baseline", observation_variant="r
                     for sample in histories[lead_index]
                 ]
         state = {"ego_speed_mps": round(ego.speed_mps, 2), "previous_ego_speed_mps": previous_speed,
-                 "speed_limit_mps": SPEED_CAP, "lead_radar": radar, "previous_action": previous_action.value}
+                 "speed_limit_mps": SPEED_CAP, "lead_radar": radar, "previous_action": previous_action}
         if observation_variant == "action-effects":
             state["action_effects"] = {"horizon_s": PREVIEW_SECONDS, "apply_action_s": ACTION_STEPS * STEP,
-                                       "after_action": "maintain", "forecast": action_effects(ego, gap, leader_speed)}
+                                       "after_action": "maintain", "forecast": action_effects(ego, gap, leader_speed,
+                                                                                             accelerations)}
         row = request_for(state)
         row["question"]["instructions"] = BASE_INSTRUCTIONS + PROMPT_VARIANTS[prompt_variant]
+        row["question"]["criteria"].update({name: description for name, (_, description) in extra_actions.items()})
         started = perf_counter()
         action, probabilities = choose(row)
-        decisions.append({"time_s": elapsed, "request": row, "action": action.value,
+        action = action.value if isinstance(action, Action) else action
+        if action not in accelerations:
+            raise ValueError(f"Unsupported longitudinal action: {action}")
+        decisions.append({"time_s": elapsed, "request": row, "action": action,
                           "probabilities": probabilities, "wall_seconds": perf_counter() - started})
         previous_action, previous_speed = action, round(ego.speed_mps, 2)
         for _ in range(ACTION_STEPS):
-            ego = ego.advance(ACCELERATION[action], SPEED_CAP)
+            ego = ego.advance(accelerations[action], SPEED_CAP)
             poses.append([ego.front_m, 0.0, 0.0])
     return {"token": record["token"], "poses": poses, "decisions": decisions}
 
@@ -321,26 +332,31 @@ def load_drex(weights):
     from .driver import DrexMax
 
     started = perf_counter()
-    return DrexMax(weights), perf_counter() - started
+    return DrexMax(weights).choose, perf_counter() - started
 
 
-def predict(plan, weights, out, prompt_variant="baseline", observation_variant="radar", history=None, model=None):
+def predict(plan, weights, out, prompt_variant="baseline", observation_variant="radar", history=None, model=None,
+            action_variant="standard"):
     if plan["protocol"] not in (PROTOCOL, HOLDOUT_PROTOCOL) or plan["speed_cap_mps"] != SPEED_CAP or not plan["scenes"]:
         raise ValueError("Unsupported or empty straight-scene package")
     if plan["protocol"] == HOLDOUT_PROTOCOL and (prompt_variant, observation_variant) != ("baseline", "action-effects"):
         raise ValueError("Fresh holdout is fixed to baseline prompt and action-effects")
+    if action_variant not in ACTION_VARIANTS or (action_variant == "gentle" and plan["protocol"] != HOLDOUT_PROTOCOL):
+        raise ValueError("The gentle action experiment requires the frozen straight holdout package")
     histories = histories_by_scene(plan, history) if observation_variant == "leader-history" else None
     choose, load_seconds = model if model is not None else load_drex(weights)
     report = {"observation_sha256": digest(plan), "prompt_variant": prompt_variant,
               "observation_variant": observation_variant, "model_path": str(weights),
               "model_load_wall_s": load_seconds, "cases": []}
+    if plan["protocol"] == HOLDOUT_PROTOCOL:
+        report["action_variant"] = action_variant
     if histories is not None:
         report["history_sha256"] = digest(history)
     for record in plan["scenes"]:
         try:
             if histories is not None:
                 record = {**record, "leader_history": histories[record["token"]]}
-            outcome = build_plan(record, choose, prompt_variant, observation_variant)
+            outcome = build_plan(record, choose, prompt_variant, observation_variant, action_variant)
         except (ValueError, RuntimeError) as exc:
             outcome = {"token": record["token"], "error": f"{type(exc).__name__}: {exc}"}
         report["cases"].append(outcome)
@@ -608,11 +624,13 @@ def fresh_score(args, payload):
 
     cfg, teacher, metadata, split, requests, candidates = fresh_context(args)
     plan, predictions = payload["plan"], payload["predictions"]
+    action_variant = predictions.get("action_variant", "standard")
     pilot_token = payload["pilot_token"]
     tokens = [row["token"] for row in plan["scenes"]]
     if (plan != read(args.cache_root / "observations.json") or any(plan[k] != v for k, v in metadata.items())
             or not tokens or tokens != [row["token"] for row in predictions["cases"]]
             or predictions["observation_sha256"] != digest(plan)
+            or action_variant not in ACTION_VARIANTS
             or (predictions["prompt_variant"], predictions["observation_variant"]) != ("baseline", "action-effects")):
         raise RuntimeError("Fresh holdout observations or predictions do not match the frozen protocol")
     if sha(Path(cfg.agent.checkpoint_path)) != teacher["checkpoint_sha256"]:
@@ -653,7 +671,7 @@ def fresh_score(args, payload):
         compared.append({"token": token, "session_id": record["session_id"], "ds": baseline, "drex": drex,
                          "delta": {key: drex[key] - baseline[key] for key in keys}})
     result = fresh_report(plan, keys, real_data.SAFETY, compared, failed, pilot_token)
-    return {**result, "ds_inference_device": args.ds_device}
+    return {**result, "ds_inference_device": args.ds_device, "action_variant": action_variant}
 
 
 def fresh_report(plan, keys, safety, compared, failed, pilot_token):
@@ -717,6 +735,60 @@ def summarize_inputs(root, reference_report):
             "gap_forecast_mean_delta_vs_ds": reference["mean_delta"], "variants": variants}
 
 
+def summarize_actions(root, reference_report):
+    standard = read(reference_report)
+    gentle = read(root / "report.json")
+    old_predictions = read(reference_report.with_name("predictions.json"))
+    new_predictions = read(root / "predictions.json")
+    bindings = ("observation_sha256", "planned_scenes", "teacher_checkpoint_sha256", "baseline_parity_token",
+                "ds_inference_device")
+    for report, predictions, variant in ((standard, old_predictions, "standard"), (gentle, new_predictions, "gentle")):
+        if (report["protocol"] != HOLDOUT_PROTOCOL or report["observation_variant"] != "action-effects"
+                or report["prompt_variant"] != "baseline" or report.get("action_variant", "standard") != variant
+                or predictions["observation_sha256"] != report["observation_sha256"]
+                or predictions.get("action_variant", "standard") != variant or report["prediction_failures"]
+                or not report["compared_scenes"] or report["compared_scenes"] != report["planned_scenes"]):
+            raise RuntimeError(f"Expected complete frozen comparisons for the {variant} commands")
+    if (any(standard[key] != gentle[key] for key in bindings)
+            or old_predictions["model_path"] != new_predictions["model_path"]):
+        raise RuntimeError("Action variants must use the same observations, model, and DriveSuprim baseline")
+    tokens = [row["token"] for row in standard["cases"]]
+    if len(tokens) != standard["compared_scenes"] or any(
+            tokens != [row["token"] for row in document["cases"]]
+            for document in (gentle, old_predictions, new_predictions)):
+        raise RuntimeError("Action variants must have the same evaluated tokens")
+
+    cases = []
+    for old, new, prediction in zip(standard["cases"], gentle["cases"], new_predictions["cases"]):
+        token = new["token"]
+        if old["ds"] != new["ds"] or old["session_id"] != new["session_id"]:
+            raise RuntimeError(f"DriveSuprim baseline or session changed for {token}")
+        counts = Counter(decision["action"] for decision in prediction["decisions"])
+        cases.append({"token": token, "session_id": new["session_id"], "ds": new["ds"],
+                      "standard": old["drex"], "gentle": new["drex"],
+                      "delta_vs_standard": {key: new["drex"][key] - score for key, score in old["drex"].items()},
+                      "delta_vs_ds": new["delta"],
+                      "gentle_action_counts": {name: counts[name] for name in GENTLE_ACTIONS}})
+    keys = cases[0]["delta_vs_standard"]
+    delta = [row["delta_vs_standard"]["pdm_score"] for row in cases]
+    return {"protocol": "navsim-straight-gentle-v1", "observation_sha256": gentle["observation_sha256"],
+            "compared_scenes": len(cases),
+            "mean_pdm": {model: mean(row[model]["pdm_score"] for row in cases)
+                         for model in ("ds", "standard", "gentle")},
+            "mean_delta_vs_standard": {key: mean(row["delta_vs_standard"][key] for row in cases) for key in keys},
+            "mean_delta_vs_ds": gentle["mean_delta"],
+            "pdm_wins_vs_standard": sum(value > 1e-8 for value in delta),
+            "pdm_losses_vs_standard": sum(value < -1e-8 for value in delta),
+            "pdm_ties_vs_standard": sum(abs(value) <= 1e-8 for value in delta),
+            "safety_regressions_vs_standard": {
+                key: sum(row["delta_vs_standard"][key] < -1e-8 for row in cases)
+                for key in gentle["safety_regressions"]},
+            "safety_regressions_vs_ds": gentle["safety_regressions"],
+            "gentle_action_counts": {name: sum(row["gentle_action_counts"][name] for row in cases)
+                                     for name in GENTLE_ACTIONS},
+            "cases": cases}
+
+
 def on_astra(stage, args, payload=None):
     container = os.environ.get("DREX_ASTRA_CONTAINER", "egorov_drivesuprim")
     package = os.environ.get("DREX_ASTRA_PACKAGE", "/workspace/exp_v2/drex_transfer/navsim_train_v1")
@@ -750,7 +822,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("stage", choices=("prepare", "predict", "score", "history", "predict-suite",
                                           "fresh-prepare", "fresh-score", "bridge-fresh-prepare", "bridge-fresh-score",
-                                          "bridge-prepare", "bridge-score", "bridge-history", "summarize-inputs"))
+                                          "bridge-prepare", "bridge-score", "bridge-history", "summarize-inputs",
+                                          "summarize-actions"))
     parser.add_argument("--package", type=Path)
     parser.add_argument("--source", type=Path)
     parser.add_argument("--repo", type=Path)
@@ -763,6 +836,7 @@ def main():
     parser.add_argument("--reference-report", type=Path)
     parser.add_argument("--prompt-variant", choices=PROMPT_VARIANTS)
     parser.add_argument("--observation-variant", choices=OBSERVATION_VARIANTS)
+    parser.add_argument("--action-variant", choices=ACTION_VARIANTS, default="standard")
     parser.add_argument("--limit", type=int, default=8)
     args = parser.parse_args()
     if args.limit < 1:
@@ -787,6 +861,15 @@ def main():
         return 0
     if args.out is None:
         parser.error("--out must point to the experiment directory")
+    if args.stage == "summarize-actions":
+        if args.reference_report is None:
+            parser.error("--reference-report must point to the completed standard action-effects report")
+        result = summarize_actions(args.out, args.reference_report)
+        comparison = args.out / "comparison.json"
+        write(comparison, result)
+        print(json.dumps({key: value for key, value in result.items() if key != "cases"}, indent=2))
+        print(f"Paired action comparison: {comparison}")
+        return 0
     if args.stage == "summarize-inputs":
         if args.reference_report is None:
             parser.error("--reference-report must point to the gap-forecast report")
@@ -839,8 +922,13 @@ def main():
         if predictions.exists():
             parser.error("Use a new run name to write a different prediction file")
         history = read(history_path) if args.observation_variant == "leader-history" else None
-        return int(predict(read(observations), args.weights, predictions,
-                           args.prompt_variant or "baseline", args.observation_variant or "radar", history=history))
+        output_path = predictions.with_name("predictions.partial.json") if args.action_variant == "gentle" else predictions
+        failed = predict(read(observations), args.weights, output_path,
+                         args.prompt_variant or "baseline", args.observation_variant or "radar", history=history,
+                         action_variant=args.action_variant)
+        if output_path != predictions:
+            output_path.replace(predictions)
+        return int(failed)
     plan, output = read(observations), read(predictions)
     if len(plan["scenes"]) != len(output["cases"]):
         parser.error("Run scoring after the GPU job has written all planned case results")
@@ -848,6 +936,8 @@ def main():
         parser.error("The saved predictions use a different prompt variant")
     if args.observation_variant and output.get("observation_variant", "radar") != args.observation_variant:
         parser.error("The saved predictions use a different observation variant")
+    if output.get("action_variant", "standard") != args.action_variant:
+        parser.error("The saved predictions use a different action variant")
     payload = {"plan": plan, "predictions": output}
     if output.get("observation_variant") == "leader-history":
         payload["history"] = read(history_path)

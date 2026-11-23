@@ -7,10 +7,10 @@ from tempfile import TemporaryDirectory
 
 import numpy as np
 
-from .driver import Action
+from .driver import Action, DrexMax
 from .navsim_straight import (EXTRA_INPUT_VARIANTS, HOLDOUT_PROTOCOL, PROTOCOL, SPEED_CAP, build_plan, digest,
                              fresh_report, holdout_records, on_astra, past_leader_speeds, predict, predict_suite,
-                             read, score, straight_observation, summarize_inputs, write)
+                             read, score, straight_observation, summarize_actions, summarize_inputs, write)
 
 
 class StraightPlanTests(unittest.TestCase):
@@ -184,6 +184,65 @@ class StraightPlanTests(unittest.TestCase):
             self.assertEqual(effects["apply_action_s"], 0.5)
             self.assertEqual(effects["forecast"]["maintain"]["progress_m"], 8.0)
             self.assertGreater(effects["forecast"]["slow"]["minimum_gap_m"], effects["forecast"]["maintain"]["minimum_gap_m"])
+
+    def test_gentle_commands_are_scored_by_drex_and_use_the_preview_acceleration(self):
+        driver = DrexMax.__new__(DrexMax)
+        driver.model = Mock()
+        driver.model.predict.side_effect = (
+            [[[0, 0, 0, 0, 0, 1, 0]], [[0, 0, 0, 0, 0, 0, 1]]] + [[[0, 1, 0, 0, 0, 0, 0]]] * 6
+        )
+        scene = {"token": "example", "speed_mps": 4.0, "leaders": [{"gap_m": 12.0, "speed_mps": 2.0}]}
+        standard = build_plan(scene, lambda _: (Action.MAINTAIN, None), observation_variant="action-effects")
+        gentle = build_plan(scene, driver.choose, observation_variant="action-effects", action_variant="gentle")
+        first, second, third = gentle["decisions"][:3]
+        self.assertEqual([first["action"], second["action"]], ["gentle_proceed", "gentle_slow"])
+        self.assertEqual(second["request"]["state"]["ego_speed_mps"], 4.5)
+        self.assertEqual(second["request"]["state"]["previous_action"], "gentle_proceed")
+        self.assertAlmostEqual(third["request"]["state"]["ego_speed_mps"], 4.125, delta=0.0051)
+        self.assertAlmostEqual(gentle["poses"][4][0], 2.125)
+        self.assertAlmostEqual(gentle["poses"][9][0], 4.28125)
+        before = standard["decisions"][0]["request"]
+        after = first["request"]
+        self.assertEqual(before["question"]["instructions"], after["question"]["instructions"])
+        self.assertEqual(list(before["question"]["criteria"]), list(after["question"]["criteria"])[:5])
+        forecast = after["state"]["action_effects"]["forecast"]
+        for name, effect in before["state"]["action_effects"]["forecast"].items():
+            self.assertEqual(forecast[name], effect)
+        self.assertEqual(forecast["gentle_proceed"]["progress_m"], 8.88)
+        self.assertEqual(forecast["gentle_slow"]["progress_m"], 7.34)
+
+    def test_action_summary_compares_to_archived_standard_and_rejects_changed_ds(self):
+        ds = {"pdm_score": .9, "no_at_fault_collisions": 1.0}
+        standard = {"pdm_score": .8, "no_at_fault_collisions": 1.0}
+        gentle = {"pdm_score": .7, "no_at_fault_collisions": 0.0}
+        case = dict(token="example", session_id="trip", ds=ds)
+        report = dict(protocol=HOLDOUT_PROTOCOL, observation_variant="action-effects", prompt_variant="baseline",
+                      observation_sha256="same", planned_scenes=1, compared_scenes=1, prediction_failures=[],
+                      teacher_checkpoint_sha256="checkpoint", baseline_parity_token="pilot", ds_inference_device="cpu")
+        predictions = dict(observation_sha256="same", model_path="drex", cases=[
+            dict(token="example", decisions=[dict(action="gentle_proceed")])])
+        gentle_report = dict(**report, action_variant="gentle",
+                             mean_delta={"pdm_score": -.2, "no_at_fault_collisions": -1.0},
+                             safety_regressions={"no_at_fault_collisions": 1})
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "standard").mkdir()
+            reference = root / "standard/report.json"
+            write(reference, {**report, "cases": [{**case, "drex": standard}]})
+            write(reference.with_name("predictions.json"), predictions)
+            write(root / "predictions.json", {**predictions, "action_variant": "gentle"})
+            write(root / "report.json", {**gentle_report, "cases": [
+                {**case, "drex": gentle, "delta": gentle_report["mean_delta"]}]})
+            result = summarize_actions(root, reference)
+            self.assertAlmostEqual(result["mean_delta_vs_standard"]["pdm_score"], -.1)
+            self.assertEqual(result["gentle_action_counts"], {"gentle_proceed": 1, "gentle_slow": 0})
+            self.assertEqual(result["pdm_losses_vs_standard"], 1)
+            self.assertEqual(result["safety_regressions_vs_standard"], {"no_at_fault_collisions": 1})
+            changed = {**case, "ds": {**ds, "pdm_score": .93}}
+            write(root / "report.json", {**gentle_report, "cases": [
+                {**changed, "drex": gentle, "delta": gentle_report["mean_delta"]}]})
+            with self.assertRaisesRegex(RuntimeError, "baseline or session changed"):
+                summarize_actions(root, reference)
 
     def test_input_suite_loads_model_once_for_both_variants(self):
         record = {"token": "example", "speed_mps": 4.0, "leaders": [{"gap_m": 12.0, "speed_mps": 2.0}]}
