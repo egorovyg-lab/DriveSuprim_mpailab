@@ -9,11 +9,29 @@ import numpy as np
 
 from .driver import Action, DrexMax
 from .navsim_straight import (EXTRA_INPUT_VARIANTS, HOLDOUT_PROTOCOL, PROTOCOL, SPEED_CAP, build_plan, digest,
-                             fresh_report, holdout_records, on_astra, past_leader_speeds, predict, predict_suite,
+                             fresh_report, holdout_records, main, on_astra, past_leader_speeds, predict, predict_suite,
                              read, score, straight_observation, summarize_actions, summarize_inputs, write)
 
 
 class StraightPlanTests(unittest.TestCase):
+    def test_fresh_score_exits_successfully_after_writing_a_complete_report(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plan = {"anchor_identity_sha256": "anchor", "scenes": [{"token": "fresh"}]}
+            pilot = {"protocol": PROTOCOL, "anchor_identity_sha256": "anchor", "scenes": [{"token": "train"}]}
+            write(root / "observations.json", plan)
+            write(root / "pilot.json", pilot)
+            write(root / "predictions.json", {"cases": [{"token": "fresh"}], "action_variant": "gentle"})
+            command = ["navsim_straight", "bridge-fresh-score", "--out", str(root),
+                       "--pilot-observations", str(root / "pilot.json"), "--action-variant", "gentle"]
+            target = "scripts.drex_drive.navsim_straight.on_astra"
+            with patch.object(sys, "argv", command), patch(target) as score_stage:
+                score_stage.return_value = {"compared_scenes": 1, "prediction_failures": []}
+                self.assertEqual(main(), 0)
+                self.assertEqual(read(root / "report.json"), score_stage.return_value)
+                score_stage.return_value = {"compared_scenes": 1, "prediction_failures": [{"token": "other"}]}
+                self.assertEqual(main(), 1)
+
     def test_fresh_score_passes_an_explicit_cpu_device_to_astra(self):
         path = "scripts.drex_drive.navsim_straight.subprocess.run"
         with patch.dict("os.environ", {"DREX_ASTRA_DS_DEVICE": "cpu", "DREX_ASTRA_DS_GPU": "2"}):

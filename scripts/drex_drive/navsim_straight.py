@@ -952,7 +952,8 @@ def main():
     write(summary, result)
     print(json.dumps({key: value for key, value in result.items() if key != "cases"}, indent=2))
     print(f"Paired scores: {summary}")
-    return int(result["compared_scenes"] == 0 or (args.stage == "bridge-fresh-score" and result["prediction_failures"]))
+    return int(result["compared_scenes"] == 0
+               or (args.stage == "bridge-fresh-score" and bool(result["prediction_failures"])))
 
 
 if __name__ == "__main__":
