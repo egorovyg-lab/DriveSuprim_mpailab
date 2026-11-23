@@ -4,10 +4,11 @@ set -euo pipefail
 if [[ ${1:-} == --suite-worker ]]; then
   runtime=$2
   out=$3
+  stage=${4:-predict-suite}
   exec 9>"$out/.predict.lock"
   flock -n 9 || { echo 'This suite is already running' >&2; exit 1; }
   export PYTHONPATH="$runtime/upstream"
-  exec srun --ntasks=1 "$runtime/venv/bin/python" -m scripts.drex_drive.navsim_straight predict-suite \
+  exec srun --ntasks=1 "$runtime/venv/bin/python" -m scripts.drex_drive.navsim_straight "$stage" \
     --out "$out" --weights "$runtime/models/drex-max-v1"
 fi
 if [[ ${1:-} == --worker ]]; then
@@ -35,6 +36,39 @@ slurm_args=(--partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 --gres=g
             --mem=96G --time=00:30:00 --chdir="$repo" --output="$runtime/logs/straight-%j.log")
 
 case "${1:-}" in
+  following-test)
+    reference=$runtime/runs/navsim-straight-fresh-v1
+    out=$runtime/runs/navsim-straight-following-v1
+    pilot=$runtime/runs/navsim-straight-train-v1/observations.json
+    [[ -s "$reference/observations.json" && -s "$reference/predictions.json" && -s "$reference/report.json" && -s "$pilot" ]] ||
+      { echo 'Complete the original fresh-test before running following-test' >&2; exit 2; }
+    mkdir -p "$out" "$runtime/logs"
+    exec 8>"$out/.comparison.lock"
+    flock -n 8 || { echo 'The following comparison is already running' >&2; exit 1; }
+    variants=(leader-context action-gap-end)
+    missing=0
+    for variant in "${variants[@]}"; do
+      run=$out/$variant
+      mkdir -p "$run"
+      if [[ ! -e "$run/observations.json" ]]; then
+        cp -- "$reference/observations.json" "$run/observations.json"
+      fi
+      cmp -s "$reference/observations.json" "$run/observations.json" ||
+        { echo "Observations differ from the original cohort in $run" >&2; exit 2; }
+      [[ -s "$run/predictions.json" ]] || missing=1
+    done
+    script="$repo/scripts/drex_drive/straight.sh"
+    bash "$script" connect
+    if (( missing )); then
+      sbatch --job-name=drex-following --wait "${slurm_args[@]}" "$script" \
+        --suite-worker "$runtime" "$out" predict-following
+    fi
+    module=scripts.drex_drive.navsim_straight
+    for variant in "${variants[@]}"; do
+      DREX_ASTRA_DS_DEVICE=cpu python3 -m "$module" bridge-fresh-score --out "$out/$variant" \
+        --pilot-observations "$pilot" --prompt-variant baseline --observation-variant "$variant"
+    done
+    python3 -m "$module" summarize-following --out "$out" --reference-report "$reference/report.json" ;;
   action-probes)
     reference=$runtime/runs/navsim-straight-fresh-v1
     out=$runtime/runs/${DREX_STRAIGHT_NAME:-navsim-straight-action-probes-v1}
@@ -188,5 +222,5 @@ case "${1:-}" in
       score_args+=(--observation-variant "$DREX_STRAIGHT_OBSERVATION")
     fi
     python3 -m scripts.drex_drive.navsim_straight bridge-score "${score_args[@]}" ;;
-  *) printf 'Usage: %s connect|prepare|submit|score|progress-test|forecast-test|next-tests|fresh-test|fresh-score|gentle-test|action-probes\n' "$0" >&2; exit 2 ;;
+  *) printf 'Usage: %s connect|prepare|submit|score|progress-test|forecast-test|next-tests|fresh-test|fresh-score|gentle-test|action-probes|following-test\n' "$0" >&2; exit 2 ;;
 esac

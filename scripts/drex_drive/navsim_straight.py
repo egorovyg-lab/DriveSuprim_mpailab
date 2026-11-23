@@ -46,7 +46,10 @@ PROMPT_VARIANTS = {
     ),
 }
 EXTRA_INPUT_VARIANTS = ("leader-history", "action-effects")
-OBSERVATION_VARIANTS = ("radar", "gap-forecast", *EXTRA_INPUT_VARIANTS)
+FOLLOWING_VARIANTS = ("leader-context", "action-gap-end")
+FOLLOWING_PROTOCOL = "navsim-straight-following-v1"
+HOLDOUT_OBSERVATIONS = ("action-effects", *FOLLOWING_VARIANTS)
+OBSERVATION_VARIANTS = ("radar", "gap-forecast", *EXTRA_INPUT_VARIANTS, *FOLLOWING_VARIANTS)
 ACTION_VARIANTS = ("standard", "gentle")
 GENTLE_ACTIONS = {
     "gentle_proceed": (1.0, "Increase speed gently at 1 m/s²."),
@@ -260,7 +263,7 @@ def histories_by_scene(plan, history):
     return {r["token"]: r["leader_history"] for r in history["scenes"]}
 
 
-def action_effects(ego, gap, lead_speed, accelerations):
+def action_effects(ego, gap, lead_speed, accelerations, include_end=False):
     previews = {}
     for action, acceleration in accelerations.items():
         simulated = ego
@@ -271,14 +274,18 @@ def action_effects(ego, gap, lead_speed, accelerations):
             if gap is not None:
                 next_gap = gap + (step + 1) * STEP * lead_speed - (simulated.front_m - ego.front_m)
                 min_gap = min(min_gap, next_gap)
-        previews[action] = {"progress_m": round(simulated.front_m - ego.front_m, 2),
-                            "minimum_gap_m": None if min_gap is None else round(min_gap, 2)}
+        progress = simulated.front_m - ego.front_m
+        preview = {"progress_m": round(progress, 2), "minimum_gap_m": None if min_gap is None else round(min_gap, 2)}
+        if include_end:
+            preview["gap_at_horizon_m"] = None if gap is None else round(gap + PREVIEW_SECONDS * lead_speed - progress, 2)
+            preview["closing_speed_at_horizon_mps"] = None if gap is None else round(simulated.speed_mps - lead_speed, 2)
+        previews[action] = preview
     return previews
 
 
 def build_plan(record, choose, prompt_variant="baseline", observation_variant="radar", action_variant="standard"):
     from .driver import request_for
-    from .simulation import ACCELERATION, Action, Vehicle
+    from .simulation import ACCELERATION, Action, STOPPED_MPS, Vehicle
 
     extra_actions = GENTLE_ACTIONS if action_variant == "gentle" else {}
     accelerations = {action.value: acceleration for action, acceleration in ACCELERATION.items()}
@@ -306,6 +313,9 @@ def build_plan(record, choose, prompt_variant="baseline", observation_variant="r
             if observation_variant != "radar":
                 radar["gap_if_maintain_1s_m"] = round(gap - closing_speed, 2)
                 radar["gap_if_maintain_2s_m"] = round(gap - 2 * closing_speed, 2)
+            if observation_variant == "leader-context":
+                radar["leader_speed_mps"] = round(leader_speed, 2)
+                radar["headway_s"] = round(gap / ego.speed_mps, 2) if ego.speed_mps > STOPPED_MPS else None
             if observation_variant == "leader-history":
                 radar["measured_lead_speed_history"] = [
                     {"age_s": round(sample["age_at_start_s"] + elapsed, 3), "speed_mps": sample["speed_mps"]}
@@ -313,10 +323,10 @@ def build_plan(record, choose, prompt_variant="baseline", observation_variant="r
                 ]
         state = {"ego_speed_mps": round(ego.speed_mps, 2), "previous_ego_speed_mps": previous_speed,
                  "speed_limit_mps": SPEED_CAP, "lead_radar": radar, "previous_action": previous_action}
-        if observation_variant == "action-effects":
+        if observation_variant in HOLDOUT_OBSERVATIONS:
             state["action_effects"] = {"horizon_s": PREVIEW_SECONDS, "apply_action_s": ACTION_STEPS * STEP,
-                                       "after_action": "maintain", "forecast": action_effects(ego, gap, leader_speed,
-                                                                                             accelerations)}
+                                       "after_action": "maintain", "forecast": action_effects(
+                                           ego, gap, leader_speed, accelerations, observation_variant == "action-gap-end")}
         row = request_for(state)
         row["question"]["instructions"] = BASE_INSTRUCTIONS + PROMPT_VARIANTS[prompt_variant]
         row["question"]["criteria"].update({name: description for name, (_, description) in extra_actions.items()})
@@ -345,8 +355,10 @@ def predict(plan, weights, out, prompt_variant="baseline", observation_variant="
             action_variant="standard"):
     if plan["protocol"] not in (PROTOCOL, HOLDOUT_PROTOCOL) or plan["speed_cap_mps"] != SPEED_CAP or not plan["scenes"]:
         raise ValueError("Unsupported or empty straight-scene package")
-    if plan["protocol"] == HOLDOUT_PROTOCOL and (prompt_variant, observation_variant) != ("baseline", "action-effects"):
-        raise ValueError("Fresh holdout is fixed to baseline prompt and action-effects")
+    if plan["protocol"] == HOLDOUT_PROTOCOL and (prompt_variant != "baseline" or observation_variant not in HOLDOUT_OBSERVATIONS):
+        raise ValueError("Fresh holdout is fixed to baseline prompt and action-effects observations")
+    if observation_variant in FOLLOWING_VARIANTS and (plan["protocol"], action_variant) != (HOLDOUT_PROTOCOL, "standard"):
+        raise ValueError("Following variants require the frozen straight holdout package and the standard commands")
     if action_variant not in ACTION_VARIANTS or (action_variant == "gentle" and plan["protocol"] != HOLDOUT_PROTOCOL):
         raise ValueError("The gentle action experiment requires the frozen straight holdout package")
     histories = histories_by_scene(plan, history) if observation_variant == "leader-history" else None
@@ -371,9 +383,9 @@ def predict(plan, weights, out, prompt_variant="baseline", observation_variant="
     return any("error" in case for case in report["cases"])
 
 
-def predict_suite(root, weights):
+def predict_suite(root, weights, variants=EXTRA_INPUT_VARIANTS):
     pending = []
-    for variant in EXTRA_INPUT_VARIANTS:
+    for variant in variants:
         out = root / variant
         plan = read(out / "observations.json")
         history = read(out / "history.json") if variant == "leader-history" else None
@@ -382,6 +394,7 @@ def predict_suite(root, weights):
             prior = read(output)
             if (prior["observation_sha256"] != digest(plan) or prior["observation_variant"] != variant
                     or prior["prompt_variant"] != "baseline" or len(prior["cases"]) != len(plan["scenes"])
+                    or prior.get("action_variant", "standard") != "standard" or prior["model_path"] != str(weights)
                     or (history is not None and prior.get("history_sha256") != digest(history))):
                 raise RuntimeError(f"Incomplete or incompatible prior predictions in {out}. Use a new run name")
         else:
@@ -389,8 +402,12 @@ def predict_suite(root, weights):
     if not pending:
         return False
     model = load_drex(weights)
-    failures = [predict(plan, weights, output, observation_variant=variant, history=history, model=model)
-                for variant, plan, history, output in pending]
+    failures = []
+    for variant, plan, history, output in pending:
+        path = output.with_name("predictions.partial.json") if variant in FOLLOWING_VARIANTS else output
+        failures.append(predict(plan, weights, path, observation_variant=variant, history=history, model=model))
+        if path != output:
+            path.replace(output)
     return any(failures)
 
 
@@ -631,13 +648,15 @@ def fresh_score(args, payload):
     cfg, teacher, metadata, split, requests, candidates = fresh_context(args)
     plan, predictions = payload["plan"], payload["predictions"]
     action_variant = predictions.get("action_variant", "standard")
+    observation_variant = predictions["observation_variant"]
     pilot_token = payload["pilot_token"]
     tokens = [row["token"] for row in plan["scenes"]]
     if (plan != read(args.cache_root / "observations.json") or any(plan[k] != v for k, v in metadata.items())
             or not tokens or tokens != [row["token"] for row in predictions["cases"]]
             or predictions["observation_sha256"] != digest(plan)
             or action_variant not in ACTION_VARIANTS
-            or (predictions["prompt_variant"], predictions["observation_variant"]) != ("baseline", "action-effects")):
+            or predictions["prompt_variant"] != "baseline" or observation_variant not in HOLDOUT_OBSERVATIONS
+            or (observation_variant in FOLLOWING_VARIANTS and action_variant != "standard")):
         raise RuntimeError("Fresh holdout observations or predictions do not match the frozen protocol")
     if sha(Path(cfg.agent.checkpoint_path)) != teacher["checkpoint_sha256"]:
         raise RuntimeError("Original DriveSuprim checkpoint changed")
@@ -677,7 +696,8 @@ def fresh_score(args, payload):
         compared.append({"token": token, "session_id": record["session_id"], "ds": baseline, "drex": drex,
                          "delta": {key: drex[key] - baseline[key] for key in keys}})
     result = fresh_report(plan, keys, real_data.SAFETY, compared, failed, pilot_token)
-    return {**result, "ds_inference_device": args.ds_device, "action_variant": action_variant}
+    return {**result, "ds_inference_device": args.ds_device, "action_variant": action_variant,
+            "observation_variant": observation_variant}
 
 
 def fresh_report(plan, keys, safety, compared, failed, pilot_token):
@@ -840,34 +860,42 @@ def summarize_inputs(root, reference_report):
             "gap_forecast_mean_delta_vs_ds": reference["mean_delta"], "variants": variants}
 
 
-def summarize_actions(root, reference_report):
+def matched_holdout(root, reference_report, observation_variant, action_variant):
     standard = read(reference_report)
-    gentle = read(root / "report.json")
+    trial = read(root / "report.json")
     old_predictions = read(reference_report.with_name("predictions.json"))
     new_predictions = read(root / "predictions.json")
     bindings = ("observation_sha256", "planned_scenes", "teacher_checkpoint_sha256", "baseline_parity_token",
                 "ds_inference_device")
-    for report, predictions, variant in ((standard, old_predictions, "standard"), (gentle, new_predictions, "gentle")):
-        if (report["protocol"] != HOLDOUT_PROTOCOL or report["observation_variant"] != "action-effects"
-                or report["prompt_variant"] != "baseline" or report.get("action_variant", "standard") != variant
+    runs = ((standard, old_predictions, "action-effects", "standard"),
+            (trial, new_predictions, observation_variant, action_variant))
+    for report, predictions, observation, actions in runs:
+        if (report["protocol"] != HOLDOUT_PROTOCOL or report["observation_variant"] != observation
+                or report["prompt_variant"] != "baseline" or report.get("action_variant", "standard") != actions
                 or predictions["observation_sha256"] != report["observation_sha256"]
-                or predictions.get("action_variant", "standard") != variant or report["prediction_failures"]
+                or predictions.get("action_variant", "standard") != actions or report["prediction_failures"]
                 or not report["compared_scenes"] or report["compared_scenes"] != report["planned_scenes"]):
-            raise RuntimeError(f"Expected complete frozen comparisons for the {variant} commands")
-    if (any(standard[key] != gentle[key] for key in bindings)
+            raise RuntimeError(f"Expected a completed {observation} comparison with {actions} commands")
+    if (any(standard[key] != trial[key] for key in bindings)
             or old_predictions["model_path"] != new_predictions["model_path"]):
-        raise RuntimeError("Action variants must use the same observations, model, and DriveSuprim baseline")
+        raise RuntimeError("Variants must use the same scenes, model, and DriveSuprim baseline")
     tokens = [row["token"] for row in standard["cases"]]
     if len(tokens) != standard["compared_scenes"] or any(
             tokens != [row["token"] for row in document["cases"]]
-            for document in (gentle, old_predictions, new_predictions)):
-        raise RuntimeError("Action variants must have the same evaluated tokens")
+            for document in (trial, old_predictions, new_predictions)):
+        raise RuntimeError("Variants must have the same evaluated tokens")
+    for old, new in zip(standard["cases"], trial["cases"]):
+        if old["ds"] != new["ds"] or old["session_id"] != new["session_id"]:
+            raise RuntimeError(f"DriveSuprim baseline or session changed for {new['token']}")
+    return standard, trial, old_predictions, new_predictions
+
+
+def summarize_actions(root, reference_report):
+    standard, gentle, _, new_predictions = matched_holdout(root, reference_report, "action-effects", "gentle")
 
     cases = []
     for old, new, prediction in zip(standard["cases"], gentle["cases"], new_predictions["cases"]):
         token = new["token"]
-        if old["ds"] != new["ds"] or old["session_id"] != new["session_id"]:
-            raise RuntimeError(f"DriveSuprim baseline or session changed for {token}")
         counts = Counter(decision["action"] for decision in prediction["decisions"])
         cases.append({"token": token, "session_id": new["session_id"], "ds": new["ds"],
                       "standard": old["drex"], "gentle": new["drex"],
@@ -892,6 +920,43 @@ def summarize_actions(root, reference_report):
             "gentle_action_counts": {name: sum(row["gentle_action_counts"][name] for row in cases)
                                      for name in GENTLE_ACTIONS},
             "cases": cases}
+
+
+def summarize_following(root, reference_report):
+    variants = []
+    for variant in FOLLOWING_VARIANTS:
+        standard, trial, old_predictions, new_predictions = matched_holdout(root / variant, reference_report,
+                                                                            variant, "standard")
+        cases = []
+        for old, new, before, after in zip(standard["cases"], trial["cases"], old_predictions["cases"],
+                                           new_predictions["cases"]):
+            token = new["token"]
+            delta = {key: new["drex"][key] - value for key, value in old["drex"].items()}
+            decisions_before = [row["action"] for row in before["decisions"]]
+            decisions_after = [row["action"] for row in after["decisions"]]
+            cases.append({"token": token, "session_id": new["session_id"], "ds": new["ds"],
+                          "standard": old["drex"], "drex": new["drex"], "delta_vs_standard": delta,
+                          "delta_vs_ds": new["delta"], "standard_actions": decisions_before,
+                          "variant_actions": decisions_after})
+        deltas = [row["delta_vs_standard"]["pdm_score"] for row in cases]
+        variants.append({"observation_variant": variant, "mean_pdm": trial["mean_pdm"],
+                         "mean_delta_vs_standard": {
+                             key: mean(row["delta_vs_standard"][key] for row in cases)
+                             for key in cases[0]["delta_vs_standard"]},
+                         "mean_delta_vs_ds": trial["mean_delta"],
+                         "mean_delta_equal_session_vs_ds": trial["mean_delta_equal_session"],
+                         "pdm_wins_vs_standard": sum(value > 1e-8 for value in deltas),
+                         "pdm_losses_vs_standard": sum(value < -1e-8 for value in deltas),
+                         "pdm_ties_vs_standard": sum(abs(value) <= 1e-8 for value in deltas),
+                         "safety_regressions_vs_standard": {
+                             key: sum(row["delta_vs_standard"][key] < -1e-8 for row in cases)
+                             for key in trial["safety_regressions"]},
+                         "comfort_regressions_vs_standard": sum(
+                             row["delta_vs_standard"]["history_comfort"] < -1e-8 for row in cases),
+                         "safety_regressions_vs_ds": trial["safety_regressions"], "cases": cases})
+    return {"protocol": FOLLOWING_PROTOCOL, "observation_sha256": standard["observation_sha256"],
+            "compared_scenes": standard["compared_scenes"], "reference_mean_pdm": standard["mean_pdm"],
+            "variants": variants}
 
 
 def on_astra(stage, args, payload=None):
@@ -930,7 +995,8 @@ def main():
     parser.add_argument("stage", choices=("prepare", "predict", "score", "history", "predict-suite",
                                           "fresh-prepare", "fresh-score", "bridge-fresh-prepare", "bridge-fresh-score",
                                           "bridge-prepare", "bridge-score", "bridge-history", "summarize-inputs",
-                                          "summarize-actions", "score-action-probes", "bridge-action-probes"))
+                                          "summarize-actions", "score-action-probes", "bridge-action-probes",
+                                          "predict-following", "summarize-following"))
     parser.add_argument("--package", type=Path)
     parser.add_argument("--source", type=Path)
     parser.add_argument("--repo", type=Path)
@@ -972,6 +1038,16 @@ def main():
         return 0
     if args.out is None:
         parser.error("--out must point to the experiment directory")
+    if args.stage == "summarize-following":
+        if args.reference_report is None:
+            parser.error("--reference-report must point to the completed standard action-effects report")
+        result = summarize_following(args.out, args.reference_report)
+        summary = args.out / "suite.json"
+        write(summary, result)
+        print(json.dumps({**result, "variants": [
+            {key: val for key, val in variant.items() if key != "cases"} for variant in result["variants"]]}, indent=2))
+        print(f"Paired following comparison: {summary}")
+        return 0
     if args.stage == "bridge-action-probes":
         if args.reference_report is None:
             parser.error("--reference-report must point to the completed standard action-effects report")
@@ -999,10 +1075,12 @@ def main():
         write(args.out / "suite.json", result)
         print(json.dumps(result, indent=2, allow_nan=False))
         return int(any(variant["prediction_failures"] for variant in result["variants"]))
-    if args.stage in ("predict", "predict-suite") and (args.weights is None or not args.weights.is_dir()):
+    if args.stage in ("predict", "predict-suite", "predict-following") and (args.weights is None or not args.weights.is_dir()):
         parser.error("--weights must point to the Drex Max weights directory")
     if args.stage == "predict-suite":
         return int(predict_suite(args.out, args.weights))
+    if args.stage == "predict-following":
+        return int(predict_suite(args.out, args.weights, FOLLOWING_VARIANTS))
     observations = args.out / "observations.json"
     predictions = args.out / "predictions.json"
     summary = args.out / "report.json"

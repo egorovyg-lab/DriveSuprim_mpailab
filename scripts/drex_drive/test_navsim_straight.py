@@ -8,13 +8,59 @@ from tempfile import TemporaryDirectory
 import numpy as np
 
 from .driver import Action, DrexMax
-from .navsim_straight import (ACTION_PROBES, EXTRA_INPUT_VARIANTS, HOLDOUT_PROTOCOL, PROTOCOL, SPEED_CAP, build_plan, digest,
+from .navsim_straight import (ACTION_PROBES, EXTRA_INPUT_VARIANTS, FOLLOWING_VARIANTS, HOLDOUT_PROTOCOL, PROTOCOL,
+                             SPEED_CAP, build_plan, digest,
                              fresh_report, holdout_records, main, on_astra, past_leader_speeds, predict, predict_suite,
                              prepare_action_probes, read, score, straight_observation, summarize_actions, summarize_inputs,
                              write)
 
 
 class StraightPlanTests(unittest.TestCase):
+    def test_following_inputs_add_only_their_fields_and_handle_stops(self):
+        scene = dict(token="example", speed_mps=4.0, leaders=[{"gap_m": 12.0, "speed_mps": 2.0}])
+        choose = lambda _: ("maintain", None)
+        standard = build_plan(scene, choose, observation_variant="action-effects")
+        current = build_plan(scene, choose, observation_variant="leader-context")
+        preview = build_plan(scene, choose, observation_variant="action-gap-end")
+        for prediction in (current, preview):
+            self.assertEqual(prediction["poses"], standard["poses"])
+            self.assertEqual(prediction["decisions"][0]["request"]["question"],
+                             standard["decisions"][0]["request"]["question"])
+        base = standard["decisions"][0]["request"]["state"]
+        current_state = current["decisions"][0]["request"]["state"]
+        self.assertEqual(current_state, {**base, "lead_radar": {
+            **base["lead_radar"], "leader_speed_mps": 2.0, "headway_s": 3.0}})
+        end_state = preview["decisions"][0]["request"]["state"]
+        forecast = end_state["action_effects"]["forecast"]
+        for action, existing in base["action_effects"]["forecast"].items():
+            self.assertEqual({key: forecast[action][key] for key in existing}, existing)
+        self.assertEqual(forecast["proceed"]["gap_at_horizon_m"], 6.25)
+        self.assertEqual(forecast["proceed"]["closing_speed_at_horizon_mps"], 3.0)
+        stopped = build_plan({**scene, "speed_mps": 0.0}, choose, observation_variant="leader-context")
+        self.assertIsNone(stopped["decisions"][0]["request"]["state"]["lead_radar"]["headway_s"])
+        empty = build_plan({**scene, "leaders": []}, choose, observation_variant="action-gap-end")
+        no_lead = empty["decisions"][0]["request"]["state"]["action_effects"]["forecast"]["proceed"]
+        self.assertIsNone(no_lead["closing_speed_at_horizon_mps"])
+        self.assertIsNone(no_lead["gap_at_horizon_m"])
+
+    def test_following_suite_uses_one_model_and_reuses_completed_predictions(self):
+        scene = dict(token="example", speed_mps=4.0, leaders=[])
+        plan = dict(protocol=HOLDOUT_PROTOCOL, speed_cap_mps=SPEED_CAP, scenes=[scene])
+        choose = Mock(return_value=("maintain", None))
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for variant in FOLLOWING_VARIANTS:
+                (root / variant).mkdir()
+                write(root / variant / "observations.json", plan)
+            with patch("scripts.drex_drive.navsim_straight.load_drex", return_value=(choose, 0.0)) as load:
+                self.assertFalse(predict_suite(root, root, FOLLOWING_VARIANTS))
+                self.assertFalse(predict_suite(root, root, FOLLOWING_VARIANTS))
+                load.assert_called_once_with(root)
+            self.assertEqual(choose.call_count, 16)
+            for variant in FOLLOWING_VARIANTS:
+                result = read(root / variant / "predictions.json")
+                self.assertEqual((result["observation_variant"], result["action_variant"]), (variant, "standard"))
+
     def test_action_probes_replace_only_the_specified_command(self):
         scenes = [dict(token=token, speed_mps=2.0, leaders=[]) for token in ("control", *ACTION_PROBES)]
         plan = dict(protocol=HOLDOUT_PROTOCOL, speed_cap_mps=SPEED_CAP, scenes=scenes)
