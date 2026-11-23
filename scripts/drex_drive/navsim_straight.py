@@ -44,12 +44,22 @@ PROMPT_VARIANTS = {
         "speed in this interval is needed to preserve that gap. Reassess from the current range and closing speed "
         "at each decision."
     ),
+    "sufficient-gap": (
+        " Among actions that leave sufficient room to slow or stop behind the leader, prefer more forward progress. "
+        "Use the predicted gap and whether it is shrinking together. Brake when slowing is needed to preserve room."
+    ),
+    "assess-hold": (
+        " First assess maintaining speed. If it will close the gap too quickly, slow or stop. "
+        "If the leader is pulling away and accelerating still leaves sufficient room, accelerate. "
+        "If the gap remains sufficient at the current speed and extra acceleration would close it too quickly, maintain."
+    ),
 }
 EXTRA_INPUT_VARIANTS = ("leader-history", "action-effects")
 FOLLOWING_VARIANTS = ("leader-context", "action-gap-end")
 FOLLOWING_PROTOCOL = "navsim-straight-following-v1"
 HOLDOUT_OBSERVATIONS = ("action-effects", *FOLLOWING_VARIANTS)
 OBSERVATION_VARIANTS = ("radar", "gap-forecast", *EXTRA_INPUT_VARIANTS, *FOLLOWING_VARIANTS)
+NIGHT_FORECASTS = ("action-deltas", "short-preview", "dual-preview")
 ACTION_VARIANTS = ("standard", "gentle")
 GENTLE_ACTIONS = {
     "gentle_proceed": (1.0, "Increase speed gently at 1 m/s²."),
@@ -263,12 +273,12 @@ def histories_by_scene(plan, history):
     return {r["token"]: r["leader_history"] for r in history["scenes"]}
 
 
-def action_effects(ego, gap, lead_speed, accelerations, include_end=False):
+def action_effects(ego, gap, lead_speed, accelerations, include_end=False, horizon_s=PREVIEW_SECONDS):
     previews = {}
     for action, acceleration in accelerations.items():
         simulated = ego
         min_gap = gap
-        for step in range(round(PREVIEW_SECONDS / STEP)):
+        for step in range(round(horizon_s / STEP)):
             requested = acceleration if step < ACTION_STEPS else accelerations["maintain"]
             simulated = simulated.advance(requested, SPEED_CAP)
             if gap is not None:
@@ -277,7 +287,7 @@ def action_effects(ego, gap, lead_speed, accelerations, include_end=False):
         progress = simulated.front_m - ego.front_m
         preview = {"progress_m": round(progress, 2), "minimum_gap_m": None if min_gap is None else round(min_gap, 2)}
         if include_end:
-            preview["gap_at_horizon_m"] = None if gap is None else round(gap + PREVIEW_SECONDS * lead_speed - progress, 2)
+            preview["gap_at_horizon_m"] = None if gap is None else round(gap + horizon_s * lead_speed - progress, 2)
             preview["closing_speed_at_horizon_mps"] = None if gap is None else round(simulated.speed_mps - lead_speed, 2)
         previews[action] = preview
     return previews
@@ -323,10 +333,21 @@ def build_plan(record, choose, prompt_variant="baseline", observation_variant="r
                 ]
         state = {"ego_speed_mps": round(ego.speed_mps, 2), "previous_ego_speed_mps": previous_speed,
                  "speed_limit_mps": SPEED_CAP, "lead_radar": radar, "previous_action": previous_action}
-        if observation_variant in HOLDOUT_OBSERVATIONS:
-            state["action_effects"] = {"horizon_s": PREVIEW_SECONDS, "apply_action_s": ACTION_STEPS * STEP,
-                                       "after_action": "maintain", "forecast": action_effects(
-                                           ego, gap, leader_speed, accelerations, observation_variant == "action-gap-end")}
+        if observation_variant in (*HOLDOUT_OBSERVATIONS, *NIGHT_FORECASTS):
+            horizon_s = 1.0 if observation_variant == "short-preview" else PREVIEW_SECONDS
+            forecast = action_effects(ego, gap, leader_speed, accelerations,
+                                      include_end=observation_variant == "action-gap-end", horizon_s=horizon_s)
+            if observation_variant == "action-deltas":
+                stay = forecast["maintain"]
+                for effect in forecast.values():
+                    effect["extra_progress_vs_maintain_m"] = round(effect["progress_m"] - stay["progress_m"], 2)
+                    effect["min_gap_change_vs_maintain_m"] = (
+                        None if gap is None else round(effect["minimum_gap_m"] - stay["minimum_gap_m"], 2))
+            state["action_effects"] = {"horizon_s": horizon_s, "apply_action_s": ACTION_STEPS * STEP,
+                                       "after_action": "maintain", "forecast": forecast}
+            if observation_variant == "dual-preview":
+                state["action_effects"]["forecast_at_1s"] = action_effects(ego, gap, leader_speed, accelerations,
+                                                                         horizon_s=1.0)
         row = request_for(state)
         row["question"]["instructions"] = BASE_INSTRUCTIONS + PROMPT_VARIANTS[prompt_variant]
         row["question"]["criteria"].update({name: description for name, (_, description) in extra_actions.items()})
@@ -959,7 +980,7 @@ def summarize_following(root, reference_report):
             "variants": variants}
 
 
-def on_astra(stage, args, payload=None):
+def on_astra(stage, args, payload=None, source_code=None):
     container = os.environ.get("DREX_ASTRA_CONTAINER", "egorov_drivesuprim")
     package = os.environ.get("DREX_ASTRA_PACKAGE", "/workspace/exp_v2/drex_transfer/navsim_train_v1")
     source = os.environ.get("DREX_STRAIGHT_SOURCE", "/workspace/exp_v2/drex_rollout_audit/rollout_audit_pool64_v1")
@@ -971,7 +992,7 @@ def on_astra(stage, args, payload=None):
     gpu = os.environ.get("DREX_ASTRA_DS_GPU", "0") if stage == "fresh-score" and ds_device == "cuda" else ""
     remote = ["docker", "exec", "-i", "-w", repo, container, "env", f"PYTHONPATH={source}/tools:{repo}",
               f"CUDA_VISIBLE_DEVICES={gpu}", "OMP_NUM_THREADS=2", "OPENBLAS_NUM_THREADS=2", "MKL_NUM_THREADS=2",
-              "python", "-B", "-c", Path(__file__).read_text(encoding="utf-8"), stage,
+              "python", "-B", "-c", source_code if source_code is not None else Path(__file__).read_text(encoding="utf-8"), stage,
               "--package", package, "--source", source, "--repo", repo, "--limit", str(args.limit)]
     if stage in ("fresh-prepare", "fresh-score", "score-action-probes"):
         root = "/workspace/exp_v2/drivemem_memory"
