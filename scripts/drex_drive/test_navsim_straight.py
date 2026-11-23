@@ -2,11 +2,14 @@ import sys
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import numpy as np
 
 from .driver import Action
-from .navsim_straight import PROTOCOL, build_plan, digest, score, straight_observation
+from .navsim_straight import (EXTRA_INPUT_VARIANTS, PROTOCOL, SPEED_CAP, build_plan, digest, past_leader_speeds,
+                             predict_suite, read, score, straight_observation, summarize_inputs, write)
 
 
 class StraightPlanTests(unittest.TestCase):
@@ -93,6 +96,91 @@ class StraightPlanTests(unittest.TestCase):
             }})
         empty_road = build_plan({**record, "leaders": []}, choose, observation_variant="gap-forecast")
         self.assertIsNone(empty_road["decisions"][0]["request"]["state"]["lead_radar"])
+
+    def test_history_matches_the_leader_and_preserves_measurement_age(self):
+        def track(token, time_us, speed):
+            return SimpleNamespace(track_token=token, metadata=SimpleNamespace(timestamp_us=time_us),
+                                   velocity=SimpleNamespace(x=speed, y=0))
+
+        past = [SimpleNamespace(tracked_objects=Mock()) for _ in range(2)]
+        past[0].tracked_objects.get_tracked_objects_of_type.return_value = [track("lead", 9000000, 3)]
+        past[1].tracked_objects.get_tracked_objects_of_type.return_value = [
+            track("other", 9500000, 9), track("lead", 9500000, 2),
+        ]
+        history = past_leader_speeds(SimpleNamespace(past_detections_tracks=past), track("lead", 10000000, 1),
+                                     SimpleNamespace(heading=0), "vehicle")
+        self.assertEqual(history, [{"age_at_start_s": 1.0, "speed_mps": 3.0},
+                                  {"age_at_start_s": 0.5, "speed_mps": 2.0}])
+        record = {"token": "example", "speed_mps": 4.0, "leaders": [{"gap_m": 12.0, "speed_mps": 1.0}]}
+        choose = lambda _: (Action.MAINTAIN, None)
+        original = build_plan(record, choose, observation_variant="gap-forecast")
+        variant = build_plan({**record, "leader_history": [history]}, choose, observation_variant="leader-history")
+        self.assertEqual(original["poses"], variant["poses"])
+        for index, (before, after) in enumerate(zip(original["decisions"], variant["decisions"])):
+            first, second = before["request"], after["request"]
+            self.assertEqual(first["question"], second["question"])
+            samples = second["state"]["lead_radar"].pop("measured_lead_speed_history")
+            self.assertEqual(samples[1], {"age_s": 0.5 + index * 0.5, "speed_mps": 2.0})
+            self.assertEqual(first["state"], second["state"])
+
+    def test_action_effects_are_extra_predictions_with_the_same_dynamics(self):
+        record = {"token": "example", "speed_mps": 4.0, "leaders": [{"gap_m": 3.0, "speed_mps": 2.0}]}
+        choose = lambda _: (Action.MAINTAIN, None)
+        baseline = build_plan(record, choose, observation_variant="gap-forecast")
+        variant = build_plan(record, choose, observation_variant="action-effects")
+        self.assertEqual(variant["poses"], baseline["poses"])
+        for first, second in zip(baseline["decisions"], variant["decisions"]):
+            self.assertEqual(first["request"]["question"], second["request"]["question"])
+            effects = second["request"]["state"].pop("action_effects")
+            self.assertEqual(first["request"]["state"], second["request"]["state"])
+            self.assertEqual(effects["horizon_s"], 2.0)
+            self.assertEqual(effects["apply_action_s"], 0.5)
+            self.assertEqual(effects["forecast"]["maintain"]["progress_m"], 8.0)
+            self.assertGreater(effects["forecast"]["slow"]["minimum_gap_m"], effects["forecast"]["maintain"]["minimum_gap_m"])
+
+    def test_input_suite_loads_model_once_for_both_variants(self):
+        record = {"token": "example", "speed_mps": 4.0, "leaders": [{"gap_m": 12.0, "speed_mps": 2.0}]}
+        plan = {"protocol": PROTOCOL, "speed_cap_mps": SPEED_CAP, "scenes": [record]}
+        history = {"observation_sha256": digest(plan), "scenes": [{"token": "example", "leader_history": [[]]}]}
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for variant in EXTRA_INPUT_VARIANTS:
+                (root / variant).mkdir()
+                write(root / variant / "observations.json", plan)
+            write(root / "leader-history" / "history.json", history)
+            with patch("scripts.drex_drive.navsim_straight.load_drex", return_value=(lambda _: (Action.MAINTAIN, None), 0.0)) as load:
+                self.assertFalse(predict_suite(root, root))
+                self.assertFalse(predict_suite(root, root))
+                load.assert_called_once_with(root)
+            for variant in EXTRA_INPUT_VARIANTS:
+                result = read(root / variant / "predictions.json")
+                self.assertEqual(result["observation_variant"], variant)
+                self.assertEqual(result["prompt_variant"], "baseline")
+                self.assertEqual(len(result["cases"][0]["poses"]), 40)
+
+    def test_input_suite_summary_uses_matched_gap_forecast_and_ds_scores(self):
+        base = {"protocol": PROTOCOL, "prompt_variant": "baseline", "observation_sha256": "frozen",
+                "planned_scenes": 1, "compared_scenes": 1, "prediction_failures": [],
+                "mean_delta": {"pdm_score": -0.05, "no_at_fault_collisions": 0},
+                "safety_regressions": {"no_at_fault_collisions": 0}}
+        ds = {"pdm_score": 0.9, "no_at_fault_collisions": 1.0}
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reference = root / "reference.json"
+            write(reference, {**base, "observation_variant": "gap-forecast", "cases": [
+                {"token": "example", "ds": ds, "drex": {**ds, "pdm_score": 0.85}},
+            ]})
+            for variant in EXTRA_INPUT_VARIANTS:
+                (root / variant).mkdir()
+                write(root / variant / "report.json", {**base, "observation_variant": variant, "cases": [
+                    {"token": "example", "ds": ds, "drex": {**ds, "pdm_score": 0.88}},
+                ]})
+            write(root / "leader-history" / "history.json", {"scenes": [{"leader_history": [[{}]]}]})
+            result = summarize_inputs(root, reference)
+            self.assertEqual(result["history_available_scenes"], 1)
+            for variant in result["variants"]:
+                self.assertAlmostEqual(variant["mean_delta_vs_gap_forecast"]["pdm_score"], 0.03)
+                self.assertEqual(variant["pdm_better_vs_gap_forecast"], 1)
 
     def test_paired_scoring_verifies_original_ds_anchor(self):
         record = {"token": "example", "session_id": "session", "cache_sha256": "cache", "speed_mps": 4.0, "leaders": []}
