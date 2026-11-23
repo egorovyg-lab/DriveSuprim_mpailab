@@ -23,6 +23,20 @@ SPEED_CAP = 10.0
 ACCEL_CAP = 2.0
 HORIZON = POSES * STEP
 PROTOCOL = "navsim-straight-train-v1"
+BASE_INSTRUCTIONS = (
+    "Choose the longitudinal action for the next 0.5 seconds on a straight road. Maintain a clear gap "
+    "while making forward progress within the speed limit. There is no destination stop in this horizon. "
+    "Radar range is bumper-to-bumper. Positive closing speed means the gap is shrinking."
+)
+PROMPT_VARIANTS = {
+    "baseline": "",
+    "progress": (
+        " For maintain versus slow, consider range and closing speed together. Prefer maintain if continuing at the "
+        "current speed preserves a comfortable gap, including after an earlier slow action. Choose slow when reducing "
+        "speed in this interval is needed to preserve that gap. Reassess from the current range and closing speed "
+        "at each decision."
+    ),
+}
 
 
 def digest(value):
@@ -182,7 +196,7 @@ def prepare(package, source, repo, limit):
             "rejected": dict(rejected), "scenes": rows, "speed_cap_mps": SPEED_CAP}
 
 
-def build_plan(record, choose):
+def build_plan(record, choose, prompt_variant="baseline"):
     from .driver import request_for
     from .simulation import ACCELERATION, Action, Vehicle
 
@@ -199,11 +213,7 @@ def build_plan(record, choose):
         }
         row = request_for({"ego_speed_mps": round(ego.speed_mps, 2), "previous_ego_speed_mps": previous_speed,
                            "speed_limit_mps": SPEED_CAP, "lead_radar": radar, "previous_action": previous_action.value})
-        row["question"]["instructions"] = (
-            "Choose the longitudinal action for the next 0.5 seconds on a straight road. Maintain a clear gap "
-            "while making forward progress within the speed limit. There is no destination stop in this horizon. "
-            "Radar range is bumper-to-bumper. Positive closing speed means the gap is shrinking."
-        )
+        row["question"]["instructions"] = BASE_INSTRUCTIONS + PROMPT_VARIANTS[prompt_variant]
         started = perf_counter()
         action, probabilities = choose(row)
         decisions.append({"time_s": elapsed, "request": row, "action": action.value,
@@ -215,18 +225,18 @@ def build_plan(record, choose):
     return {"token": record["token"], "poses": poses, "decisions": decisions}
 
 
-def predict(plan, weights, out):
+def predict(plan, weights, out, prompt_variant="baseline"):
     from .driver import DrexMax
 
     if plan["protocol"] != PROTOCOL or plan["speed_cap_mps"] != SPEED_CAP or not plan["scenes"]:
         raise ValueError("Unsupported or empty straight-scene package")
     started = perf_counter()
     choose = DrexMax(weights)
-    report = {"observation_sha256": digest(plan), "model_path": str(weights),
+    report = {"observation_sha256": digest(plan), "prompt_variant": prompt_variant, "model_path": str(weights),
               "model_load_wall_s": perf_counter() - started, "cases": []}
     for record in plan["scenes"]:
         try:
-            outcome = build_plan(record, choose)
+            outcome = build_plan(record, choose, prompt_variant)
         except (ValueError, RuntimeError) as exc:
             outcome = {"token": record["token"], "error": f"{type(exc).__name__}: {exc}"}
         report["cases"].append(outcome)
@@ -261,8 +271,9 @@ def score(package, source, repo, payload):
     from rollout_replay import bound_context
 
     plan, predictions = payload["plan"], payload["predictions"]
+    prompt_variant = predictions.get("prompt_variant", "baseline")
     _, candidates, source_id = source_context(package, source)
-    if (plan["protocol"] != PROTOCOL or plan["anchor_identity_sha256"] != source_id
+    if (plan["protocol"] != PROTOCOL or prompt_variant not in PROMPT_VARIANTS or plan["anchor_identity_sha256"] != source_id
             or predictions["observation_sha256"] != digest(plan)
             or [s["token"] for s in plan["scenes"]] != [c["token"] for c in predictions["cases"]]):
         raise RuntimeError("Observation, prediction or original audit identity differs")
@@ -295,7 +306,8 @@ def score(package, source, repo, payload):
         drex = raw_score(cache, poses, template, keys)
         compared.append({"token": token, "session_id": record["session_id"], "ds": baseline, "drex": drex,
                          "delta": {key: drex[key] - baseline[key] for key in keys}})
-    return {"protocol": PROTOCOL, "planned_scenes": len(plan["scenes"]), "compared_scenes": len(compared),
+    return {"protocol": PROTOCOL, "prompt_variant": prompt_variant, "observation_sha256": digest(plan),
+            "planned_scenes": len(plan["scenes"]), "compared_scenes": len(compared),
             "prediction_failures": failed,
             "mean_delta": {key: mean(row["delta"][key] for row in compared) for key in keys} if compared else None,
             "safety_regressions": {key: sum(row["delta"][key] < -1e-8 for row in compared) for key in real_data.SAFETY},
@@ -328,6 +340,7 @@ def main():
     parser.add_argument("--repo", type=Path)
     parser.add_argument("--out", type=Path)
     parser.add_argument("--weights", type=Path)
+    parser.add_argument("--prompt-variant", choices=PROMPT_VARIANTS, default="baseline")
     parser.add_argument("--limit", type=int, default=8)
     args = parser.parse_args()
     if args.limit < 1:
@@ -359,7 +372,7 @@ def main():
             parser.error("--weights must point to the Drex Max weights directory")
         if predictions.exists():
             parser.error("Use a new run name to write a different prediction file")
-        return int(predict(read(observations), args.weights, predictions))
+        return int(predict(read(observations), args.weights, predictions, args.prompt_variant))
     plan, output = read(observations), read(predictions)
     if len(plan["scenes"]) != len(output["cases"]):
         parser.error("Run scoring after the GPU job has written all planned case results")

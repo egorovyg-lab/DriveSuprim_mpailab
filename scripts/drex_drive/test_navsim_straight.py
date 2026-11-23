@@ -62,6 +62,21 @@ class StraightPlanTests(unittest.TestCase):
         self.assertEqual(stop["poses"][-1], stop["poses"][-2])
         self.assertIsNone(stop["decisions"][0]["request"]["state"]["lead_radar"])
 
+    def test_progress_variant_changes_only_the_instructions_for_equal_actions(self):
+        record = {"token": "example", "speed_mps": 4.0, "leaders": [{"gap_m": 12.0, "speed_mps": 2.0}]}
+        choose = Mock(return_value=(Action.MAINTAIN, None))
+        baseline = build_plan(record, choose)
+        progress = build_plan(record, choose, "progress")
+        self.assertEqual(baseline["poses"], progress["poses"])
+        for before, after in zip(baseline["decisions"], progress["decisions"]):
+            self.assertEqual(before["request"]["state"], after["request"]["state"])
+            old_question = before["request"]["question"]
+            new_question = after["request"]["question"]
+            amended = new_question["instructions"].removeprefix(old_question["instructions"])
+            self.assertNotEqual(new_question["instructions"], amended)
+            self.assertIn("Prefer maintain", amended)
+            self.assertEqual({**new_question, "instructions": old_question["instructions"]}, old_question)
+
     def test_paired_scoring_verifies_original_ds_anchor(self):
         record = {"token": "example", "session_id": "session", "cache_sha256": "cache", "speed_mps": 4.0, "leaders": []}
         plan = {"protocol": PROTOCOL, "anchor_identity_sha256": "original", "scenes": [record]}
