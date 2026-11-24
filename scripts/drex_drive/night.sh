@@ -1,6 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Slurm runs a copy of this script from its spool directory.
+if [[ ${1:-} == worker ]]; then
+  repo=$2
+  runtime=$3
+  out=$4
+  cd "$repo"
+  exec 8>"$out/.predict.lock"
+  flock -n 8 || { echo 'Night predictions are already running' >&2; exit 1; }
+  export PYTHONPATH="$runtime/upstream"
+  exec srun --ntasks=1 "$runtime/venv/bin/python" -m scripts.drex_drive.navsim_night predict \
+    --out "$out" --weights "$runtime/models/drex-max-v1"
+fi
+
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 cd "$repo"
 script="$repo/scripts/drex_drive/night.sh"
@@ -27,9 +40,9 @@ case "${1:-}" in
     if [[ ! -s "$out/gpu-complete.txt" ]]; then
       stage=gpu
       printf '%s\n' "$stage" >"$out/status.txt"
-      sbatch --job-name=drex-night --wait --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 \
+      sbatch --parsable --job-name=drex-night --wait --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 \
         --gres=gpu:1 --cpus-per-task=4 --mem=96G --time="${DREX_NIGHT_GPU_TIME:-02:00:00}" --chdir="$repo" \
-        --output="$runtime/logs/night-%j.log" "$script" worker
+        --output="$runtime/logs/night-%j.log" "$script" worker "$repo" "$runtime" "$out" | tee "$out/last-job.txt"
       printf 'Predictions complete\n' >"$out/gpu-complete.txt"
     fi
     if [[ ! -s "$out/suite.json" ]]; then
@@ -43,12 +56,6 @@ case "${1:-}" in
       python3 -m "$module" probes --out "$out"
     fi
     printf 'complete\n' >"$out/status.txt" ;;
-  worker)
-    exec 8>"$out/.predict.lock"
-    flock -n 8 || { echo 'Night predictions are already running' >&2; exit 1; }
-    export PYTHONPATH="$runtime/upstream"
-    exec srun --ntasks=1 "$runtime/venv/bin/python" -m "$module" predict \
-      --out "$out" --weights "$runtime/models/drex-max-v1" ;;
   status)
     if [[ -s "$out/status.txt" ]]; then
       cat "$out/status.txt"
@@ -56,6 +63,17 @@ case "${1:-}" in
     squeue -u "$USER" -n drex-night -o "%.18i %.22j %.10T %.10M %R"
     if [[ -s "$log" ]]; then
       tail -n 18 "$log"
+    fi
+    if [[ -s "$out/last-job.txt" ]]; then
+      read -r job <"$out/last-job.txt"
+      job=${job%%;*}
+      if [[ $job =~ ^[0-9]+$ ]]; then
+        printf '\nSlurm job %s\n' "$job"
+        sacct -X -j "$job" --format=JobID,State,Elapsed,ExitCode || true
+        if [[ -s "$runtime/logs/night-$job.log" ]]; then
+          tail -n 18 "$runtime/logs/night-$job.log"
+        fi
+      fi
     fi ;;
   *) printf 'Usage: %s start|status\n' "$0" >&2; exit 2 ;;
 esac
