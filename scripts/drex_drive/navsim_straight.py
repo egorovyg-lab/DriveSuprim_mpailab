@@ -53,19 +53,26 @@ PROMPT_VARIANTS = {
         "If the leader is pulling away and accelerating still leaves sufficient room, accelerate. "
         "If the gap remains sufficient at the current speed and extra acceleration would close it too quickly, maintain."
     ),
+    "corridor-risk": (
+        " Check each action's near_path_clearance_with_margin_m. Zero or less means estimated footprint overlap "
+        "within the preview. A null value means there is no near-path object in this forecast. "
+        "If proceeding risks overlap and maintaining speed stays clear, maintain. "
+        "Slow or stop if maintaining speed also risks overlap. Keep making progress where the forecast leaves room."
+    ),
 }
 EXTRA_INPUT_VARIANTS = ("leader-history", "action-effects")
 FOLLOWING_VARIANTS = ("leader-context", "action-gap-end")
 FOLLOWING_PROTOCOL = "navsim-straight-following-v1"
 HOLDOUT_OBSERVATIONS = ("action-effects", *FOLLOWING_VARIANTS)
 OBSERVATION_VARIANTS = ("radar", "gap-forecast", *EXTRA_INPUT_VARIANTS, *FOLLOWING_VARIANTS)
-NIGHT_FORECASTS = ("action-deltas", "short-preview", "dual-preview", "corridor-objects")
+NIGHT_FORECASTS = ("action-deltas", "short-preview", "dual-preview", "corridor-objects", "corridor-preview")
 ACTION_VARIANTS = ("standard", "gentle")
 GENTLE_ACTIONS = {
     "gentle_proceed": (1.0, "Increase speed gently at 1 m/s²."),
     "gentle_slow": (-0.75, "Reduce speed gently at 0.75 m/s²."),
 }
 PREVIEW_SECONDS = 2.0
+CORRIDOR_POSITION_MARGIN_M = 0.25
 
 
 def digest(value):
@@ -273,22 +280,51 @@ def histories_by_scene(plan, history):
     return {r["token"]: r["leader_history"] for r in history["scenes"]}
 
 
-def action_effects(ego, gap, lead_speed, accelerations, include_end=False, horizon_s=PREVIEW_SECONDS):
+def minimum_path_clearance(ego_x, time_s, objects, ego_bounds):
+    clearance = []
+    for obj in objects:
+        x = obj["x_m"] + time_s * obj["vx_mps"]
+        y = obj["y_m"] + time_s * obj["vy_mps"]
+        half_along = obj["half_length_along_path_m"]
+        x_gap = max(x - half_along - (ego_x + ego_bounds["front_m"]),
+                    ego_x + ego_bounds["rear_m"] - (x + half_along))
+        y_gap = abs(y) - obj["lateral_reach_m"]
+        clearance.append(max(x_gap, y_gap) - CORRIDOR_POSITION_MARGIN_M)
+    return min(clearance, default=None)
+
+
+def action_effects(ego, gap, lead_speed, accelerations, include_end=False, horizon_s=PREVIEW_SECONDS,
+                   corridor=None):
     previews = {}
     for action, acceleration in accelerations.items():
         simulated = ego
         min_gap = gap
+        min_clearance, first_overlap = None, None
+        if corridor is not None:
+            objects, ego_bounds, elapsed = corridor
+            min_clearance = minimum_path_clearance(ego.front_m, elapsed, objects, ego_bounds)
+            if min_clearance is not None and min_clearance <= 0:
+                first_overlap = 0.0
         for step in range(round(horizon_s / STEP)):
             requested = acceleration if step < ACTION_STEPS else accelerations["maintain"]
             simulated = simulated.advance(requested, SPEED_CAP)
             if gap is not None:
                 next_gap = gap + (step + 1) * STEP * lead_speed - (simulated.front_m - ego.front_m)
                 min_gap = min(min_gap, next_gap)
+            if min_clearance is not None:
+                time_s = (step + 1) * STEP
+                clearance = minimum_path_clearance(simulated.front_m, elapsed + time_s, objects, ego_bounds)
+                min_clearance = min(min_clearance, clearance)
+                if first_overlap is None and clearance <= 0:
+                    first_overlap = round(time_s, 2)
         progress = simulated.front_m - ego.front_m
         preview = {"progress_m": round(progress, 2), "minimum_gap_m": None if min_gap is None else round(min_gap, 2)}
         if include_end:
             preview["gap_at_horizon_m"] = None if gap is None else round(gap + horizon_s * lead_speed - progress, 2)
             preview["closing_speed_at_horizon_mps"] = None if gap is None else round(simulated.speed_mps - lead_speed, 2)
+        if corridor is not None:
+            preview["near_path_clearance_with_margin_m"] = None if min_clearance is None else round(min_clearance, 3)
+            preview["near_path_overlap_first_s"] = first_overlap
         previews[action] = preview
     return previews
 
@@ -333,7 +369,7 @@ def build_plan(record, choose, prompt_variant="baseline", observation_variant="r
                 ]
         state = {"ego_speed_mps": round(ego.speed_mps, 2), "previous_ego_speed_mps": previous_speed,
                  "speed_limit_mps": SPEED_CAP, "lead_radar": radar, "previous_action": previous_action}
-        if observation_variant == "corridor-objects":
+        if observation_variant in ("corridor-objects", "corridor-preview"):
             state["near_path_objects"] = [
                 {"type": obj["type"], "forward_m": round(obj["x_m"] + elapsed * obj["vx_mps"] - ego.front_m, 2),
                  "lateral_m": round(obj["y_m"] + elapsed * obj["vy_mps"], 2), "heading_rad": obj["heading_rad"],
@@ -345,8 +381,11 @@ def build_plan(record, choose, prompt_variant="baseline", observation_variant="r
             ]
         if observation_variant in (*HOLDOUT_OBSERVATIONS, *NIGHT_FORECASTS):
             horizon_s = 1.0 if observation_variant == "short-preview" else PREVIEW_SECONDS
+            corridor = ((record["corridor_objects"], record["ego_bounds"], elapsed)
+                        if observation_variant == "corridor-preview" else None)
             forecast = action_effects(ego, gap, leader_speed, accelerations,
-                                      include_end=observation_variant == "action-gap-end", horizon_s=horizon_s)
+                                      include_end=observation_variant == "action-gap-end", horizon_s=horizon_s,
+                                      corridor=corridor)
             if observation_variant == "action-deltas":
                 stay = forecast["maintain"]
                 for effect in forecast.values():
@@ -355,6 +394,8 @@ def build_plan(record, choose, prompt_variant="baseline", observation_variant="r
                         None if gap is None else round(effect["minimum_gap_m"] - stay["minimum_gap_m"], 2))
             state["action_effects"] = {"horizon_s": horizon_s, "apply_action_s": ACTION_STEPS * STEP,
                                        "after_action": "maintain", "forecast": forecast}
+            if corridor is not None:
+                state["action_effects"]["near_path_position_margin_m"] = CORRIDOR_POSITION_MARGIN_M
             if observation_variant == "dual-preview":
                 state["action_effects"]["forecast_at_1s"] = action_effects(ego, gap, leader_speed, accelerations,
                                                                          horizon_s=1.0)

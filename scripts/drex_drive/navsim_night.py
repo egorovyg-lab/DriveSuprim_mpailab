@@ -36,6 +36,10 @@ EPSILON = 1e-8
 COLLISION_TOKEN = "cf6c2163667d51d0"
 CORRIDOR_VARIANT = "corridor-objects"
 CORRIDOR_MARGIN_M = 0.75
+PREVIEW_SETUPS = {
+    "corridor-preview": ("baseline", "corridor-preview", "standard"),
+    "corridor-preview-instruction": ("corridor-risk", "corridor-preview", "standard"),
+}
 
 
 def leader_category(observation):
@@ -178,6 +182,8 @@ def archive_evaluator(args, plan, inspect=None):
             raise RuntimeError(f"Current observation changed for {token}")
         if "corridor_objects" in record and corridor_objects(metric_cache) != record["corridor_objects"]:
             raise RuntimeError(f"Current corridor objects changed for {token}")
+        if "ego_bounds" in record and ego_bounds(metric_cache) != record["ego_bounds"]:
+            raise RuntimeError(f"Ego footprint changed for {token}")
         sample = real_data.load_inputs(args.package, token, manifest, vocab)
         anchor = next(row for row in candidates[token] if row["candidate_local"] == sample["baseline_local"])
         if list(keys) != anchor["metric_keys"]:
@@ -491,30 +497,52 @@ def corridor_objects(cache):
     return sorted(objects, key=lambda obj: (obj["x_m"], obj["track_token"]))
 
 
-def prepare_corridor(args, plan):
+def ego_bounds(cache):
+    vehicle = cache.ego_state.car_footprint.vehicle_parameters
+    center, half_length = float(vehicle.rear_axle_to_center), float(vehicle.length) / 2
+    return {"front_m": center + half_length, "rear_m": center - half_length}
+
+
+def prepare_corridor(args, plan, include_bounds=False):
     _, _, _, _, caches = archive_context(args, plan)
-    result = {}
+    result, bounds = {}, {}
     for scene in plan["scenes"]:
         token = scene["token"]
         cache = caches[token]
         if cache["sha256"] != scene["cache_sha256"]:
             raise RuntimeError(f"Metric cache changed for {token}")
-        result[token] = corridor_objects(straight.load_cache(cache))
-    return {"observation_sha256": straight.digest(plan), "objects": result}
+        metric_cache = straight.load_cache(cache)
+        result[token] = corridor_objects(metric_cache)
+        if include_bounds:
+            bounds[token] = ego_bounds(metric_cache)
+    export = {"observation_sha256": straight.digest(plan), "objects": result}
+    return {**export, "ego_bounds": bounds} if include_bounds else export
 
 
 def with_corridor(plan, exported):
     tokens = check_plan(plan)
     if exported["observation_sha256"] != straight.digest(plan) or set(exported["objects"]) != set(tokens):
         raise RuntimeError("Corridor input does not match the nightly observations")
-    return {**plan, "scenes": [{**record, "corridor_objects": exported["objects"][record["token"]]}
-                              for record in plan["scenes"]]}
+    bounds = exported.get("ego_bounds")
+    if bounds is not None and set(bounds) != set(tokens):
+        raise RuntimeError("Ego footprints do not match the nightly observations")
+    rows = []
+    for record in plan["scenes"]:
+        token = record["token"]
+        row = {**record, "corridor_objects": exported["objects"][token]}
+        if bounds is not None:
+            row["ego_bounds"] = bounds[token]
+        rows.append(row)
+    return {**plan, "scenes": rows}
 
 
 def score_corridor(args, payload):
     import numpy as np
 
     original, reference = payload["plan"], payload["reference"]
+    variant = payload.get("variant", CORRIDOR_VARIANT)
+    if variant != CORRIDOR_VARIANT and variant not in PREVIEW_SETUPS:
+        raise RuntimeError("Unknown corridor experiment variant")
     plan = with_corridor(original, payload["export"])
     tokens = check_plan(plan)
     cases = {row["token"]: row for row in reference["cases"]}
@@ -540,8 +568,9 @@ def score_corridor(args, payload):
                     else "near_clear" if objects else "no_extra_objects")
         rows.append({"token": token, "session_id": record["session_id"], "leader_category": record["leader_category"],
                      "object_category": category, "objects": objects, "pilot_session": record["pilot_session"],
-                     "ds": ds, "scores": {"control": previous["scores"]["control"], CORRIDOR_VARIANT: evaluate(prediction)},
-                     "actions": prediction["actions"], "planned_distance_m": prediction["poses"][-1][0]})
+                     "ds": ds, "scores": {"control": previous["scores"]["control"], variant: evaluate(prediction)},
+                     "actions": prediction["actions"], "planned_distance_m": prediction["poses"][-1][0],
+                     **({"action_margins": prediction["action_margins"]} if "action_margins" in prediction else {})})
     collision_case = next((row for row in rows if row["token"] == COLLISION_TOKEN), None)
     target = payload.get("collision_track_token")
     target_covered = (any(obj["track_token"] == target for scene in plan["scenes"] if scene["token"] == COLLISION_TOKEN
@@ -549,12 +578,53 @@ def score_corridor(args, payload):
                       if target is not None else None)
     return {"protocol": "navsim-straight-corridor-v1", "observation_sha256": straight.digest(original),
             "predicted_scenes": len(rows), "prediction_failures": failures,
-            "all": paired(rows, CORRIDOR_VARIANT, protected),
+            "all": paired(rows, variant, protected),
             "by_object_category": {
-                category: paired([row for row in rows if row["object_category"] == category], CORRIDOR_VARIANT, protected)
+                category: paired([row for row in rows if row["object_category"] == category], variant, protected)
                 for category in ("projected_overlap", "near_clear", "no_extra_objects")},
             "collision_track_token": target, "collision_track_in_input": target_covered,
             "collision_case": collision_case, "cases": rows}
+
+
+def read_corridor_predictions(root, plan, variant, setup):
+    folder = root / variant
+    identity = straight.read(folder / "identity.json")
+    control = straight.read(root / "control" / "identity.json")
+    if (identity["observation_sha256"] != straight.digest(plan) or identity["variant"] != variant
+            or identity["setup"] != list(setup) or identity["model_path"] != control["model_path"]):
+        raise RuntimeError("Corridor predictions do not match the frozen experiment")
+    predictions = {}
+    for token in check_plan(plan):
+        case = straight.read(folder / f"{token}.json")
+        if "error" in case:
+            predictions[token] = case
+            continue
+        decisions = case["decisions"]
+        data = {"token": case["token"], "poses": case["poses"], "actions": [row["action"] for row in decisions]}
+        if variant in PREVIEW_SETUPS:
+            data["action_margins"] = [
+                {"time_s": row["time_s"], "chosen_action": row["action"], "forecast": {
+                    action: {key: preview[key] for key in ("near_path_clearance_with_margin_m", "near_path_overlap_first_s")}
+                    for action, preview in row["request"]["state"]["action_effects"]["forecast"].items()}}
+                for row in decisions
+            ]
+        predictions[token] = data
+    return identity["observation_sha256"], predictions
+
+
+def compare_preview_with_corridor(result, previous, variant):
+    baseline = {row["token"]: row for row in previous["cases"]}
+    matched = []
+    for row in result["cases"]:
+        old = baseline.get(row["token"])
+        if old is None:
+            continue
+        if row["objects"] != old["objects"] or row["session_id"] != old["session_id"]:
+            raise RuntimeError(f"Archived corridor objects changed for {row['token']}")
+        matched.append({**row, "scores": {**row["scores"], "control": old["scores"][CORRIDOR_VARIANT]}})
+    protected = result["all"].get("vs_control", {}).get("regressions", ())
+    combined = paired(matched, variant, protected)
+    return {"scenes": len(matched), **combined.get("vs_control", {})}
 
 
 def on_astra(stage, args, payload):
@@ -573,9 +643,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("stage", choices=("prepare", "predict", "score", "probes", "collision",
                                           "corridor-prepare", "corridor-predict", "corridor-score",
+                                          "preview-prepare", "preview-predict", "preview-score",
                                           "astra-night-prepare", "astra-night-score", "astra-night-probes",
                                           "astra-night-collision", "astra-night-corridor-prepare",
-                                          "astra-night-corridor-score"))
+                                          "astra-night-corridor-score", "astra-night-preview-prepare"))
     parser.add_argument("--out", type=Path)
     parser.add_argument("--pilot", type=Path)
     parser.add_argument("--weights", type=Path)
@@ -590,7 +661,10 @@ def main():
             remote = {"astra-night-prepare": prepare, "astra-night-score": score,
                       "astra-night-probes": score_probes, "astra-night-collision": score_collision,
                       "astra-night-corridor-prepare": prepare_corridor, "astra-night-corridor-score": score_corridor}
-            result = remote[args.stage](args, payload)
+            if args.stage == "astra-night-preview-prepare":
+                result = prepare_corridor(args, payload, include_bounds=True)
+            else:
+                result = remote[args.stage](args, payload)
         print(json.dumps(result, allow_nan=False))
         return 0
 
@@ -598,6 +672,8 @@ def main():
         parser.error("--out is required")
     root = args.out
     plan_path = root / "observations.json"
+    is_preview = args.stage.startswith("preview-")
+    corridor_input = root / ("corridor-preview-input.json" if is_preview else "corridor-input.json")
     if args.stage == "prepare":
         if args.pilot is None:
             parser.error("--pilot is required")
@@ -613,13 +689,13 @@ def main():
         print(f"Eligible {len(tokens)}/{plan['screened_scenes']}; {len(VARIANTS)} variants; "
               f"{len(tokens) * len(VARIANTS)} planned trajectories", flush=True)
         return 0
-    if args.stage in ("predict", "corridor-predict"):
+    if args.stage in ("predict", "corridor-predict", "preview-predict"):
         if args.weights is None or not args.weights.is_dir():
             parser.error("--weights must point to the installed Drex Max model")
-        if args.stage == "corridor-predict":
-            plan = with_corridor(straight.read(plan_path), straight.read(root / "corridor-input.json"))
-            predict_night(root, args.weights, plan=plan,
-                          setups={CORRIDOR_VARIANT: ("baseline", CORRIDOR_VARIANT, "standard")})
+        if args.stage != "predict":
+            plan = with_corridor(straight.read(plan_path), straight.read(corridor_input))
+            setups = PREVIEW_SETUPS if is_preview else {CORRIDOR_VARIANT: ("baseline", CORRIDOR_VARIANT, "standard")}
+            predict_night(root, args.weights, plan=plan, setups=setups)
         else:
             predict_night(root, args.weights)
         return 0
@@ -633,30 +709,17 @@ def main():
     report = straight.read(suite)
     if report["observation_sha256"] != straight.digest(plan):
         raise RuntimeError("The control scores belong to a different nightly cohort")
-    corridor_input = root / "corridor-input.json"
-    if args.stage == "corridor-prepare":
+    if args.stage in ("corridor-prepare", "preview-prepare"):
         if not corridor_input.exists():
-            straight.write(corridor_input, on_astra("astra-night-corridor-prepare", args, plan))
+            stage = "astra-night-preview-prepare" if is_preview else "astra-night-corridor-prepare"
+            straight.write(corridor_input, on_astra(stage, args, plan))
         exported = straight.read(corridor_input)
         with_corridor(plan, exported)
         print(f"Prepared corridor objects on {sum(bool(rows) for rows in exported['objects'].values())} scenes.")
         return 0
-    if args.stage == "corridor-score":
+    if args.stage in ("corridor-score", "preview-score"):
         exported = straight.read(corridor_input)
         prediction_plan = with_corridor(plan, exported)
-        folder = root / CORRIDOR_VARIANT
-        identity = straight.read(folder / "identity.json")
-        control = straight.read(root / "control" / "identity.json")
-        if (identity["observation_sha256"] != straight.digest(prediction_plan)
-                or identity["setup"] != ["baseline", CORRIDOR_VARIANT, "standard"]
-                or identity["model_path"] != control["model_path"]):
-            raise RuntimeError("Corridor predictions do not match the frozen experiment")
-        predictions = {}
-        for token in check_plan(plan):
-            case = straight.read(folder / f"{token}.json")
-            predictions[token] = (case if "error" in case else
-                                  {"token": case["token"], "poses": case["poses"],
-                                   "actions": [row["action"] for row in case["decisions"]]})
         collision = root / "collision.json"
         target = None
         if collision.exists():
@@ -665,9 +728,28 @@ def main():
                 raise RuntimeError("Collision review belongs to a different nightly cohort")
             target = next((event["track_token"] for event in review["profiles"]["control"]["contacts_through_first_at_fault"]
                            if event["at_fault"]), None)
-        payload = {"plan": plan, "reference": report, "predictions": predictions, "export": exported,
-                   "prediction_plan_sha256": identity["observation_sha256"], "collision_track_token": target}
-        result = on_astra("astra-night-corridor-score", args, payload)
+        details = {"plan": plan, "reference": report, "export": exported, "collision_track_token": target}
+        if is_preview:
+            previous = straight.read(root / "corridor.json")
+            if previous["observation_sha256"] != straight.digest(plan):
+                raise RuntimeError("The preceding corridor test belongs to a different nightly cohort")
+            variants = {}
+            for name, setup in PREVIEW_SETUPS.items():
+                plan_hash, predictions = read_corridor_predictions(root, prediction_plan, name, setup)
+                payload = {**details, "variant": name, "prediction_plan_sha256": plan_hash, "predictions": predictions}
+                result = on_astra("astra-night-corridor-score", args, payload)
+                result["vs_corridor_objects"] = compare_preview_with_corridor(result, previous, name)
+                variants[name] = result
+            output = root / "corridor-preview.json"
+            straight.write(output, {"protocol": "navsim-straight-corridor-preview-v1",
+                                    "position_margin_m": straight.CORRIDOR_POSITION_MARGIN_M,
+                                    "observation_sha256": straight.digest(plan), "variants": variants})
+            print(f"Corridor preview comparison: {output}")
+            return 0
+        plan_hash, predictions = read_corridor_predictions(
+            root, prediction_plan, CORRIDOR_VARIANT, ("baseline", CORRIDOR_VARIANT, "standard"))
+        result = on_astra("astra-night-corridor-score", args, {**details, "prediction_plan_sha256": plan_hash,
+                                                            "predictions": predictions})
         output = root / "corridor.json"
         straight.write(output, result)
         print(f"Corridor comparison on {result['predicted_scenes']} scenes: {output}")

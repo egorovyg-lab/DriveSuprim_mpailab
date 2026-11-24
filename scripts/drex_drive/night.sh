@@ -25,19 +25,24 @@ pilot=$runtime/runs/navsim-straight-train-v1/observations.json
 log=$out/night.log
 
 case "${1:-}" in
-  corridor)
+  corridor|corridor-preview)
     [[ -s "$out/suite.json" ]] || { echo 'Complete nightly scoring before running the corridor test' >&2; exit 2; }
     exec 7>"$out/.corridor.lock"
     flock -n 7 || { echo 'Corridor test is already running' >&2; exit 1; }
-    bash "$repo/scripts/drex_drive/straight.sh" connect
-    python3 -m "$module" corridor-prepare --out "$out"
-    if [[ ! -s "$out/corridor-gpu-complete.txt" ]]; then
-      sbatch --job-name=drex-corridor --wait --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 \
-        --gres=gpu:1 --cpus-per-task=4 --mem=96G --time=00:30:00 --chdir="$repo" \
-        --output="$runtime/logs/corridor-%j.log" "$script" worker "$repo" "$runtime" "$out" corridor-predict
-      printf 'Predictions complete\n' >"$out/corridor-gpu-complete.txt"
+    stage=corridor
+    if [[ $1 == corridor-preview ]]; then
+      [[ -s "$out/corridor.json" ]] || { echo 'Complete the corridor object test before running its preview' >&2; exit 2; }
+      stage=preview
     fi
-    python3 -m "$module" corridor-score --out "$out" ;;
+    bash "$repo/scripts/drex_drive/straight.sh" connect
+    python3 -m "$module" "$stage-prepare" --out "$out"
+    if [[ ! -s "$out/$1-gpu-complete.txt" ]]; then
+      sbatch --job-name="drex-$1" --wait --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 \
+        --gres=gpu:1 --cpus-per-task=4 --mem=96G --time=00:30:00 --chdir="$repo" \
+        --output="$runtime/logs/$1-%j.log" "$script" worker "$repo" "$runtime" "$out" "$stage-predict"
+      printf 'Predictions complete\n' >"$out/$1-gpu-complete.txt"
+    fi
+    python3 -m "$module" "$stage-score" --out "$out" ;;
   collision)
     [[ -s "$out/suite.json" ]] || { echo 'Complete nightly scoring before reviewing the collision' >&2; exit 2; }
     exec 7>"$out/.collision.lock"
@@ -95,5 +100,5 @@ case "${1:-}" in
         fi
       fi
     fi ;;
-  *) printf 'Usage: %s start|status|collision|corridor\n' "$0" >&2; exit 2 ;;
+  *) printf 'Usage: %s start|status|collision|corridor|corridor-preview\n' "$0" >&2; exit 2 ;;
 esac

@@ -25,6 +25,36 @@ def example_plan():
 
 
 class NightTests(unittest.TestCase):
+    def test_preview_distinguishes_acceleration_from_holding_at_a_narrow_gap(self):
+        parked = {"type": "VEHICLE", "x_m": 10.3315, "y_m": -3.359, "heading_rad": .5965,
+                  "length_m": 4.8091, "width_m": 1.8969, "vx_mps": 0.0, "vy_mps": 0.0,
+                  "lateral_reach_m": 3.284, "half_length_along_path_m": 2.5221}
+        scene = {"token": "preview", "speed_mps": 1.117, "leaders": [], "corridor_objects": [parked],
+                 "ego_bounds": {"front_m": 3.8, "rear_m": -1.2}}
+        choose = lambda _: ("maintain", None)
+        old = straight.build_plan(scene, choose, observation_variant=night.CORRIDOR_VARIANT)
+        preview = straight.build_plan(scene, choose, observation_variant="corridor-preview")
+        instructed = straight.build_plan(scene, choose, "corridor-risk", "corridor-preview")
+        self.assertEqual(old["poses"], preview["poses"])
+        self.assertEqual(preview["poses"], instructed["poses"])
+        states = [run["decisions"][0]["request"]["state"] for run in (old, preview, instructed)]
+        self.assertEqual(states[1], states[2])
+        old_forecast = states[0]["action_effects"]["forecast"]
+        forecast = states[1]["action_effects"]["forecast"]
+        self.assertEqual(forecast["proceed"]["near_path_overlap_first_s"], 1.9)
+        self.assertAlmostEqual(forecast["proceed"]["near_path_clearance_with_margin_m"], -.175)
+        self.assertGreater(forecast["maintain"]["near_path_clearance_with_margin_m"], 0)
+        self.assertIsNone(forecast["maintain"]["near_path_overlap_first_s"])
+        self.assertEqual({key: forecast["proceed"][key] for key in old_forecast["proceed"]}, old_forecast["proceed"])
+        clear = straight.build_plan({**scene, "corridor_objects": [{**parked, "y_m": -3.7}]}, choose,
+                                    observation_variant="corridor-preview")
+        clear_forecast = clear["decisions"][0]["request"]["state"]["action_effects"]["forecast"]
+        self.assertGreater(clear_forecast["proceed"]["near_path_clearance_with_margin_m"], 0)
+        self.assertIsNone(clear_forecast["proceed"]["near_path_overlap_first_s"])
+        empty = straight.build_plan({**scene, "corridor_objects": []}, choose, observation_variant="corridor-preview")
+        empty_forecast = empty["decisions"][0]["request"]["state"]["action_effects"]["forecast"]
+        self.assertIsNone(empty_forecast["proceed"]["near_path_clearance_with_margin_m"])
+
     def test_corridor_includes_a_rotated_vehicle_outside_the_leader_strip(self):
         import numpy as np
 
