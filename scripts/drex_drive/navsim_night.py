@@ -460,24 +460,24 @@ def score_collision(args, payload):
 def corridor_objects(cache):
     origin = cache.ego_state.rear_axle
     vehicle = cache.ego_state.car_footprint.vehicle_parameters
-    reach = straight.straight_reach(cache.ego_state.dynamic_car_state.speed)
-    front = vehicle.rear_axle_to_center + vehicle.length / 2
+    reach = straight.straight_reach(float(cache.ego_state.dynamic_car_state.speed))
+    front = float(vehicle.rear_axle_to_center) + float(vehicle.length) / 2
     c, s = cos(origin.heading), sin(origin.heading)
     objects = []
     for actor in cache.current_tracked_objects[0].tracked_objects:
-        x, y = straight.local_xy(actor.center.x, actor.center.y, origin)
+        x, y = map(float, straight.local_xy(actor.center.x, actor.center.y, origin))
         kind = actor.tracked_object_type.name
         if kind == "VEHICLE" and 0 < x <= 65 and abs(y) <= 1.8:
             continue
-        heading = (actor.box.center.heading - origin.heading + pi) % (2 * pi) - pi
-        length, width = actor.box.length, actor.box.width
+        heading = float((actor.box.center.heading - origin.heading + pi) % (2 * pi) - pi)
+        length, width = float(actor.box.length), float(actor.box.width)
         velocity = getattr(actor, "velocity", None)
-        vx, vy = (velocity.x, velocity.y) if velocity is not None else (0.0, 0.0)
+        vx, vy = (float(velocity.x), float(velocity.y)) if velocity is not None else (0.0, 0.0)
         vx, vy = c * vx + s * vy, -s * vx + c * vy
         if not all(isfinite(value) for value in (x, y, heading, length, width, vx, vy)) or min(length, width) <= 0:
             continue
         half_along = (abs(cos(heading)) * length + abs(sin(heading)) * width) / 2
-        lateral_reach = (abs(sin(heading)) * length + abs(cos(heading)) * width + vehicle.width) / 2
+        lateral_reach = (abs(sin(heading)) * length + abs(cos(heading)) * width + float(vehicle.width)) / 2
         x_end, y_end = x + straight.HORIZON * vx, y + straight.HORIZON * vy
         if max(x, x_end) + half_along < front or min(x, x_end) - half_along > front + reach:
             continue
@@ -487,7 +487,7 @@ def corridor_objects(cache):
         objects.append({"track_token": actor.track_token, "type": kind, "x_m": round(x, 4), "y_m": round(y, 4),
                         "heading_rad": round(heading, 4), "length_m": round(length, 4), "width_m": round(width, 4),
                         "vx_mps": round(vx, 4), "vy_mps": round(vy, 4), "lateral_reach_m": round(lateral_reach, 4),
-                        "half_length_along_path_m": round(half_along, 4), "projected_lateral_overlap": clearance <= 0})
+                        "half_length_along_path_m": round(half_along, 4), "projected_lateral_overlap": bool(clearance <= 0)})
     return sorted(objects, key=lambda obj: (obj["x_m"], obj["track_token"]))
 
 

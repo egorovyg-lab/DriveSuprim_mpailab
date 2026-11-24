@@ -1,5 +1,6 @@
 from pathlib import Path
 from math import pi
+import json
 import shlex
 import sys
 from tempfile import TemporaryDirectory
@@ -25,20 +26,23 @@ def example_plan():
 
 class NightTests(unittest.TestCase):
     def test_corridor_includes_a_rotated_vehicle_outside_the_leader_strip(self):
+        import numpy as np
+
         def actor(token, y, heading):
-            center = SimpleNamespace(x=10.33, y=y, heading=heading)
+            center = SimpleNamespace(x=np.float64(10.33), y=np.float64(y), heading=np.float64(heading))
             return SimpleNamespace(track_token=token, center=center, tracked_object_type=SimpleNamespace(name="VEHICLE"),
-                                   box=SimpleNamespace(center=center, length=4.8, width=2.0))
+                                   box=SimpleNamespace(center=center, length=np.float64(4.8), width=np.float32(2.0)))
 
         ego = SimpleNamespace(rear_axle=SimpleNamespace(x=0.0, y=0.0, heading=0.0),
                               dynamic_car_state=SimpleNamespace(speed=1.117),
                               car_footprint=SimpleNamespace(vehicle_parameters=SimpleNamespace(
-                                  rear_axle_to_center=1.3, length=4.8, width=2.0)))
+                                  rear_axle_to_center=1.3, length=4.8, width=np.float64(2.0))))
         cache = SimpleNamespace(ego_state=ego, current_tracked_objects=[SimpleNamespace(tracked_objects=[
             actor("leader", 0.0, 0.0), actor("parallel-side", -3.36, 0.0),
             actor("rotated-side", -3.36, pi / 2), actor("near-clear", 2.4, 0.0),
         ])])
         objects = night.corridor_objects(cache)
+        self.assertEqual(json.loads(json.dumps(objects, allow_nan=False)), objects)
         self.assertEqual([obj["track_token"] for obj in objects], ["near-clear", "rotated-side"])
         self.assertEqual([obj["projected_lateral_overlap"] for obj in objects], [False, True])
         record = {"token": "example", "speed_mps": 1.117, "leaders": [], "corridor_objects": objects}
