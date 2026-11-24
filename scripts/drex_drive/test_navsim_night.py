@@ -25,6 +25,52 @@ def example_plan():
 
 
 class NightTests(unittest.TestCase):
+    def test_regression_selection_catches_ttc_only_and_keeps_the_rescued_scene(self):
+        plan = example_plan()
+        plan["scenes"][0]["token"] = night.COLLISION_TOKEN
+        binding = straight.digest(plan)
+        good = dict(pdm_score=1.0, no_at_fault_collisions=1.0, time_to_collision_within_bound=1.0)
+        contact = dict(pdm_score=0.0, no_at_fault_collisions=0.0, time_to_collision_within_bound=0.0)
+        ttc_only = dict(pdm_score=.64, no_at_fault_collisions=1.0, time_to_collision_within_bound=0.0)
+        def report(name, first, second):
+            return {"observation_sha256": binding, "cases": [
+                {"token": token, "ds": good, "scores": {name: metrics}}
+                for token, metrics in zip((night.COLLISION_TOKEN, "b"), (first, second))]}
+
+        a, b = night.PREVIEW_SETUPS
+        suite = report("control", contact, good)
+        corridor = report(night.CORRIDOR_VARIANT, contact, good)
+        preview = {"variants": {a: report(a, good, good), b: report(b, good, ttc_only)}}
+        cases = night.regression_cases(plan, suite, corridor, preview)
+        self.assertEqual(set(cases), {night.COLLISION_TOKEN, "b"})
+        self.assertTrue(cases[night.COLLISION_TOKEN]["positive_control"])
+        self.assertEqual(cases["b"]["regressions"], {a: [], b: ["time_to_collision_within_bound"]})
+
+    def test_archived_regression_replay_checks_metrics_and_labels_object_inputs(self):
+        plan = example_plan()
+        binding = straight.digest(plan)
+        good = {"pdm_score": 1.0}
+        diagnostic = {"metrics": good, "initial_leader_track_tokens": ["vehicle"],
+                      "contacts_through_first_at_fault": [], "ttc_geometric_candidates": [{"track_token": "vehicle"}]}
+        evaluate = Mock(return_value=diagnostic)
+        reference = {"regressions": {}, "positive_control": False, "ds": good,
+                     "scores": dict.fromkeys(night.REGRESSION_SETUPS, good)}
+        trajectory = {"token": "a", "poses": [[1.0, 0.0, 0.0]], "decisions": []}
+        payload = {"plan": plan, "observation_sha256": binding,
+                   "export": {"observation_sha256": binding, "objects": {
+                       "a": [{"track_token": "vehicle"}], "b": []}},
+                   "selected": {"a": reference}, "predictions": {"a": dict.fromkeys(night.REGRESSION_SETUPS, trajectory)}}
+        with patch.object(night, "archive_evaluator", return_value=(lambda _: ({**diagnostic}, evaluate), ())):
+            report = night.score_regressions(None, payload)
+            self.assertEqual(evaluate.call_count, 1)
+            paths = report["cases"][0]["profiles"]
+            self.assertTrue(paths["corridor-preview"]["ttc_geometric_candidates"][0]["in_initial_leader_radar"])
+            self.assertTrue(paths["corridor-preview"]["ttc_geometric_candidates"][0]["corridor_object_field_used"])
+            self.assertFalse(paths["control"]["ttc_geometric_candidates"][0]["corridor_object_field_used"])
+            reference["scores"]["control"] = {"pdm_score": .9}
+            with self.assertRaisesRegex(RuntimeError, "Archived raw PDM did not reproduce"):
+                night.score_regressions(None, payload)
+
     def test_preview_distinguishes_acceleration_from_holding_at_a_narrow_gap(self):
         parked = {"type": "VEHICLE", "x_m": 10.3315, "y_m": -3.359, "heading_rad": .5965,
                   "length_m": 4.8091, "width_m": 1.8969, "vx_mps": 0.0, "vy_mps": 0.0,

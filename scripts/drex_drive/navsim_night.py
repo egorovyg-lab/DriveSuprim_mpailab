@@ -664,6 +664,138 @@ def compare_preview_with_corridor(result, previous, variant):
     return {"scenes": len(matched), **combined.get("vs_control", {})}
 
 
+RISK_METRICS = ("no_at_fault_collisions", "time_to_collision_within_bound")
+REGRESSION_SETUPS = {"control": ("baseline", "action-effects", "standard"),
+                     CORRIDOR_VARIANT: ("baseline", CORRIDOR_VARIANT, "standard"), **PREVIEW_SETUPS}
+
+
+def regression_cases(plan, suite, corridor, preview):
+    tokens = set(check_plan(plan))
+    variants = preview["variants"]
+    if set(variants) != set(PREVIEW_SETUPS):
+        raise RuntimeError("The preview suite is missing a variant")
+    index = {}
+    for name, report in (("control", suite), (CORRIDOR_VARIANT, corridor), *variants.items()):
+        rows = {row["token"]: row for row in report["cases"]}
+        if (report["observation_sha256"] != straight.digest(plan)
+                or set(rows) != tokens or len(report["cases"]) != len(tokens)):
+            raise RuntimeError(f"Regression review requires the same completed cohort for {name}")
+        index[name] = rows
+    selected = {}
+    for scene in plan["scenes"]:
+        token = scene["token"]
+        control = index["control"][token]["scores"]["control"]
+        corridor_scores = index[CORRIDOR_VARIANT][token]["scores"][CORRIDOR_VARIANT]
+        regressions = {name: [key for key in RISK_METRICS
+                              if any(index[name][token]["scores"][name][key] < base[key] - EPSILON
+                                     for base in (control, corridor_scores))]
+                       for name in PREVIEW_SETUPS}
+        if token == COLLISION_TOKEN or any(regressions.values()):
+            selected[token] = {"regressions": regressions, "positive_control": token == COLLISION_TOKEN,
+                               "ds": index["control"][token]["ds"],
+                               "scores": {name: index[name][token]["scores"][name] for name in REGRESSION_SETUPS}}
+    return selected
+
+
+def regression_trajectories(root, plan, corridor_plan, preview_plan, selected):
+    plans = {"control": plan, CORRIDOR_VARIANT: corridor_plan, **dict.fromkeys(PREVIEW_SETUPS, preview_plan)}
+    model_path = straight.read(root / "control" / "identity.json")["model_path"]
+    result = {token: {} for token in selected}
+    for name, setup in REGRESSION_SETUPS.items():
+        folder = root / name
+        identity = straight.read(folder / "identity.json")
+        if identity != {"observation_sha256": straight.digest(plans[name]), "variant": name,
+                        "setup": list(setup), "model_path": model_path}:
+            raise RuntimeError(f"Prediction identity changed for {name}")
+        for token in selected:
+            case = straight.read(folder / f"{token}.json")
+            decisions = case["decisions"]
+            if (case["token"] != token or [row["time_s"] for row in decisions]
+                    != [i * straight.STEP for i in range(0, straight.POSES, straight.ACTION_STEPS)]):
+                raise RuntimeError(f"Invalid archived decision trace for {name}/{token}")
+            result[token][name] = {"token": token, "poses": case["poses"], "decisions": [
+                {"time_s": row["time_s"], "action": row["action"], "lead_radar": row["request"]["state"]["lead_radar"],
+                 "chosen_forecast": row["request"]["state"]["action_effects"]["forecast"][row["action"]]}
+                for row in decisions]}
+    return result
+
+
+def inspect_regression(scene, scorer, states):
+    from shapely.affinity import translate
+    from navsim.planning.simulation.planner.pdm_planner.utils.pdm_enums import StateIndex
+
+    result = inspect_contacts(scene, scorer, states)
+    initial, reason = straight.straight_observation(scene, include_leader_tokens=True)
+    if reason is not None:
+        raise RuntimeError(f"Regression scene failed its original observation filter: {reason}")
+    result["initial_leader_track_tokens"] = initial["leader_track_tokens"]
+    candidates = []
+    time_s = result["ttc_infraction_time_s"]
+    if time_s is not None:
+        step = scorer.proposal_sampling.interval_length
+        tick = round(time_s / step)
+        state = states[tick]
+        speed = hypot(state[StateIndex.VELOCITY_X], state[StateIndex.VELOCITY_Y])
+        heading = state[StateIndex.HEADING]
+        obs = scorer._observation
+        for offset in range(0, int(scorer._config.future_collision_horizon_window * 10), 3):
+            dt = offset * step
+            polygon = translate(scorer._ego_polygons[1, tick], xoff=cos(heading) * speed * dt,
+                                yoff=sin(heading) * speed * dt)
+            frame = obs[tick + offset]
+            actors = {actor.track_token: actor for actor in obs.detections_tracks[tick + offset].tracked_objects}
+            for token in frame.intersects(polygon):
+                if obs.red_light_token not in token and token not in obs.collided_track_ids:
+                    candidates.append({"track_token": token, "projection_s": round(dt, 3),
+                                       "track_at_projection": actor_snapshot(actors[token], scene.ego_state.rear_axle)})
+    result["ttc_geometric_candidates"] = candidates
+    return result
+
+
+def score_regressions(args, payload):
+    original = payload["plan"]
+    plan = with_corridor(original, payload["export"])
+    selected, predictions = payload["selected"], payload["predictions"]
+    if straight.digest(original) != payload["observation_sha256"] or set(selected) != set(predictions):
+        raise RuntimeError("Regression replay does not match the frozen observations")
+    records = [record for record in plan["scenes"] if record["token"] in selected]
+    if {record["token"] for record in records} != set(selected):
+        raise RuntimeError("A regression case is missing from the frozen cohort")
+    for_scene, _ = archive_evaluator(args, {**plan, "scenes": records}, inspect=inspect_regression)
+    rows = []
+    for record in records:
+        token = record["token"]
+        reference, trajectories = selected[token], predictions[token]
+        if set(trajectories) != set(REGRESSION_SETUPS):
+            raise RuntimeError(f"Missing archived trajectory for {token}")
+        ds, evaluate = for_scene(record)
+        results, pose_cache = {"ds": ds}, {}
+        lateral = {actor["track_token"] for actor in record["corridor_objects"]}
+        for name, trajectory in trajectories.items():
+            if trajectory["token"] != token:
+                raise RuntimeError(f"Trajectory token differs from its regression case: {token}/{name}")
+            key = tuple(tuple(pose) for pose in trajectory["poses"])
+            if key not in pose_cache:
+                pose_cache[key] = evaluate(trajectory)
+            results[name] = {**pose_cache[key], "decisions": trajectory["decisions"]}
+        for name, result in results.items():
+            expected = reference["ds"] if name == "ds" else reference["scores"][name]
+            if set(expected) != set(result["metrics"]) or any(
+                    not isclose(val, expected[key], rel_tol=1e-7, abs_tol=1e-8)
+                    for key, val in result["metrics"].items()):
+                raise RuntimeError(f"Archived raw PDM did not reproduce for {token}/{name}")
+            leaders = result["initial_leader_track_tokens"]
+            for field in ("contacts_through_first_at_fault", "ttc_geometric_candidates"):
+                result[field] = [{**event, "in_initial_leader_radar": event["track_token"] in leaders,
+                                  "in_corridor_object_export": event["track_token"] in lateral,
+                                  "corridor_object_field_used": name in (*PREVIEW_SETUPS, CORRIDOR_VARIANT)}
+                                 for event in result[field]]
+        rows.append({"token": token, "session_id": record["session_id"], "regressions": reference["regressions"],
+                     "positive_control": reference["positive_control"], "profiles": results})
+    return {"protocol": "navsim-straight-regression-replay-v1", "observation_sha256": straight.digest(original),
+            "scenes": len(rows), "cases": rows}
+
+
 def on_astra(stage, args, payload):
     straight_code = Path(straight.__file__).read_text(encoding="utf-8")
     bundled_straight = b64encode(compress(straight_code.encode())).decode()
@@ -678,13 +810,13 @@ def on_astra(stage, args, payload):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("stage", choices=("prepare", "predict", "score", "probes", "collision",
+    parser.add_argument("stage", choices=("prepare", "predict", "score", "probes", "collision", "regressions",
                                           "corridor-prepare", "corridor-predict", "corridor-score",
                                           "preview-prepare", "preview-predict", "preview-score",
                                           "astra-night-prepare", "astra-night-score", "astra-night-probes",
                                           "astra-night-collision", "astra-night-corridor-prepare",
                                           "astra-night-corridor-score", "astra-night-preview-prepare",
-                                          "astra-night-preview-score"))
+                                          "astra-night-preview-score", "astra-night-regressions"))
     parser.add_argument("--out", type=Path)
     parser.add_argument("--pilot", type=Path)
     parser.add_argument("--weights", type=Path)
@@ -699,7 +831,7 @@ def main():
             remote = {"astra-night-prepare": prepare, "astra-night-score": score,
                       "astra-night-probes": score_probes, "astra-night-collision": score_collision,
                       "astra-night-corridor-prepare": prepare_corridor, "astra-night-corridor-score": score_corridor,
-                      "astra-night-preview-score": score_previews}
+                      "astra-night-preview-score": score_previews, "astra-night-regressions": score_regressions}
             if args.stage == "astra-night-preview-prepare":
                 result = prepare_corridor(args, payload, include_bounds=True)
             else:
@@ -748,6 +880,20 @@ def main():
     report = straight.read(suite)
     if report["observation_sha256"] != straight.digest(plan):
         raise RuntimeError("The control scores belong to a different nightly cohort")
+    if args.stage == "regressions":
+        corridor = straight.read(root / "corridor.json")
+        preview = straight.read(root / "corridor-preview.json")
+        exported = straight.read(root / "corridor-preview-input.json")
+        selected = regression_cases(plan, report, corridor, preview)
+        trajectories = regression_trajectories(root, plan, with_corridor(plan, straight.read(root / "corridor-input.json")),
+                                               with_corridor(plan, exported), selected)
+        payload = {"plan": plan, "export": exported, "observation_sha256": report["observation_sha256"],
+                   "selected": selected, "predictions": trajectories}
+        result = on_astra("astra-night-regressions", args, payload)
+        output = root / "corridor-regressions.json"
+        straight.write(output, result)
+        print(f"Archived regression replay on {result['scenes']} scenes: {output}")
+        return 0
     if args.stage in ("corridor-prepare", "preview-prepare"):
         if not corridor_input.exists():
             stage = "astra-night-preview-prepare" if is_preview else "astra-night-corridor-prepare"

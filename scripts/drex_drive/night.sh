@@ -25,6 +25,14 @@ pilot=$runtime/runs/navsim-straight-train-v1/observations.json
 log=$out/night.log
 
 case "${1:-}" in
+  regressions)
+    for input in suite.json corridor.json corridor-preview.json corridor-input.json corridor-preview-input.json; do
+      [[ -s "$out/$input" ]] || { echo "Required input missing: $out/$input" >&2; exit 2; }
+    done
+    exec 7>"$out/.regression-replay.lock"
+    flock -n 7 || { echo 'Archived regression replay is already running' >&2; exit 1; }
+    bash "$repo/scripts/drex_drive/straight.sh" connect
+    python3 -m "$module" regressions --out "$out" ;;
   preview-check)
     for input in observations.json suite.json corridor.json control/identity.json; do
       [[ -s "$out/$input" ]] || { echo "Required input missing: $out/$input" >&2; exit 2; }
@@ -122,5 +130,5 @@ case "${1:-}" in
         fi
       fi
     fi ;;
-  *) printf 'Usage: %s start|status|collision|corridor|preview-check|corridor-preview\n' "$0" >&2; exit 2 ;;
+  *) printf 'Usage: %s start|status|collision|corridor|preview-check|corridor-preview|regressions\n' "$0" >&2; exit 2 ;;
 esac

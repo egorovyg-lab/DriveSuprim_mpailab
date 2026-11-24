@@ -117,7 +117,7 @@ def past_leader_speeds(cache, leader, origin, vehicle_type):
     return sorted(samples, key=lambda sample: -sample["age_at_start_s"])
 
 
-def straight_observation(cache, include_history=False):
+def straight_observation(cache, include_history=False, include_leader_tokens=False):
     """Filter by static road geometry and extract traffic from the current frame only."""
     import numpy as np
     from nuplan.common.actor_state.tracked_objects_types import TrackedObjectType
@@ -183,6 +183,8 @@ def straight_observation(cache, include_history=False):
         leaders.append((radar_track, actor))
     leaders.sort(key=lambda entry: entry[0]["gap_m"])
     observation = {"speed_mps": round(speed, 4), "leaders": [track for track, _ in leaders]}
+    if include_leader_tokens:
+        observation["leader_track_tokens"] = [actor.track_token for _, actor in leaders]
     if include_history:
         observation["leader_history"] = [past_leader_speeds(cache, actor, origin, TrackedObjectType.VEHICLE)
                                          for _, actor in leaders]
