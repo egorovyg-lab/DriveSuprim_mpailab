@@ -5,6 +5,7 @@ from collections import Counter, defaultdict
 from contextlib import redirect_stdout
 from pathlib import Path
 from statistics import mean
+from math import hypot, isfinite
 import json
 import sys
 
@@ -30,6 +31,7 @@ VARIANTS = {
     "dual-preview": ("baseline", "dual-preview", "standard"),
 }
 EPSILON = 1e-8
+COLLISION_TOKEN = "cf6c2163667d51d0"
 
 
 def leader_category(observation):
@@ -140,7 +142,7 @@ def compact_predictions(root, plan):
     return result
 
 
-def archive_evaluator(args, plan):
+def archive_evaluator(args, plan, inspect=None):
     import numpy as np
     import real_data
     from rollout_replay import bound_context
@@ -166,13 +168,21 @@ def archive_evaluator(args, plan):
         anchor = next(row for row in candidates[token] if row["candidate_local"] == sample["baseline_local"])
         if list(keys) != anchor["metric_keys"]:
             raise RuntimeError(f"DriveSuprim metric columns changed for {token}")
-        baseline = straight.raw_score(cache, vocab[anchor["candidate_vocab"]], template, keys)
-        if not np.allclose(list(baseline.values()), anchor["expected_raw"], atol=1e-8, rtol=1e-7):
+        def replay(poses):
+            if inspect is None:
+                return straight.raw_score(cache, poses, template, keys)
+            metrics, scene, scorer, states = straight.raw_score_details(cache, poses, template, keys)
+            return {"metrics": metrics, **inspect(scene, scorer, states)}
+
+        baseline = replay(vocab[anchor["candidate_vocab"]])
+        baseline_metrics = baseline if inspect is None else baseline["metrics"]
+        if not np.allclose(list(baseline_metrics.values()), anchor["expected_raw"], atol=1e-8, rtol=1e-7):
             raise RuntimeError(f"DriveSuprim score parity failed for {token}")
 
         def evaluate(prediction):
-            result = straight.raw_score(cache, straight.checked_straight_poses(prediction), template, keys)
-            if not all(np.isfinite(list(result.values()))):
+            result = replay(straight.checked_straight_poses(prediction))
+            metrics = result if inspect is None else result["metrics"]
+            if not all(np.isfinite(list(metrics.values()))):
                 raise RuntimeError(f"Nonfinite scorer output for {token}")
             return result
 
@@ -315,6 +325,124 @@ def score_probes(args, payload):
             "cases": rows}
 
 
+def collision_profiles(scene, original):
+    from .simulation import ACCELERATION, Action, Vehicle
+
+    commands = [row["action"] for row in original["decisions"]]
+    if len(commands) != straight.POSES // straight.ACTION_STEPS:
+        raise RuntimeError("Incomplete archived trajectory in the collision scene")
+    archived = [ACCELERATION[Action(action)] for action in commands]
+
+    def replay(accelerations):
+        ego = Vehicle(0.0, scene["speed_mps"])
+        poses = []
+        for acceleration in accelerations:
+            for _ in range(straight.ACTION_STEPS):
+                ego = ego.advance(acceleration, straight.SPEED_CAP)
+                poses.append([ego.front_m, 0.0, 0.0])
+        return {"token": scene["token"], "poses": poses}
+
+    baseline = replay(archived)
+    if original["poses"] != baseline["poses"]:
+        raise RuntimeError("Control commands no longer reproduce the archived poses")
+    profiles = {"control": baseline, "maintain": replay([0.0] * len(archived))}
+    for name, delay, action in (("slow_from_start", 0, Action.SLOW), ("stop_from_start", 0, Action.STOP),
+                                ("stop_after_0_5s", 1, Action.STOP), ("stop_after_1s", 2, Action.STOP)):
+        profiles[name] = replay(archived[:delay] + [ACCELERATION[action]] * (len(archived) - delay))
+    return profiles
+
+
+def actor_snapshot(actor, origin):
+    x, y = straight.local_xy(actor.center.x, actor.center.y, origin)
+    velocity = getattr(actor, "velocity", None)
+    speed = hypot(velocity.x, velocity.y) if velocity is not None else None
+    return {"type": actor.tracked_object_type.name, "longitudinal_m": float(x), "lateral_m": float(y),
+            "speed_mps": speed if speed is not None and isfinite(speed) else None}
+
+
+def initial_leader_filter(snapshot):
+    if snapshot is None:
+        return "absent_from_initial_tracks"
+    if snapshot["type"] != "VEHICLE":
+        return "non_vehicle"
+    if not 0 < snapshot["longitudinal_m"] <= 65:
+        return "outside_forward_range"
+    if abs(snapshot["lateral_m"]) > 1.8:
+        return "outside_lateral_band"
+    return "inside_vehicle_position_filter"
+
+
+def inspect_contacts(scene, scorer, states):
+    from nuplan.planning.metrics.utils.collision_utils import CollisionType
+    from navsim.planning.simulation.planner.pdm_planner.scoring.pdm_scorer_utils import get_collision_type
+    from navsim.planning.simulation.planner.pdm_planner.utils.pdm_enums import EgoAreaIndex, StateIndex
+
+    index = 1  # Model trajectory, as in pdm_score_from_interpolated_trajectory.
+    observation = scorer._observation
+    origin = scene.ego_state.rear_axle
+    current = {actor.track_token: actor for actor in scene.current_tracked_objects[0].tracked_objects}
+    ignored = set(observation.collided_track_ids)
+    step = scorer.proposal_sampling.interval_length
+    fault_time = scorer.time_to_at_fault_collision(index)
+    ttc_time = scorer.time_to_ttc_infraction(index)
+    contacts = []
+    for tick, state in enumerate(states):
+        time = tick * step
+        if time > fault_time + EPSILON:
+            break
+        ego_polygon = scorer._ego_polygons[index, tick]
+        occupancy = observation[tick]
+        area = scorer._ego_areas[index, tick]
+        actors = {actor.track_token: actor for actor in observation.detections_tracks[tick].tracked_objects}
+        for token in occupancy.intersects(ego_polygon):
+            if observation.red_light_token in token or token in ignored:
+                continue
+            actor = observation.unique_objects[token]
+            collision_type = get_collision_type(state, ego_polygon, actor, occupancy[token])
+            at_fault = (collision_type in (CollisionType.ACTIVE_FRONT_COLLISION, CollisionType.STOPPED_TRACK_COLLISION)
+                        or (collision_type == CollisionType.ACTIVE_LATERAL_COLLISION
+                            and (area[EgoAreaIndex.MULTIPLE_LANES] or area[EgoAreaIndex.NON_DRIVABLE_AREA])))
+            ignored.add(token)
+            initial = actor_snapshot(current[token], origin) if token in current else None
+            at_contact = actor_snapshot(actors[token], origin)
+            first_replay_time = next(i * step for i in range(tick + 1) if token in observation[i].token_to_idx)
+            ego_x, ego_y = straight.local_xy(state[StateIndex.X], state[StateIndex.Y], origin)
+            contacts.append({"track_token": token, "time_s": round(time, 3), "type": collision_type.name,
+                             "at_fault": bool(at_fault), "initial_track": initial,
+                             "first_in_replay_s": round(first_replay_time, 3),
+                             "initial_leader_filter": initial_leader_filter(initial), "track_at_contact": at_contact,
+                             "ego_at_contact": {"longitudinal_m": float(ego_x), "lateral_m": float(ego_y),
+                                                "speed_mps": hypot(state[StateIndex.VELOCITY_X],
+                                                                   state[StateIndex.VELOCITY_Y])}})
+    findings = [contact["time_s"] for contact in contacts if contact["at_fault"]]
+    confirmed = min(findings, default=float("inf"))
+    if abs(confirmed - fault_time) > EPSILON or isfinite(confirmed) != isfinite(fault_time):
+        raise RuntimeError("Contact trace does not reproduce the PDM scorer's first at-fault collision time")
+    return {"at_fault_collision_time_s": float(fault_time) if isfinite(fault_time) else None,
+            "ttc_infraction_time_s": float(ttc_time) if isfinite(ttc_time) else None,
+            "contacts_through_first_at_fault": contacts}
+
+
+def score_collision(args, payload):
+    import numpy as np
+
+    plan, reference = payload["plan"], payload["reference"]
+    if straight.digest(plan) != payload["observation_sha256"] or reference["token"] != COLLISION_TOKEN:
+        raise RuntimeError("Collision review does not match the archived nightly scene")
+    record = next(row for row in plan["scenes"] if row["token"] == COLLISION_TOKEN)
+    for_scene, _ = archive_evaluator(args, {**plan, "scenes": [record]}, inspect=inspect_contacts)
+    ds, evaluate = for_scene(record)
+    profiles = {name: {"planned_distance_m": item["poses"][-1][0], **evaluate(item)}
+                for name, item in payload["profiles"].items()}
+    for result, scores in ((ds, reference["ds"]), (profiles["control"], reference["scores"]["control"])):
+        if any(not np.isclose(value, scores[key], atol=1e-8, rtol=1e-7) for key, value in result["metrics"].items()):
+            raise RuntimeError("Collision review did not reproduce the archived PDM metrics")
+    return {"protocol": "navsim-straight-collision-v1", "observation_sha256": payload["observation_sha256"],
+            "token": COLLISION_TOKEN, "initial_drex_observation": {
+                "speed_mps": record["speed_mps"], "leaders": record["leaders"]},
+            "ds": ds, "profiles": profiles}
+
+
 def on_astra(stage, args, payload):
     straight_code = Path(straight.__file__).read_text(encoding="utf-8")
     launcher = ("import sys, types\n"
@@ -327,8 +455,9 @@ def on_astra(stage, args, payload):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("stage", choices=("prepare", "predict", "score", "probes",
-                                          "astra-night-prepare", "astra-night-score", "astra-night-probes"))
+    parser.add_argument("stage", choices=("prepare", "predict", "score", "probes", "collision",
+                                          "astra-night-prepare", "astra-night-score", "astra-night-probes",
+                                          "astra-night-collision"))
     parser.add_argument("--out", type=Path)
     parser.add_argument("--pilot", type=Path)
     parser.add_argument("--weights", type=Path)
@@ -340,7 +469,8 @@ def main():
     if args.stage.startswith("astra-night-"):
         payload = json.load(sys.stdin)
         with redirect_stdout(sys.stderr):
-            remote = {"astra-night-prepare": prepare, "astra-night-score": score, "astra-night-probes": score_probes}
+            remote = {"astra-night-prepare": prepare, "astra-night-score": score,
+                      "astra-night-probes": score_probes, "astra-night-collision": score_collision}
             result = remote[args.stage](args, payload)
         print(json.dumps(result, allow_nan=False))
         return 0
@@ -379,6 +509,17 @@ def main():
     report = straight.read(suite)
     if report["observation_sha256"] != straight.digest(plan):
         raise RuntimeError("The control scores belong to a different nightly cohort")
+    if args.stage == "collision":
+        scene = next(row for row in plan["scenes"] if row["token"] == COLLISION_TOKEN)
+        original = straight.read(root / "control" / f"{COLLISION_TOKEN}.json")
+        reference = next(row for row in report["cases"] if row["token"] == COLLISION_TOKEN)
+        payload = {"plan": plan, "observation_sha256": report["observation_sha256"],
+                   "reference": reference, "profiles": collision_profiles(scene, original)}
+        result = on_astra("astra-night-collision", args, payload)
+        output = root / "collision.json"
+        straight.write(output, result)
+        print(f"Collision review scored on Astra: {output}")
+        return 0
     targets = make_probes(root, plan, report)
     result = on_astra("astra-night-probes", args, {"plan": plan, "targets": targets})
     output = root / "single-edits.json"

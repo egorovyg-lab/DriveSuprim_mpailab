@@ -24,6 +24,12 @@ pilot=$runtime/runs/navsim-straight-train-v1/observations.json
 log=$out/night.log
 
 case "${1:-}" in
+  collision)
+    [[ -s "$out/suite.json" ]] || { echo 'Complete nightly scoring before reviewing the collision' >&2; exit 2; }
+    exec 7>"$out/.collision.lock"
+    flock -n 7 || { echo 'Collision review is already running' >&2; exit 1; }
+    bash "$repo/scripts/drex_drive/straight.sh" connect
+    python3 -m "$module" collision --out "$out" ;;
   start)
     [[ -s "$pilot" ]] || { echo 'Original TRAIN observations are missing' >&2; exit 2; }
     mkdir -p "$out" "$runtime/logs"
@@ -75,5 +81,5 @@ case "${1:-}" in
         fi
       fi
     fi ;;
-  *) printf 'Usage: %s start|status\n' "$0" >&2; exit 2 ;;
+  *) printf 'Usage: %s start|status|collision\n' "$0" >&2; exit 2 ;;
 esac

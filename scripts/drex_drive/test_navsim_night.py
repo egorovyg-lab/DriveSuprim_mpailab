@@ -1,4 +1,6 @@
 from pathlib import Path
+import shlex
+import sys
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
@@ -78,7 +80,82 @@ class NightTests(unittest.TestCase):
             night.on_astra("astra-night-score", SimpleNamespace(limit=8), {})
         code = invoke.call_args.kwargs["source_code"]
         compile(code, "<night-transport>", "exec")
-        self.assertLess(len(code.encode("utf-8")), 95_000)
+        remote = shlex.join(["docker", "exec", "container", "python", "-c", code])
+        self.assertLess(len(remote.encode("utf-8")), 120_000)
+
+    def test_collision_profiles_reproduce_control_and_hold_braking(self):
+        scene = {"token": night.COLLISION_TOKEN, "speed_mps": 4.0, "leaders": []}
+        original = straight.build_plan(scene, lambda _: ("proceed", None), observation_variant="action-effects")
+        profiles = night.collision_profiles(scene, original)
+        self.assertEqual(len(profiles), 6)
+        self.assertEqual(profiles["control"]["poses"], original["poses"])
+        braking = profiles["stop_from_start"]["poses"]
+        self.assertAlmostEqual(braking[-1][0], 4.0**2 / (2 * 3.0))
+        self.assertEqual(braking[-1], braking[-2])
+        self.assertEqual(profiles["stop_after_0_5s"]["poses"][:5], original["poses"][:5])
+        self.assertEqual(profiles["stop_after_1s"]["poses"][:10], original["poses"][:10])
+
+    def test_collision_review_explains_initial_leader_filter(self):
+        self.assertEqual(night.initial_leader_filter(None), "absent_from_initial_tracks")
+        actor = {"type": "PEDESTRIAN", "longitudinal_m": 10.0, "lateral_m": 0.0}
+        self.assertEqual(night.initial_leader_filter(actor), "non_vehicle")
+        self.assertEqual(night.initial_leader_filter({**actor, "type": "VEHICLE", "lateral_m": 4.0}),
+                         "outside_lateral_band")
+        self.assertEqual(night.initial_leader_filter({**actor, "type": "VEHICLE", "longitudinal_m": 80.0}),
+                         "outside_forward_range")
+
+    def test_contact_review_uses_scorer_time_and_the_tracks_at_each_frame(self):
+        from enum import Enum
+        import numpy as np
+
+        kind = Enum("CollisionType", "ACTIVE_FRONT_COLLISION STOPPED_TRACK_COLLISION ACTIVE_LATERAL_COLLISION REAR")
+        def actor(token, y):
+            return SimpleNamespace(track_token=token, center=SimpleNamespace(x=10.0, y=y),
+                                   tracked_object_type=SimpleNamespace(name="VEHICLE"))
+
+        side = actor("side", 3.1)
+        entries = [actor("rear", 0.0), side]
+
+        class Frame(dict):
+            @property
+            def token_to_idx(self):
+                return self
+
+            def intersects(self, ego):
+                return ego
+
+        class Replay(list):
+            red_light_token = "red_light"
+            collided_track_ids = []
+            unique_objects = {track.track_token: track for track in entries}
+            detections_tracks = [SimpleNamespace(tracked_objects=entries),
+                                 SimpleNamespace(tracked_objects=[entries[0], actor("side", .4)])]
+
+        state_index = SimpleNamespace(X=0, Y=1, VELOCITY_X=2, VELOCITY_Y=3)
+        modules = {
+            "nuplan.planning.metrics.utils.collision_utils": SimpleNamespace(CollisionType=kind),
+            "navsim.planning.simulation.planner.pdm_planner.scoring.pdm_scorer_utils": SimpleNamespace(
+                get_collision_type=lambda _, __, track, ___: (
+                    kind.ACTIVE_FRONT_COLLISION if track.track_token == "side" else kind.REAR)),
+            "navsim.planning.simulation.planner.pdm_planner.utils.pdm_enums": SimpleNamespace(
+                EgoAreaIndex=SimpleNamespace(MULTIPLE_LANES=0, NON_DRIVABLE_AREA=1), StateIndex=state_index),
+        }
+        scene = SimpleNamespace(ego_state=SimpleNamespace(rear_axle=SimpleNamespace(x=0, y=0, heading=0)),
+                                current_tracked_objects=[SimpleNamespace(tracked_objects=entries)])
+        polygons = np.empty((2, 2), dtype=object)
+        polygons[1, 0], polygons[1, 1] = ["rear"], ["rear", "side"]
+        scorer = SimpleNamespace(_observation=Replay([Frame(rear=None, side=None)] * 2), _ego_polygons=polygons,
+                                 _ego_areas=np.zeros((2, 2, 2), dtype=bool),
+                                 proposal_sampling=SimpleNamespace(interval_length=.1),
+                                 time_to_at_fault_collision=lambda _: .1, time_to_ttc_infraction=lambda _: 0.)
+        with patch.dict(sys.modules, modules):
+            result = night.inspect_contacts(scene, scorer, np.zeros((2, 4)))
+        before, fault = result["contacts_through_first_at_fault"]
+        self.assertFalse(before["at_fault"])
+        self.assertTrue(fault["at_fault"])
+        self.assertEqual(fault["initial_leader_filter"], "outside_lateral_band")
+        self.assertEqual(fault["track_at_contact"]["lateral_m"], .4)
+        self.assertEqual(result["at_fault_collision_time_s"], .1)
 
 
 if __name__ == "__main__":

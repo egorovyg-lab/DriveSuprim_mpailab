@@ -432,7 +432,7 @@ def predict_suite(root, weights, variants=EXTRA_INPUT_VARIANTS):
     return any(failures)
 
 
-def raw_score(path, poses, template, keys):
+def raw_score_details(path, poses, template, keys):
     import numpy as np
     from hydra.utils import instantiate
     from omegaconf import OmegaConf
@@ -447,9 +447,14 @@ def raw_score(path, poses, template, keys):
         raise RuntimeError("Original non-reactive 40-pose protocol required")
     scorer._config.human_penalty_filter = False
     policy = instantiate(cfg.traffic_agents_policy.non_reactive, simulator.proposal_sampling)
-    frame, _ = pdm_score(load_cache(path), Trajectory(np.asarray(poses, dtype=float), sampling),
+    cache = load_cache(path)
+    frame, states = pdm_score(cache, Trajectory(np.asarray(poses, dtype=float), sampling),
                           simulator.proposal_sampling, simulator, scorer, policy)
-    return {key: float(frame.iloc[0][key]) for key in keys}
+    return {key: float(frame.iloc[0][key]) for key in keys}, cache, scorer, states
+
+
+def raw_score(path, poses, template, keys):
+    return raw_score_details(path, poses, template, keys)[0]
 
 
 def checked_straight_poses(prediction):
