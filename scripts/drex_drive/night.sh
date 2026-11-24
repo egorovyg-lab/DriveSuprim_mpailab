@@ -25,6 +25,28 @@ pilot=$runtime/runs/navsim-straight-train-v1/observations.json
 log=$out/night.log
 
 case "${1:-}" in
+  preview-check)
+    for input in observations.json suite.json corridor.json control/identity.json; do
+      [[ -s "$out/$input" ]] || { echo "Required input missing: $out/$input" >&2; exit 2; }
+    done
+    if [[ ! -s "$out/corridor-preview-gpu-complete.txt" ]]; then
+      [[ -x "$runtime/venv/bin/python" && -f "$runtime/upstream/drex_max/model.py" &&
+        -d "$runtime/models/drex-max-v1" ]] ||
+        { echo "Drex runtime, upstream loader or weights missing in $runtime" >&2; exit 2; }
+      "$runtime/venv/bin/python" --version
+      echo 'GPU request: 1 GPU, 4 CPUs, 96G RAM, 30 minutes'
+    else
+      echo 'GPU predictions already complete'
+    fi
+    printf '\nScratch space\n'
+    df -h "$out"
+    printf '\nLogin node resources\n'
+    nproc
+    free -h
+    printf '\nSlurm partition\n'
+    sinfo -p "${DREX_PARTITION:-batch}" -o '%P %a %l %D %t %c %m %G'
+    printf '\nJobs for %s\n' "$USER"
+    squeue -u "$USER" -o '%.18i %.24j %.10T %.10M %R' ;;
   corridor|corridor-preview)
     [[ -s "$out/suite.json" ]] || { echo 'Complete nightly scoring before running the corridor test' >&2; exit 2; }
     exec 7>"$out/.corridor.lock"
@@ -100,5 +122,5 @@ case "${1:-}" in
         fi
       fi
     fi ;;
-  *) printf 'Usage: %s start|status|collision|corridor|corridor-preview\n' "$0" >&2; exit 2 ;;
+  *) printf 'Usage: %s start|status|collision|corridor|preview-check|corridor-preview\n' "$0" >&2; exit 2 ;;
 esac

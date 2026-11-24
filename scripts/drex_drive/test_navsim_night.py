@@ -109,6 +109,31 @@ class NightTests(unittest.TestCase):
         self.assertEqual(result["collision_case"]["object_category"], "projected_overlap")
         self.assertEqual(result["by_object_category"]["no_extra_objects"]["vs_control"]["ties"], 1)
 
+    def test_preview_batch_reuses_only_identical_poses_on_the_same_scene(self):
+        plan = example_plan()
+        tokens = night.check_plan(plan)
+        binding = straight.digest(plan)
+        exported = {"observation_sha256": binding, "objects": {token: [] for token in tokens}}
+        ds = {"pdm_score": .8, "history_comfort": 1.0}
+        reference = {"observation_sha256": binding, "cases": [
+            {"token": token, "ds": ds, "scores": {"control": ds}} for token in tokens]}
+        predictions = {name: {token: {"token": token, "poses": [[4.0, 0, 0]], "actions": ["maintain"]}
+                              for token in tokens} for name in night.PREVIEW_SETUPS}
+        predictions["corridor-preview-instruction"]["b"]["poses"] = [[5.0, 0, 0]]
+        payload = {"plan": plan, "export": exported, "reference": reference, "predictions_by_variant": predictions,
+                   "prediction_plan_sha256": straight.digest(night.with_corridor(plan, exported))}
+        replay = Mock(side_effect=lambda x: {**ds, "pdm_score": x["poses"][-1][0] / 10})
+        evaluate_scene = Mock(return_value=(ds, replay))
+        with patch.object(night, "archive_evaluator", return_value=(evaluate_scene, ("history_comfort",))) as init:
+            result = night.score_previews(None, payload)
+        self.assertEqual(init.call_count, 1)
+        self.assertEqual(evaluate_scene.call_count, 2)
+        self.assertEqual(replay.call_count, 3)
+        self.assertEqual(result["scoring"]["ds_replays"], 2)
+        self.assertEqual(result["scoring"]["unique_drex_replays"], 3)
+        self.assertEqual(result["scoring"]["reused_drex_scores"], 1)
+        self.assertAlmostEqual(result["variants"]["corridor-preview-instruction"]["all"]["mean_pdm"], .45)
+
     def test_one_model_and_per_scene_resume(self):
         plan = example_plan()
         choose = Mock(return_value=("maintain", None))

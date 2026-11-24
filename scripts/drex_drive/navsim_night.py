@@ -4,11 +4,13 @@ import argparse
 from base64 import b64encode
 from collections import Counter, defaultdict
 from contextlib import redirect_stdout
+from functools import lru_cache
 from pathlib import Path
 from statistics import mean
 from math import cos, hypot, isclose, isfinite, pi, sin
 import json
 import sys
+from time import perf_counter
 from zlib import compress
 
 if __package__:
@@ -536,7 +538,7 @@ def with_corridor(plan, exported):
     return {**plan, "scenes": rows}
 
 
-def score_corridor(args, payload):
+def score_corridor(args, payload, evaluator=None):
     import numpy as np
 
     original, reference = payload["plan"], payload["reference"]
@@ -550,7 +552,7 @@ def score_corridor(args, payload):
     if (reference["observation_sha256"] != straight.digest(original) or set(cases) != set(tokens)
             or set(predictions) != set(tokens) or payload["prediction_plan_sha256"] != straight.digest(plan)):
         raise RuntimeError("Corridor predictions, observations and references differ")
-    for_scene, protected = archive_evaluator(args, plan)
+    for_scene, protected = archive_evaluator(args, plan) if evaluator is None else evaluator
     rows, failures = [], []
     for record in plan["scenes"]:
         token = record["token"]
@@ -584,6 +586,41 @@ def score_corridor(args, payload):
                 for category in ("projected_overlap", "near_clear", "no_extra_objects")},
             "collision_track_token": target, "collision_track_in_input": target_covered,
             "collision_case": collision_case, "cases": rows}
+
+
+def score_previews(args, payload):
+    started = perf_counter()
+    predictions = payload["predictions_by_variant"]
+    if set(predictions) != set(PREVIEW_SETUPS):
+        raise RuntimeError("Expected predictions for both corridor preview variants")
+    plan = with_corridor(payload["plan"], payload["export"])
+    for_scene, protected = archive_evaluator(args, plan)
+    records = {record["token"]: record for record in plan["scenes"]}
+
+    @lru_cache(maxsize=None)
+    def scene_context(token):
+        return for_scene(records[token])
+
+    @lru_cache(maxsize=None)
+    def score_poses(token, poses):
+        return scene_context(token)[1]({"token": token, "poses": poses})
+
+    def paired_evaluator(record):
+        token = record["token"]
+        ds, _ = scene_context(token)
+
+        def evaluate(prediction):
+            poses = tuple(tuple(pose) for pose in prediction["poses"])
+            return score_poses(token, poses)
+
+        return ds, evaluate
+
+    variants = {name: score_corridor(args, {**payload, "variant": name, "predictions": predictions[name]},
+                                     evaluator=(paired_evaluator, protected)) for name in PREVIEW_SETUPS}
+    counted = score_poses.cache_info()
+    return {"variants": variants, "scoring": {"ds_replays": scene_context.cache_info().misses,
+                                               "unique_drex_replays": counted.misses, "reused_drex_scores": counted.hits,
+                                               "wall_seconds": perf_counter() - started}}
 
 
 def read_corridor_predictions(root, plan, variant, setup):
@@ -646,7 +683,8 @@ def main():
                                           "preview-prepare", "preview-predict", "preview-score",
                                           "astra-night-prepare", "astra-night-score", "astra-night-probes",
                                           "astra-night-collision", "astra-night-corridor-prepare",
-                                          "astra-night-corridor-score", "astra-night-preview-prepare"))
+                                          "astra-night-corridor-score", "astra-night-preview-prepare",
+                                          "astra-night-preview-score"))
     parser.add_argument("--out", type=Path)
     parser.add_argument("--pilot", type=Path)
     parser.add_argument("--weights", type=Path)
@@ -660,7 +698,8 @@ def main():
         with redirect_stdout(sys.stderr):
             remote = {"astra-night-prepare": prepare, "astra-night-score": score,
                       "astra-night-probes": score_probes, "astra-night-collision": score_collision,
-                      "astra-night-corridor-prepare": prepare_corridor, "astra-night-corridor-score": score_corridor}
+                      "astra-night-corridor-prepare": prepare_corridor, "astra-night-corridor-score": score_corridor,
+                      "astra-night-preview-score": score_previews}
             if args.stage == "astra-night-preview-prepare":
                 result = prepare_corridor(args, payload, include_bounds=True)
             else:
@@ -733,17 +772,19 @@ def main():
             previous = straight.read(root / "corridor.json")
             if previous["observation_sha256"] != straight.digest(plan):
                 raise RuntimeError("The preceding corridor test belongs to a different nightly cohort")
-            variants = {}
+            predictions_by_variant = {}
             for name, setup in PREVIEW_SETUPS.items():
-                plan_hash, predictions = read_corridor_predictions(root, prediction_plan, name, setup)
-                payload = {**details, "variant": name, "prediction_plan_sha256": plan_hash, "predictions": predictions}
-                result = on_astra("astra-night-corridor-score", args, payload)
+                _, predictions_by_variant[name] = read_corridor_predictions(root, prediction_plan, name, setup)
+            payload = {**details, "prediction_plan_sha256": straight.digest(prediction_plan),
+                       "predictions_by_variant": predictions_by_variant}
+            batch = on_astra("astra-night-preview-score", args, payload)
+            for name, result in batch["variants"].items():
                 result["vs_corridor_objects"] = compare_preview_with_corridor(result, previous, name)
-                variants[name] = result
             output = root / "corridor-preview.json"
             straight.write(output, {"protocol": "navsim-straight-corridor-preview-v1",
                                     "position_margin_m": straight.CORRIDOR_POSITION_MARGIN_M,
-                                    "observation_sha256": straight.digest(plan), "variants": variants})
+                                    "observation_sha256": straight.digest(plan), **batch})
+            print(f"Astra scoring: {batch['scoring']}")
             print(f"Corridor preview comparison: {output}")
             return 0
         plan_hash, predictions = read_corridor_predictions(
