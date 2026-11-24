@@ -156,6 +156,12 @@ class NightTests(unittest.TestCase):
         self.assertEqual(fault["initial_leader_filter"], "outside_lateral_band")
         self.assertEqual(fault["track_at_contact"]["lateral_m"], .4)
         self.assertEqual(result["at_fault_collision_time_s"], .1)
+        polygons[1, 0], polygons[1, 1] = [], []
+        scorer.time_to_at_fault_collision = lambda _: np.float64(np.inf)
+        with patch.dict(sys.modules, modules), np.errstate(invalid="raise"):
+            result = night.inspect_contacts(scene, scorer, np.zeros((2, 4)))
+        self.assertIsNone(result["at_fault_collision_time_s"])
+        self.assertEqual(result["contacts_through_first_at_fault"], [])
 
 
 if __name__ == "__main__":

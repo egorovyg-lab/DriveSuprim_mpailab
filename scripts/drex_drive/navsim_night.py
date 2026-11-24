@@ -5,7 +5,7 @@ from collections import Counter, defaultdict
 from contextlib import redirect_stdout
 from pathlib import Path
 from statistics import mean
-from math import hypot, isfinite
+from math import hypot, isclose, isfinite
 import json
 import sys
 
@@ -416,7 +416,7 @@ def inspect_contacts(scene, scorer, states):
                                                                    state[StateIndex.VELOCITY_Y])}})
     findings = [contact["time_s"] for contact in contacts if contact["at_fault"]]
     confirmed = min(findings, default=float("inf"))
-    if abs(confirmed - fault_time) > EPSILON or isfinite(confirmed) != isfinite(fault_time):
+    if not isclose(confirmed, fault_time, rel_tol=0.0, abs_tol=EPSILON):
         raise RuntimeError("Contact trace does not reproduce the PDM scorer's first at-fault collision time")
     return {"at_fault_collision_time_s": float(fault_time) if isfinite(fault_time) else None,
             "ttc_infraction_time_s": float(ttc_time) if isfinite(ttc_time) else None,
