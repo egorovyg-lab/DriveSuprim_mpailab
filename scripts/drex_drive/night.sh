@@ -6,11 +6,12 @@ if [[ ${1:-} == worker ]]; then
   repo=$2
   runtime=$3
   out=$4
+  task=${5:-predict}
   cd "$repo"
   exec 8>"$out/.predict.lock"
   flock -n 8 || { echo 'Night predictions are already running' >&2; exit 1; }
   export PYTHONPATH="$runtime/upstream"
-  exec srun --ntasks=1 "$runtime/venv/bin/python" -m scripts.drex_drive.navsim_night predict \
+  exec srun --ntasks=1 "$runtime/venv/bin/python" -m scripts.drex_drive.navsim_night "$task" \
     --out "$out" --weights "$runtime/models/drex-max-v1"
 fi
 
@@ -24,6 +25,19 @@ pilot=$runtime/runs/navsim-straight-train-v1/observations.json
 log=$out/night.log
 
 case "${1:-}" in
+  corridor)
+    [[ -s "$out/suite.json" ]] || { echo 'Complete nightly scoring before running the corridor test' >&2; exit 2; }
+    exec 7>"$out/.corridor.lock"
+    flock -n 7 || { echo 'Corridor test is already running' >&2; exit 1; }
+    bash "$repo/scripts/drex_drive/straight.sh" connect
+    python3 -m "$module" corridor-prepare --out "$out"
+    if [[ ! -s "$out/corridor-gpu-complete.txt" ]]; then
+      sbatch --job-name=drex-corridor --wait --partition="${DREX_PARTITION:-batch}" --nodes=1 --ntasks=1 \
+        --gres=gpu:1 --cpus-per-task=4 --mem=96G --time=00:30:00 --chdir="$repo" \
+        --output="$runtime/logs/corridor-%j.log" "$script" worker "$repo" "$runtime" "$out" corridor-predict
+      printf 'Predictions complete\n' >"$out/corridor-gpu-complete.txt"
+    fi
+    python3 -m "$module" corridor-score --out "$out" ;;
   collision)
     [[ -s "$out/suite.json" ]] || { echo 'Complete nightly scoring before reviewing the collision' >&2; exit 2; }
     exec 7>"$out/.collision.lock"
@@ -81,5 +95,5 @@ case "${1:-}" in
         fi
       fi
     fi ;;
-  *) printf 'Usage: %s start|status|collision\n' "$0" >&2; exit 2 ;;
+  *) printf 'Usage: %s start|status|collision|corridor\n' "$0" >&2; exit 2 ;;
 esac

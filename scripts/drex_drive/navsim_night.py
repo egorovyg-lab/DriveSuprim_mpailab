@@ -1,13 +1,15 @@
 """Run a matched NAVSIM straight-road experiment over the full archived TRAIN inventory."""
 
 import argparse
+from base64 import b64encode
 from collections import Counter, defaultdict
 from contextlib import redirect_stdout
 from pathlib import Path
 from statistics import mean
-from math import hypot, isclose, isfinite
+from math import cos, hypot, isclose, isfinite, pi, sin
 import json
 import sys
+from zlib import compress
 
 if __package__:
     from . import navsim_straight as straight
@@ -32,6 +34,8 @@ VARIANTS = {
 }
 EPSILON = 1e-8
 COLLISION_TOKEN = "cf6c2163667d51d0"
+CORRIDOR_VARIANT = "corridor-objects"
+CORRIDOR_MARGIN_M = 0.75
 
 
 def leader_category(observation):
@@ -89,11 +93,12 @@ def check_plan(plan):
     return tokens
 
 
-def predict_night(root, weights, load=straight.load_drex):
-    plan = straight.read(root / "observations.json")
+def predict_night(root, weights, load=straight.load_drex, plan=None, setups=VARIANTS):
+    if plan is None:
+        plan = straight.read(root / "observations.json")
     check_plan(plan)
     model = None
-    for name, (prompt, observation, actions) in VARIANTS.items():
+    for name, (prompt, observation, actions) in setups.items():
         folder = root / name
         folder.mkdir(exist_ok=True)
         binding = {"observation_sha256": straight.digest(plan), "variant": name, "setup": [prompt, observation, actions],
@@ -142,9 +147,7 @@ def compact_predictions(root, plan):
     return result
 
 
-def archive_evaluator(args, plan, inspect=None):
-    import numpy as np
-    import real_data
+def archive_context(args, plan):
     from rollout_replay import bound_context
 
     tokens = check_plan(plan)
@@ -154,6 +157,14 @@ def archive_evaluator(args, plan, inspect=None):
             sessions.get(row["token"]) != row["session_id"] for row in plan["scenes"]):
         raise RuntimeError("The selected scenes differ from the archived TRAIN inventory")
     manifest, _, vocab, template, caches = bound_context(args.package, args.repo, [candidates[t][0] for t in tokens])
+    return candidates, manifest, vocab, template, caches
+
+
+def archive_evaluator(args, plan, inspect=None):
+    import numpy as np
+    import real_data
+
+    candidates, manifest, vocab, template, caches = archive_context(args, plan)
     keys = ("pdm_score", *real_data.METRICS)
 
     def for_scene(record):
@@ -161,9 +172,12 @@ def archive_evaluator(args, plan, inspect=None):
         cache = caches[token]
         if cache["sha256"] != record["cache_sha256"]:
             raise RuntimeError(f"Metric cache changed for {token}")
-        observation, reason = straight.straight_observation(straight.load_cache(cache))
+        metric_cache = straight.load_cache(cache)
+        observation, reason = straight.straight_observation(metric_cache)
         if reason is not None or observation != {k: record[k] for k in ("speed_mps", "leaders")}:
             raise RuntimeError(f"Current observation changed for {token}")
+        if "corridor_objects" in record and corridor_objects(metric_cache) != record["corridor_objects"]:
+            raise RuntimeError(f"Current corridor objects changed for {token}")
         sample = real_data.load_inputs(args.package, token, manifest, vocab)
         anchor = next(row for row in candidates[token] if row["candidate_local"] == sample["baseline_local"])
         if list(keys) != anchor["metric_keys"]:
@@ -443,21 +457,125 @@ def score_collision(args, payload):
             "ds": ds, "profiles": profiles}
 
 
+def corridor_objects(cache):
+    origin = cache.ego_state.rear_axle
+    vehicle = cache.ego_state.car_footprint.vehicle_parameters
+    reach = straight.straight_reach(cache.ego_state.dynamic_car_state.speed)
+    front = vehicle.rear_axle_to_center + vehicle.length / 2
+    c, s = cos(origin.heading), sin(origin.heading)
+    objects = []
+    for actor in cache.current_tracked_objects[0].tracked_objects:
+        x, y = straight.local_xy(actor.center.x, actor.center.y, origin)
+        kind = actor.tracked_object_type.name
+        if kind == "VEHICLE" and 0 < x <= 65 and abs(y) <= 1.8:
+            continue
+        heading = (actor.box.center.heading - origin.heading + pi) % (2 * pi) - pi
+        length, width = actor.box.length, actor.box.width
+        velocity = getattr(actor, "velocity", None)
+        vx, vy = (velocity.x, velocity.y) if velocity is not None else (0.0, 0.0)
+        vx, vy = c * vx + s * vy, -s * vx + c * vy
+        if not all(isfinite(value) for value in (x, y, heading, length, width, vx, vy)) or min(length, width) <= 0:
+            continue
+        half_along = (abs(cos(heading)) * length + abs(sin(heading)) * width) / 2
+        lateral_reach = (abs(sin(heading)) * length + abs(cos(heading)) * width + vehicle.width) / 2
+        x_end, y_end = x + straight.HORIZON * vx, y + straight.HORIZON * vy
+        if max(x, x_end) + half_along < front or min(x, x_end) - half_along > front + reach:
+            continue
+        clearance = (0.0 if y * y_end <= 0 else min(abs(y), abs(y_end))) - lateral_reach
+        if clearance > CORRIDOR_MARGIN_M:
+            continue
+        objects.append({"track_token": actor.track_token, "type": kind, "x_m": round(x, 4), "y_m": round(y, 4),
+                        "heading_rad": round(heading, 4), "length_m": round(length, 4), "width_m": round(width, 4),
+                        "vx_mps": round(vx, 4), "vy_mps": round(vy, 4), "lateral_reach_m": round(lateral_reach, 4),
+                        "half_length_along_path_m": round(half_along, 4), "projected_lateral_overlap": clearance <= 0})
+    return sorted(objects, key=lambda obj: (obj["x_m"], obj["track_token"]))
+
+
+def prepare_corridor(args, plan):
+    _, _, _, _, caches = archive_context(args, plan)
+    result = {}
+    for scene in plan["scenes"]:
+        token = scene["token"]
+        cache = caches[token]
+        if cache["sha256"] != scene["cache_sha256"]:
+            raise RuntimeError(f"Metric cache changed for {token}")
+        result[token] = corridor_objects(straight.load_cache(cache))
+    return {"observation_sha256": straight.digest(plan), "objects": result}
+
+
+def with_corridor(plan, exported):
+    tokens = check_plan(plan)
+    if exported["observation_sha256"] != straight.digest(plan) or set(exported["objects"]) != set(tokens):
+        raise RuntimeError("Corridor input does not match the nightly observations")
+    return {**plan, "scenes": [{**record, "corridor_objects": exported["objects"][record["token"]]}
+                              for record in plan["scenes"]]}
+
+
+def score_corridor(args, payload):
+    import numpy as np
+
+    original, reference = payload["plan"], payload["reference"]
+    plan = with_corridor(original, payload["export"])
+    tokens = check_plan(plan)
+    cases = {row["token"]: row for row in reference["cases"]}
+    predictions = payload["predictions"]
+    if (reference["observation_sha256"] != straight.digest(original) or set(cases) != set(tokens)
+            or set(predictions) != set(tokens) or payload["prediction_plan_sha256"] != straight.digest(plan)):
+        raise RuntimeError("Corridor predictions, observations and references differ")
+    for_scene, protected = archive_evaluator(args, plan)
+    rows, failures = [], []
+    for record in plan["scenes"]:
+        token = record["token"]
+        previous, prediction = cases[token], predictions[token]
+        if prediction["token"] != token:
+            raise RuntimeError(f"Unexpected prediction token for {token}")
+        if "error" in prediction:
+            failures.append({"token": token, "error": prediction["error"]})
+            continue
+        ds, evaluate = for_scene(record)
+        if any(not np.isclose(val, previous["ds"][key], atol=1e-8, rtol=1e-7) for key, val in ds.items()):
+            raise RuntimeError(f"Archived DriveSuprim metrics did not reproduce for {token}")
+        objects = record["corridor_objects"]
+        category = ("projected_overlap" if any(obj["projected_lateral_overlap"] for obj in objects)
+                    else "near_clear" if objects else "no_extra_objects")
+        rows.append({"token": token, "session_id": record["session_id"], "leader_category": record["leader_category"],
+                     "object_category": category, "objects": objects, "pilot_session": record["pilot_session"],
+                     "ds": ds, "scores": {"control": previous["scores"]["control"], CORRIDOR_VARIANT: evaluate(prediction)},
+                     "actions": prediction["actions"], "planned_distance_m": prediction["poses"][-1][0]})
+    collision_case = next((row for row in rows if row["token"] == COLLISION_TOKEN), None)
+    target = payload.get("collision_track_token")
+    target_covered = (any(obj["track_token"] == target for scene in plan["scenes"] if scene["token"] == COLLISION_TOKEN
+                          for obj in scene["corridor_objects"])
+                      if target is not None else None)
+    return {"protocol": "navsim-straight-corridor-v1", "observation_sha256": straight.digest(original),
+            "predicted_scenes": len(rows), "prediction_failures": failures,
+            "all": paired(rows, CORRIDOR_VARIANT, protected),
+            "by_object_category": {
+                category: paired([row for row in rows if row["object_category"] == category], CORRIDOR_VARIANT, protected)
+                for category in ("projected_overlap", "near_clear", "no_extra_objects")},
+            "collision_track_token": target, "collision_track_in_input": target_covered,
+            "collision_case": collision_case, "cases": rows}
+
+
 def on_astra(stage, args, payload):
     straight_code = Path(straight.__file__).read_text(encoding="utf-8")
-    launcher = ("import sys, types\n"
+    bundled_straight = b64encode(compress(straight_code.encode())).decode()
+    bundled_night = b64encode(compress(Path(__file__).read_bytes())).decode()
+    launcher = ("import sys, types\nfrom base64 import b64decode\nfrom zlib import decompress\n"
                 "module = types.ModuleType('_drex_night_straight')\n"
                 "sys.modules[module.__name__] = module\n"
-                f"exec(compile({straight_code!r}, 'navsim_straight.py', 'exec'), module.__dict__)\n"
-                + Path(__file__).read_text(encoding="utf-8"))
+                f"exec(compile(decompress(b64decode({bundled_straight!r})), 'navsim_straight.py', 'exec'), module.__dict__)\n"
+                f"exec(compile(decompress(b64decode({bundled_night!r})), 'navsim_night.py', 'exec'))\n")
     return straight.on_astra(stage, args, payload, source_code=launcher)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("stage", choices=("prepare", "predict", "score", "probes", "collision",
+                                          "corridor-prepare", "corridor-predict", "corridor-score",
                                           "astra-night-prepare", "astra-night-score", "astra-night-probes",
-                                          "astra-night-collision"))
+                                          "astra-night-collision", "astra-night-corridor-prepare",
+                                          "astra-night-corridor-score"))
     parser.add_argument("--out", type=Path)
     parser.add_argument("--pilot", type=Path)
     parser.add_argument("--weights", type=Path)
@@ -470,7 +588,8 @@ def main():
         payload = json.load(sys.stdin)
         with redirect_stdout(sys.stderr):
             remote = {"astra-night-prepare": prepare, "astra-night-score": score,
-                      "astra-night-probes": score_probes, "astra-night-collision": score_collision}
+                      "astra-night-probes": score_probes, "astra-night-collision": score_collision,
+                      "astra-night-corridor-prepare": prepare_corridor, "astra-night-corridor-score": score_corridor}
             result = remote[args.stage](args, payload)
         print(json.dumps(result, allow_nan=False))
         return 0
@@ -494,10 +613,15 @@ def main():
         print(f"Eligible {len(tokens)}/{plan['screened_scenes']}; {len(VARIANTS)} variants; "
               f"{len(tokens) * len(VARIANTS)} planned trajectories", flush=True)
         return 0
-    if args.stage == "predict":
+    if args.stage in ("predict", "corridor-predict"):
         if args.weights is None or not args.weights.is_dir():
             parser.error("--weights must point to the installed Drex Max model")
-        predict_night(root, args.weights)
+        if args.stage == "corridor-predict":
+            plan = with_corridor(straight.read(plan_path), straight.read(root / "corridor-input.json"))
+            predict_night(root, args.weights, plan=plan,
+                          setups={CORRIDOR_VARIANT: ("baseline", CORRIDOR_VARIANT, "standard")})
+        else:
+            predict_night(root, args.weights)
         return 0
     plan = straight.read(plan_path)
     suite = root / "suite.json"
@@ -509,6 +633,45 @@ def main():
     report = straight.read(suite)
     if report["observation_sha256"] != straight.digest(plan):
         raise RuntimeError("The control scores belong to a different nightly cohort")
+    corridor_input = root / "corridor-input.json"
+    if args.stage == "corridor-prepare":
+        if not corridor_input.exists():
+            straight.write(corridor_input, on_astra("astra-night-corridor-prepare", args, plan))
+        exported = straight.read(corridor_input)
+        with_corridor(plan, exported)
+        print(f"Prepared corridor objects on {sum(bool(rows) for rows in exported['objects'].values())} scenes.")
+        return 0
+    if args.stage == "corridor-score":
+        exported = straight.read(corridor_input)
+        prediction_plan = with_corridor(plan, exported)
+        folder = root / CORRIDOR_VARIANT
+        identity = straight.read(folder / "identity.json")
+        control = straight.read(root / "control" / "identity.json")
+        if (identity["observation_sha256"] != straight.digest(prediction_plan)
+                or identity["setup"] != ["baseline", CORRIDOR_VARIANT, "standard"]
+                or identity["model_path"] != control["model_path"]):
+            raise RuntimeError("Corridor predictions do not match the frozen experiment")
+        predictions = {}
+        for token in check_plan(plan):
+            case = straight.read(folder / f"{token}.json")
+            predictions[token] = (case if "error" in case else
+                                  {"token": case["token"], "poses": case["poses"],
+                                   "actions": [row["action"] for row in case["decisions"]]})
+        collision = root / "collision.json"
+        target = None
+        if collision.exists():
+            review = straight.read(collision)
+            if review["observation_sha256"] != straight.digest(plan):
+                raise RuntimeError("Collision review belongs to a different nightly cohort")
+            target = next((event["track_token"] for event in review["profiles"]["control"]["contacts_through_first_at_fault"]
+                           if event["at_fault"]), None)
+        payload = {"plan": plan, "reference": report, "predictions": predictions, "export": exported,
+                   "prediction_plan_sha256": identity["observation_sha256"], "collision_track_token": target}
+        result = on_astra("astra-night-corridor-score", args, payload)
+        output = root / "corridor.json"
+        straight.write(output, result)
+        print(f"Corridor comparison on {result['predicted_scenes']} scenes: {output}")
+        return 0
     if args.stage == "collision":
         scene = next(row for row in plan["scenes"] if row["token"] == COLLISION_TOKEN)
         original = straight.read(root / "control" / f"{COLLISION_TOKEN}.json")

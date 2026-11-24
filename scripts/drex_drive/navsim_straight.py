@@ -59,7 +59,7 @@ FOLLOWING_VARIANTS = ("leader-context", "action-gap-end")
 FOLLOWING_PROTOCOL = "navsim-straight-following-v1"
 HOLDOUT_OBSERVATIONS = ("action-effects", *FOLLOWING_VARIANTS)
 OBSERVATION_VARIANTS = ("radar", "gap-forecast", *EXTRA_INPUT_VARIANTS, *FOLLOWING_VARIANTS)
-NIGHT_FORECASTS = ("action-deltas", "short-preview", "dual-preview")
+NIGHT_FORECASTS = ("action-deltas", "short-preview", "dual-preview", "corridor-objects")
 ACTION_VARIANTS = ("standard", "gentle")
 GENTLE_ACTIONS = {
     "gentle_proceed": (1.0, "Increase speed gently at 1 m/s²."),
@@ -333,6 +333,16 @@ def build_plan(record, choose, prompt_variant="baseline", observation_variant="r
                 ]
         state = {"ego_speed_mps": round(ego.speed_mps, 2), "previous_ego_speed_mps": previous_speed,
                  "speed_limit_mps": SPEED_CAP, "lead_radar": radar, "previous_action": previous_action}
+        if observation_variant == "corridor-objects":
+            state["near_path_objects"] = [
+                {"type": obj["type"], "forward_m": round(obj["x_m"] + elapsed * obj["vx_mps"] - ego.front_m, 2),
+                 "lateral_m": round(obj["y_m"] + elapsed * obj["vy_mps"], 2), "heading_rad": obj["heading_rad"],
+                 "length_m": obj["length_m"], "width_m": obj["width_m"],
+                 "longitudinal_speed_mps": obj["vx_mps"], "lateral_speed_mps": obj["vy_mps"],
+                 "lateral_clearance_m": round(abs(obj["y_m"] + elapsed * obj["vy_mps"]) - obj["lateral_reach_m"], 2)}
+                for obj in record["corridor_objects"]
+                if obj["x_m"] + elapsed * obj["vx_mps"] + obj["half_length_along_path_m"] >= ego.front_m
+            ]
         if observation_variant in (*HOLDOUT_OBSERVATIONS, *NIGHT_FORECASTS):
             horizon_s = 1.0 if observation_variant == "short-preview" else PREVIEW_SECONDS
             forecast = action_effects(ego, gap, leader_speed, accelerations,

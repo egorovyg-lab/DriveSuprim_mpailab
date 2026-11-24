@@ -1,4 +1,5 @@
 from pathlib import Path
+from math import pi
 import shlex
 import sys
 from tempfile import TemporaryDirectory
@@ -23,6 +24,57 @@ def example_plan():
 
 
 class NightTests(unittest.TestCase):
+    def test_corridor_includes_a_rotated_vehicle_outside_the_leader_strip(self):
+        def actor(token, y, heading):
+            center = SimpleNamespace(x=10.33, y=y, heading=heading)
+            return SimpleNamespace(track_token=token, center=center, tracked_object_type=SimpleNamespace(name="VEHICLE"),
+                                   box=SimpleNamespace(center=center, length=4.8, width=2.0))
+
+        ego = SimpleNamespace(rear_axle=SimpleNamespace(x=0.0, y=0.0, heading=0.0),
+                              dynamic_car_state=SimpleNamespace(speed=1.117),
+                              car_footprint=SimpleNamespace(vehicle_parameters=SimpleNamespace(
+                                  rear_axle_to_center=1.3, length=4.8, width=2.0)))
+        cache = SimpleNamespace(ego_state=ego, current_tracked_objects=[SimpleNamespace(tracked_objects=[
+            actor("leader", 0.0, 0.0), actor("parallel-side", -3.36, 0.0),
+            actor("rotated-side", -3.36, pi / 2), actor("near-clear", 2.4, 0.0),
+        ])])
+        objects = night.corridor_objects(cache)
+        self.assertEqual([obj["track_token"] for obj in objects], ["near-clear", "rotated-side"])
+        self.assertEqual([obj["projected_lateral_overlap"] for obj in objects], [False, True])
+        record = {"token": "example", "speed_mps": 1.117, "leaders": [], "corridor_objects": objects}
+        choose = lambda _: ("maintain", None)
+        base = straight.build_plan(record, choose, observation_variant="action-effects")
+        trial = straight.build_plan(record, choose, observation_variant=night.CORRIDOR_VARIANT)
+        self.assertEqual(base["poses"], trial["poses"])
+        old = base["decisions"][0]["request"]
+        new = trial["decisions"][0]["request"]
+        self.assertEqual(new["question"], old["question"])
+        exported = new["state"].pop("near_path_objects")
+        self.assertEqual(new, old)
+        self.assertNotIn("track_token", exported[1])
+        self.assertEqual(exported[1]["lateral_clearance_m"], -.04)
+        self.assertEqual(exported[0]["lateral_clearance_m"], .4)
+
+    def test_corridor_report_tracks_coverage_and_a_matched_collision_case(self):
+        plan = example_plan()
+        plan["scenes"][0]["token"] = night.COLLISION_TOKEN
+        tokens = night.check_plan(plan)
+        binding = straight.digest(plan)
+        exported = {"observation_sha256": binding, "objects": {
+            tokens[0]: [{"track_token": "obstacle", "projected_lateral_overlap": True}], tokens[1]: []}}
+        ds = {"pdm_score": .8, "history_comfort": 1.0}
+        reference = {"observation_sha256": binding, "cases": [
+            {"token": token, "ds": ds, "scores": {"control": ds}} for token in tokens]}
+        predictions = {token: {"token": token, "poses": [[4.0, 0, 0]], "actions": ["maintain"]} for token in tokens}
+        payload = {"plan": plan, "export": exported, "reference": reference, "predictions": predictions,
+                   "prediction_plan_sha256": straight.digest(night.with_corridor(plan, exported)),
+                   "collision_track_token": "obstacle"}
+        with patch.object(night, "archive_evaluator", return_value=(lambda _: (ds, lambda _: ds), ("history_comfort",))):
+            result = night.score_corridor(None, payload)
+        self.assertTrue(result["collision_track_in_input"])
+        self.assertEqual(result["collision_case"]["object_category"], "projected_overlap")
+        self.assertEqual(result["by_object_category"]["no_extra_objects"]["vs_control"]["ties"], 1)
+
     def test_one_model_and_per_scene_resume(self):
         plan = example_plan()
         choose = Mock(return_value=("maintain", None))
