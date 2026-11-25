@@ -1,3 +1,4 @@
+import json
 import sys
 from types import SimpleNamespace
 import unittest
@@ -13,6 +14,84 @@ from .navsim_straight import (ACTION_PROBES, EXTRA_INPUT_VARIANTS, FOLLOWING_VAR
                              fresh_report, holdout_records, main, on_astra, past_leader_speeds, predict, predict_suite,
                              prepare_action_probes, read, score, straight_observation, summarize_actions, summarize_inputs,
                              write)
+
+
+class LeadBrakeGapTests(unittest.TestCase):
+    field = "minimum_lead_gap_if_braking_m"
+
+    def setUp(self):
+        self.scene = dict(token="synthetic", speed_mps=4.0, leaders=[{"gap_m": 12.0, "speed_mps": 2.0}],
+                          corridor_objects=[], ego_bounds={"front_m": 3.0, "rear_m": -1.0})
+
+    def plan(self, *, enabled=True, actions=("maintain",) * 8):
+        commands = iter(actions)
+        return build_plan(self.scene, lambda _: (next(commands), None), observation_variant="corridor-preview",
+                          **({"lead_brake_gap": True} if enabled else {}))
+
+    def preview_at(self, plan, index):
+        return plan["decisions"][index]["request"]["state"]["action_effects"]["forecast"]
+
+    def test_lead_brake_gap_adds_only_one_field_to_each_action_at_all_decisions(self):
+        self.scene["corridor_objects"] = [
+            dict(type="vehicle", x_m=17.0, y_m=0.2, vx_mps=2.0, vy_mps=0.0, heading_rad=0.0,
+                 length_m=4.0, width_m=2.0, half_length_along_path_m=2.0, lateral_reach_m=2.0),
+        ]
+        actions = ("proceed", "maintain", "slow", "stop", "wait", "proceed", "slow", "maintain")
+        before = self.plan(enabled=False, actions=actions)
+        after = self.plan(actions=actions)
+        self.assertEqual(before["poses"], after["poses"])
+        self.assertEqual(len(before["decisions"]), 8)
+        self.assertEqual(len(after["decisions"]), 8)
+        for index, (original, augmented) in enumerate(zip(before["decisions"], after["decisions"])):
+            with self.subTest(step=index):
+                self.assertEqual(original["action"], actions[index])
+                self.assertEqual(augmented["action"], actions[index])
+                for effect in self.preview_at(after, index).values():
+                    effect.pop(self.field)
+                self.assertEqual(json.dumps(original["request"], allow_nan=False),
+                                 json.dumps(augmented["request"], allow_nan=False))
+
+    def test_late_preview_uses_scene_time_after_the_leader_has_stopped(self):
+        plan = self.plan()
+        self.assertEqual(plan["decisions"][7]["time_s"], 3.5)
+        effect = self.preview_at(plan, 7)["maintain"]
+        self.assertEqual(effect["minimum_gap_m"], 1.0)
+        # The lead rear stopped at x=13, and ego reaches absolute x=22 at 5.5 s.
+        self.assertEqual(effect[self.field], -9.0)
+
+    def test_preview_uses_the_current_radar_leader_and_includes_tau_zero(self):
+        self.scene["leaders"] = [{"gap_m": 8.0, "speed_mps": 5.0}, {"gap_m": 12.0, "speed_mps": 1.0}]
+        plan = self.plan()
+        first = self.preview_at(plan, 0)
+        self.assertEqual(first["maintain"][self.field], 6.0)
+        self.assertEqual(first["stop"][self.field], 8.0)  # The minimum is at tau=0.
+        state = plan["decisions"][3]["request"]["state"]
+        self.assertEqual(state["lead_radar"]["range_m"], 7.5)  # Radar switches to the second lead.
+        self.assertEqual(state["lead_radar"]["closing_speed_mps"], 3.0)
+        # The second lead stopped at x=12.25, and ego reaches x=14 at 3.5 s.
+        self.assertEqual(self.preview_at(plan, 3)["maintain"][self.field], -1.75)
+
+    def test_stationary_leader_has_signed_gaps_and_missing_leader_has_nulls(self):
+        self.scene["leaders"] = [{"gap_m": 1.234, "speed_mps": 0.0}]
+        stationary = self.preview_at(self.plan(), 0)
+        self.assertEqual({action: effect[self.field] for action, effect in stationary.items()},
+                         {"proceed": -8.52, "maintain": -6.77, "slow": -5.45, "stop": -4.14, "wait": -4.14})
+        self.scene["leaders"] = []
+        empty = self.plan()
+        for index in range(8):
+            self.assertIsNone(empty["decisions"][index]["request"]["state"]["lead_radar"])
+            for effect in self.preview_at(empty, index).values():
+                self.assertIsNone(effect[self.field])
+
+    def test_lead_brake_gap_rejects_each_nonstandard_variant_before_choosing(self):
+        choose = Mock()
+        for prompt, observation, action in (("progress", "corridor-preview", "standard"),
+                                            ("baseline", "radar", "standard"),
+                                            ("baseline", "corridor-preview", "gentle")):
+            with self.subTest(prompt=prompt, observation=observation, action=action):
+                with self.assertRaisesRegex(ValueError, "lead_brake_gap requires baseline/corridor-preview/standard"):
+                    build_plan(self.scene, choose, prompt, observation, action, lead_brake_gap=True)
+        choose.assert_not_called()
 
 
 class StraightPlanTests(unittest.TestCase):

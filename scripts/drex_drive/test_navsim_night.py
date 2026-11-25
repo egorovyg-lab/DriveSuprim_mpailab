@@ -25,6 +25,92 @@ def example_plan():
 
 
 class NightTests(unittest.TestCase):
+    def test_brake_gap_replays_historical_requests_and_poses(self):
+        scene = {**example_plan()["scenes"][0], "corridor_objects": [], "ego_bounds": {"front_m": 3, "rear_m": -1}}
+        archived = straight.build_plan(scene, lambda _: ("maintain", None), observation_variant="corridor-preview")
+        a, b = night.check_brake_gap_trace(scene, archived)
+        self.assertEqual(a["poses"], b["poses"])
+        archived["decisions"][0]["request"]["question"]["instructions"] += " changed"
+        with self.assertRaisesRegex(RuntimeError, "Archive request parity failed"):
+            night.check_brake_gap_trace(scene, archived)
+
+    def test_brake_gap_tokenizer_gate_rejects_truncation(self):
+        def prep(requests, max_length):
+            n = min(len(requests[0]), max_length)
+            return SimpleNamespace(inputs={
+                "input_ids": SimpleNamespace(tolist=lambda: [list(range(n))]),
+                "attention_mask": SimpleNamespace(tolist=lambda: [[1] * n])})
+
+        model = SimpleNamespace(prepare=prep)
+        night.no_brake_gap_truncation(model, range(80))
+        with self.assertRaisesRegex(RuntimeError, "truncation"):
+            night.no_brake_gap_truncation(model, range(2100))
+
+    def test_brake_gap_rejects_an_invisible_field(self):
+        scene = {**example_plan()["scenes"][1], "corridor_objects": [], "ego_bounds": {"front_m": 3, "rear_m": -1}}
+        trial = straight.build_plan(scene, lambda _: ("maintain", None),
+                                    observation_variant="corridor-preview", lead_brake_gap=True)
+        request = trial["decisions"][0]["request"]
+        with patch.object(night, "no_brake_gap_truncation", return_value=[42]):
+            with self.assertRaisesRegex(RuntimeError, "erased"):
+                night.check_brake_gap_token_pair(None, request)
+        with patch.object(night, "no_brake_gap_truncation", side_effect=([42], [42, 17])) as tokens:
+            night.check_brake_gap_token_pair(None, request)
+        self.assertEqual(tokens.call_args_list[0].args[1], night.without_brake_gap(request))
+        self.assertEqual(tokens.call_args_list[1].args[1], request)
+
+    def test_brake_gap_receipt_rejects_predictions_and_smoke_transplanted_between_attempts(self):
+        chain = {"attempt": "/runs/attempt-001", "manifest_sha256": "m1", "baseline_sha256": "cpu1"}
+        smoke = {"status": "passed", **chain, "runtime": {"weights_sha256": "w"}, "provenance_sha256": "p"}
+        cases = {"a": {"token": "a", "poses": []}}
+        receipt = night.brake_gap_receipt(chain, smoke, cases)
+        night.check_brake_gap_receipt(receipt, chain, smoke, cases, {"a"})
+        other = {**chain, "attempt": "/runs/attempt-002", "manifest_sha256": "m2", "baseline_sha256": "cpu2"}
+        other_smoke = {**smoke, **other}
+        for smoke_for_score in (smoke, other_smoke):
+            with self.assertRaisesRegex(RuntimeError, "does not belong"):
+                night.check_brake_gap_receipt(receipt, other, smoke_for_score, cases, {"a"})
+        with self.assertRaisesRegex(RuntimeError, "Incomplete"):
+            night.check_brake_gap_receipt(receipt, chain, smoke, {}, {"a"})
+
+    def test_brake_gap_artifact_does_not_overwrite_existing_destination(self):
+        with TemporaryDirectory() as folder:
+            target = Path(folder) / "receipt.json"
+            night.write_brake_gap_artifact(target, {"original": True})
+            with self.assertRaises(FileExistsError):
+                night.write_brake_gap_artifact(target, {"original": False})
+            self.assertEqual(straight.read(target), {"original": True})
+
+    def test_brake_gap_score_stops_at_first_protected_regression(self):
+        plan = example_plan()
+        report_hash = straight.digest(plan)
+        export = {"observation_sha256": report_hash, "objects": {"a": [], "b": []}}
+        good = {key: 1.0 for key in (*night.BRAKE_GAP_PROTECTED, "ego_progress", "pdm_score")}
+        regressed = {**good, "lane_keeping": 0.0}
+        archived = {t: {"token": t, "poses": [[1.0, 0, 0]]} for t in ("a", "b")}
+        predictions = {t: {"token": t, "poses": [[2.0, 0, 0]]} for t in ("a", "b")}
+        reference = dict.fromkeys(archived, {"ds": good, "scores": {night.BRAKE_GAP_CONTROL: good}})
+        payload = {"plan": plan, "export": export, "reference": reference, "archived": archived}
+        context = Mock(return_value=({}, {}, None, {}, {}))
+        evaluate = Mock(side_effect=lambda case: good if case["poses"][0][0] == 1.0 else regressed)
+        for_scene = Mock(return_value=(good, evaluate))
+        args = SimpleNamespace(repo=Path.cwd(), source=Path.cwd())
+        config = SimpleNamespace(config_core=lambda _: {})
+        with patch.dict(sys.modules, rollout_replay=config), patch.object(night, "archive_context", context), \
+                patch.object(night, "archive_evaluator", return_value=(for_scene, ())), \
+                patch.object(night, "tree_sha256", return_value="frozen"), patch.object(night, "version", return_value="mock"):
+            baseline = night.score_brake_gap(args, payload)
+            self.assertEqual(baseline["status"], "baseline_verified")
+            self.assertEqual(len(baseline["cases"]), 2)
+            for_scene.reset_mock()
+            outcome = night.score_brake_gap(args, {**payload, "predictions": predictions,
+                                                   "expected_scorer": baseline["scorer"]})
+            for_scene.assert_called_once()
+            self.assertEqual(outcome["status"], "rejected")
+            self.assertEqual(outcome["cases"][0]["regressions"], ["lane_keeping"])
+            self.assertEqual(outcome["unscored_tokens"], ["b"])
+            self.assertNotIn("summary", outcome)
+
     def test_regression_selection_catches_ttc_only_and_keeps_the_rescued_scene(self):
         plan = example_plan()
         plan["scenes"][0]["token"] = night.COLLISION_TOKEN

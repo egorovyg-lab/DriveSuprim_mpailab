@@ -72,6 +72,7 @@ GENTLE_ACTIONS = {
     "gentle_slow": (-0.75, "Reduce speed gently at 0.75 m/s²."),
 }
 PREVIEW_SECONDS = 2.0
+PREVIEW_LEAD_BRAKE_MPS2 = 2.0
 CORRIDOR_POSITION_MARGIN_M = 0.25
 
 
@@ -296,23 +297,38 @@ def minimum_path_clearance(ego_x, time_s, objects, ego_bounds):
 
 
 def action_effects(ego, gap, lead_speed, accelerations, include_end=False, horizon_s=PREVIEW_SECONDS,
-                   corridor=None):
+                   corridor=None, *, braking_lead: tuple[float, dict[str, float] | None] | None = None):
+    steps = round(horizon_s / STEP)
+    braking_rear_positions = []
+    if braking_lead is not None:
+        elapsed_s, lead = braking_lead
+        if lead is not None:
+            # Scene-relative rear positions for the radar leader selected at this decision.
+            g0, v0 = lead["gap_m"], lead["speed_mps"]
+            stop_s = v0 / PREVIEW_LEAD_BRAKE_MPS2
+            for step in range(steps + 1):
+                u = min(elapsed_s + step * STEP, stop_s)
+                lead_path = v0 * u - 0.5 * PREVIEW_LEAD_BRAKE_MPS2 * u**2
+                braking_rear_positions.append(g0 + lead_path)
     previews = {}
     for action, acceleration in accelerations.items():
         simulated = ego
         min_gap = gap
+        min_braking_gap = braking_rear_positions[0] - ego.front_m if braking_rear_positions else None
         min_clearance, first_overlap = None, None
         if corridor is not None:
             objects, ego_bounds, elapsed = corridor
             min_clearance = minimum_path_clearance(ego.front_m, elapsed, objects, ego_bounds)
             if min_clearance is not None and min_clearance <= 0:
                 first_overlap = 0.0
-        for step in range(round(horizon_s / STEP)):
+        for step in range(steps):
             requested = acceleration if step < ACTION_STEPS else accelerations["maintain"]
             simulated = simulated.advance(requested, SPEED_CAP)
             if gap is not None:
                 next_gap = gap + (step + 1) * STEP * lead_speed - (simulated.front_m - ego.front_m)
                 min_gap = min(min_gap, next_gap)
+            if min_braking_gap is not None:
+                min_braking_gap = min(min_braking_gap, braking_rear_positions[step + 1] - simulated.front_m)
             if min_clearance is not None:
                 time_s = (step + 1) * STEP
                 clearance = minimum_path_clearance(simulated.front_m, elapsed + time_s, objects, ego_bounds)
@@ -327,13 +343,20 @@ def action_effects(ego, gap, lead_speed, accelerations, include_end=False, horiz
         if corridor is not None:
             preview["near_path_clearance_with_margin_m"] = None if min_clearance is None else round(min_clearance, 3)
             preview["near_path_overlap_first_s"] = first_overlap
+        if braking_lead is not None:
+            preview["minimum_lead_gap_if_braking_m"] = None if min_braking_gap is None else round(min_braking_gap, 2)
         previews[action] = preview
     return previews
 
 
-def build_plan(record, choose, prompt_variant="baseline", observation_variant="radar", action_variant="standard"):
+def build_plan(record, choose, prompt_variant="baseline", observation_variant="radar", action_variant="standard",
+               *, lead_brake_gap: bool = False):
     from .driver import request_for
     from .simulation import ACCELERATION, Action, STOPPED_MPS, Vehicle
+
+    if lead_brake_gap and (prompt_variant, observation_variant, action_variant) != ("baseline", "corridor-preview",
+                                                                                 "standard"):
+        raise ValueError("lead_brake_gap requires baseline/corridor-preview/standard")
 
     extra_actions = GENTLE_ACTIONS if action_variant == "gentle" else {}
     accelerations = {action.value: acceleration for action, acceleration in ACCELERATION.items()}
@@ -350,7 +373,7 @@ def build_plan(record, choose, prompt_variant="baseline", observation_variant="r
         elapsed = round(step * STEP, 9)
         lead_index = min(range(len(leaders)), key=lambda i: leaders[i]["gap_m"] + elapsed * leaders[i]["speed_mps"],
                          default=None)
-        gap, leader_speed = None, None
+        lead, gap, leader_speed = None, None, None
         radar = None
         if lead_index is not None:
             lead = leaders[lead_index]
@@ -387,7 +410,7 @@ def build_plan(record, choose, prompt_variant="baseline", observation_variant="r
                         if observation_variant == "corridor-preview" else None)
             forecast = action_effects(ego, gap, leader_speed, accelerations,
                                       include_end=observation_variant == "action-gap-end", horizon_s=horizon_s,
-                                      corridor=corridor)
+                                      corridor=corridor, braking_lead=(elapsed, lead) if lead_brake_gap else None)
             if observation_variant == "action-deltas":
                 stay = forecast["maintain"]
                 for effect in forecast.values():
