@@ -91,7 +91,6 @@ case "${1:-}" in
     [[ -x "$python" && -f "$runtime/upstream/drex_max/model.py" \
        && -d "$runtime/models/drex-max-v1" ]] || { echo 'Missing Drex runtime or weights' >&2; exit 2; }
     "$python" --version
-    "$python" -B -c 'import numpy; print("NumPy", numpy.__version__)'
     printf 'Read-only archive: %s\nNew attempt: %s\n' "$archive" "$out"
     df -h "$runtime"
     nproc

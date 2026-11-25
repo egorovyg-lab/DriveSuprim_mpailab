@@ -855,9 +855,27 @@ def without_brake_gap(request):
     return request
 
 
+def check_brake_gap_pose_rows(prediction):
+    """Validate the JSON rollout on MSU270 without the scorer's array dependency."""
+    poses = prediction.get("poses")
+    error = f"Invalid straight trajectory for {prediction['token']}"
+    if not isinstance(poses, list) or len(poses) != straight.POSES:
+        raise ValueError(error)
+    limit = straight.SPEED_CAP * straight.HORIZON + EPSILON
+    previous_x = 0.0
+    for pose in poses:
+        if not isinstance(pose, list) or len(pose) != 3 or any(type(value) not in (int, float) for value in pose):
+            raise ValueError(error)
+        x, y, heading = pose
+        # These bounds also reject NaN and infinities in every coordinate.
+        if not previous_x <= x <= limit or y != 0 or heading != 0:
+            raise ValueError(error)
+        previous_x = x
+
+
 def check_brake_gap_trace(scene, archived):
     token = scene["token"]
-    straight.checked_straight_poses(archived)
+    check_brake_gap_pose_rows(archived)
     if (archived["token"] != token or [row["time_s"] for row in archived["decisions"]]
             != [step / 10 for step in range(0, straight.POSES, straight.ACTION_STEPS)]):
         raise RuntimeError(f"Invalid archived trace: {token}")
@@ -1155,7 +1173,7 @@ def run_brake_gap(args):
                 for step in augmented["decisions"]:
                     check_brake_gap_token_pair(model.model, step["request"])
                 case = straight.build_plan(scene, choose_b, *setup, lead_brake_gap=True)
-                straight.checked_straight_poses(case)
+                check_brake_gap_pose_rows(case)
                 write_brake_gap_artifact(predictions / f"{token}.json", case)
                 cases[token] = case
                 print(f"Predicted {token}", flush=True)

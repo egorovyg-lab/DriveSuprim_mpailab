@@ -25,14 +25,27 @@ def example_plan():
 
 
 class NightTests(unittest.TestCase):
-    def test_brake_gap_replays_historical_requests_and_poses(self):
+    def test_brake_gap_replays_historical_requests_and_poses_without_numpy(self):
         scene = {**example_plan()["scenes"][0], "corridor_objects": [], "ego_bounds": {"front_m": 3, "rear_m": -1}}
         archived = straight.build_plan(scene, lambda _: ("maintain", None), observation_variant="corridor-preview")
-        a, b = night.check_brake_gap_trace(scene, archived)
-        self.assertEqual(a["poses"], b["poses"])
-        archived["decisions"][0]["request"]["question"]["instructions"] += " changed"
-        with self.assertRaisesRegex(RuntimeError, "Archive request parity failed"):
-            night.check_brake_gap_trace(scene, archived)
+        with patch.dict(sys.modules, {"numpy": None}):
+            a, b = night.check_brake_gap_trace(scene, archived)
+            self.assertEqual(a["poses"], b["poses"])
+            archived["decisions"][0]["request"]["question"]["instructions"] += " changed"
+            with self.assertRaisesRegex(RuntimeError, "Archive request parity failed"):
+                night.check_brake_gap_trace(scene, archived)
+
+    def test_brake_gap_pose_validation_preserves_geometry_gates(self):
+        valid = [[i * .1, 0, 0] for i in range(1, straight.POSES + 1)]
+        night.check_brake_gap_pose_rows({"token": "a", "poses": valid})
+        invalid_rows = ([4, 0], [float("nan"), 0, 0], [float("inf"), 0, 0],
+                        [4, float("nan"), 0], [4, 0.1, 0], [4, 0, .1],
+                        [3.8, 0, 0], [41, 0, 0], ["4.0", 0, 0])
+        for poses in (valid[:-1], [[-.1, 0, 0], *valid[1:]],
+                      *([*valid[:-1], row] for row in invalid_rows)):
+            with self.subTest(last=poses[-1], count=len(poses)), \
+                    self.assertRaisesRegex(ValueError, "Invalid straight trajectory"):
+                night.check_brake_gap_pose_rows({"token": "a", "poses": poses})
 
     def test_brake_gap_tokenizer_gate_rejects_truncation(self):
         def prep(requests, max_length):
