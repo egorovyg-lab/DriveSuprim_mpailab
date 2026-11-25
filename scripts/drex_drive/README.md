@@ -289,3 +289,39 @@ bash scripts/drex_drive/lead_brake_gap.sh score attempt-001
 Артефакты и логи — `$DREX_RUNTIME_ROOT/runs/corridor-preview-lead-brake-gap-v1/attempt-001/` (при незаданной переменной корень `/scratch/pr0201/drex_runtime`). Slurm направляет stdout/stderr в `/dev/null`, а worker после проверки пути создаёт `brake-gap-<stage>-slurm/slurm-<job-id>.log` без перезаписи и без перехода по ссылкам. Если worker не дошёл до создания лога, смотрите статус `sbatch --wait` и `sacct -X -j <job-id> --format=JobID,State,Elapsed,ExitCode`. После ошибки сохраняйте файлы попытки и используйте новый номер, не перезаписывая архив. Отказ локального preflight, ошибка Slurm или обрыв SSH могут завершиться без `comparison.json`; отсутствие отчёта не считается прохождением.
 
 В `comparison.json` ожидается `pass` только при полном парном покрытии, восстановлении NC/TTC у `f43160170a665c31`, сохранении их у `cf6c2163667d51d0`, нуле снижений защищённых компонент и положительной средней Δ raw PDM (п.п.). `rejected` (`exit 3`) — установленное нарушение критерия; `incomplete` (`exit 2`) — данные или паритет не позволили завершить. При первой регрессии отчёт перечисляет оставшиеся неоценённые токены и не публикует итоговую среднюю по неполному набору. На полном наборе интервалы bootstrap по целым поездкам (20 000 повторов, seed `20261124`) описательные. Ни один результат этого пилота не является подтверждением на новых поездках.
+
+### `corridor-preview-lead-brake-gap-paired-v1`: новый A/B без архивных хешей весов
+
+Используйте этот режим, когда происхождение весов старого задания 298185 не подтверждено. **A генерируется заново** с обычным `corridor-preview`, **B** добавляет только `minimum_lead_gap_if_braking_m`. Для каждой из 23 архивных TRAIN-сцен оба варианта использует одна загруженная модель в одном Slurm-задании; seed PyTorch `20261124` сбрасывается перед каждым вариантом, выбор — argmax. Старый Drex, DrSu и архивы остаются опорой для сверки данных и raw-скорера, но дельта — **B минус новый A**, не минус результат 298185. Holdout не используется. [Каноническая запись](RESEARCH_STATE.md) · [архивный аудит](CORRIDOR_PREVIEW_AUDIT.md).
+
+После публикации отдельного коммита с `navsim_night.py`, `test_navsim_night.py`, `lead_brake_gap.sh` и `README.md`, на MSU270 из корня checkout `codex/drex-drive`:
+
+```bash
+git pull --ff-only origin codex/drex-drive &&
+bash scripts/drex_drive/lead_brake_gap.sh paired-check attempt-001 &&
+bash scripts/drex_drive/lead_brake_gap.sh paired-verify attempt-001
+```
+
+Это новый `runs/corridor-preview-lead-brake-gap-paired-v1/attempt-001/`, не старый `attempt-002`. При успешном `paired-verify` и отдельно разрешённом доступе к Astra:
+
+```bash
+bash scripts/drex_drive/straight.sh connect &&
+bash scripts/drex_drive/lead_brake_gap.sh paired-reference-score attempt-001
+```
+
+`reference-score.json` должен иметь статус `baseline_verified`: это **CPU-сверка исторических траекторий и фиксация текущего скорера**, не оценка нового A. Дальнейшие стадии запускаются вручную и по отдельности:
+
+```bash
+# Только после успешной CPU-сверки; отдельное GPU-задание на одну пару.
+bash scripts/drex_drive/lead_brake_gap.sh submit-paired-smoke attempt-001
+# Только после paired-smoke/smoke.json со статусом passed:
+bash scripts/drex_drive/lead_brake_gap.sh submit-paired attempt-001
+# Только после 23 полных пар и paired-pilot/prediction-receipt.json:
+bash scripts/drex_drive/lead_brake_gap.sh paired-score attempt-001
+```
+
+`DREX_BRAKE_GAP_PROVENANCE` не нужен. На login-узле проверяются только артефакты; Python 3.12, CUDA, одна видимая GPU с BF16, зависимости и SHA-256 текущих весов, upstream и Python проверяются на выделенном узле **до загрузки модели**. Отдельный smoke и пилот могут попасть на разные узлы, но отпечатки ПО и весов должны совпасть. Пилот снова проверяет первую пару в этой же аллокации, затем, не загружая модель повторно, сохраняет ещё 22 пары. Запросы при одинаковом начальном состоянии должны отличаться только новым полем; токенизация не должна терять поле или усекать запросы. Подсказка не меняется, записанное будущее остаётся у скорера.
+
+Лимиты Slurm: 1 GPU, 4 CPU, 96 ГБ, **10 минут** на отдельный smoke и **30 минут** на пилот с 46 траекториями. Привязки к `cn13` нет. Измеренные ресурсы появятся только после запуска. Сохраняйте `paired-smoke/`, `paired-pilot/`, логи и `comparison.json`; при первой ошибке не переходите к следующей стадии и не перезаписывайте попытку.
+
+Финал требует полное покрытие 23 пар, положительную среднюю Δ raw PDM, отсутствие падений защищённых компонент и NC/TTC = 1 у B в `f431…` и `cf6c…`. В `nc_ttc.repaired` восстановление фиксируется только если **новый A** не прошёл NC/TTC, а B прошёл. Если A уже не воспроизводит проблему, положительная Δ не доказывает её исправление. При первой регрессии сохраняется неполный отчёт без итоговой средней; при полном отчёте неопределённость описывается bootstrap целыми поездками, не как подтверждение на новых данных.

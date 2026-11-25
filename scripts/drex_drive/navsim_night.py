@@ -6,13 +6,15 @@ from collections import Counter, defaultdict
 from contextlib import redirect_stdout
 from functools import lru_cache
 from hashlib import sha256
-from importlib.metadata import version
+from importlib.metadata import PackageNotFoundError, version
+from importlib.util import find_spec
 from pathlib import Path
 import platform
 from random import Random
 from statistics import mean
 from math import cos, hypot, isclose, isfinite, pi, sin
 import json
+import os
 import sys
 from time import perf_counter
 from zlib import compress
@@ -41,9 +43,11 @@ VARIANTS = {
 EPSILON = 1e-8
 COLLISION_TOKEN = "cf6c2163667d51d0"
 BRAKE_GAP_EXPERIMENT = "corridor-preview-lead-brake-gap-v1"
+BRAKE_GAP_PAIRED_EXPERIMENT = "corridor-preview-lead-brake-gap-paired-v1"
 BRAKE_GAP_CONTROL = "corridor-preview"
 BRAKE_GAP_TARGET = "f43160170a665c31"
 BRAKE_GAP_FIELD = "minimum_lead_gap_if_braking_m"
+BRAKE_GAP_PAIR_SEED = 20261124
 BRAKE_GAP_PLAN_SHA256 = "d73d68de6d9414b0ed7cd3348d10c96f084309a772261262471fca023b0588b3"
 BRAKE_GAP_REPORT_SHA256 = "49fb38b5c1ccf822449b6d475b77d67a34f00c7cf3a1b81f2838361758356116"
 BRAKE_GAP_PROTECTED = ("no_at_fault_collisions", "time_to_collision_within_bound", "drivable_area_compliance",
@@ -1000,13 +1004,39 @@ def score_brake_gap(args, payload):
 
     plan = with_corridor(payload["plan"], payload["export"])
     staged = payload.get("predictions")
-    report = {"experiment_id": BRAKE_GAP_EXPERIMENT, "split": "archived TRAIN; diagnostic",
+    live_pair = "current_a" in payload
+    experiment = payload.get("experiment_id", BRAKE_GAP_EXPERIMENT)
+    report = {"experiment_id": experiment,
+              "split": "archived TRAIN; diagnostic",
               "planned_scenes": len(plan["scenes"]), "cases": [], "status": "incomplete",
-              "stage": "baseline" if staged is None else "comparison"}
+              "stage": "comparison" if live_pair or staged is not None else "baseline"}
     rows = report["cases"]
     pending = [record["token"] for record in plan["scenes"]]
     token = None
+
+    def check_current_raw(metrics, token, arm):
+        try:
+            check_brake_gap_metrics(metrics, metrics, token, arm)
+        except (RuntimeError, TypeError, OverflowError) as exc:
+            raise RuntimeError(f"Invalid current Drex {arm} raw scores: {token}") from exc
+
     try:
+        if (experiment not in (BRAKE_GAP_EXPERIMENT, BRAKE_GAP_PAIRED_EXPERIMENT)
+                or ((live_pair or staged is not None)
+                    and live_pair != (experiment == BRAKE_GAP_PAIRED_EXPERIMENT))):
+            raise RuntimeError("Brake-gap experiment ID does not match the scoring mode")
+        if live_pair:
+            current_a = payload["current_a"]
+            cohort = set(pending)
+            for name, arm in (("current_a", current_a), ("predictions", staged)):
+                if not isinstance(arm, dict) or set(arm) != cohort:
+                    raise RuntimeError(f"Full paired prediction membership required for {name}")
+                for token in pending:
+                    prediction = arm[token]
+                    if not isinstance(prediction, dict) or prediction.get("token") != token:
+                        raise RuntimeError(f"Incorrect prediction token in {name}: {token}")
+                    check_brake_gap_pose_rows(prediction)
+                token = None
         _, _, _, template, _ = archive_context(args, plan)
         scorer = {"config_sha256": straight.digest(config_core(template)),
                   "navsim_sha256": tree_sha256(args.repo / "navsim"),
@@ -1020,21 +1050,38 @@ def score_brake_gap(args, payload):
         records = sorted(plan["scenes"], key=lambda r: (r["token"] != BRAKE_GAP_TARGET, r["token"] != COLLISION_TOKEN))
         for scene in records:
             token = scene["token"]
-            archived, reference = payload["archived"][token], payload["reference"][token]
+            control = current_a[token] if live_pair else payload["archived"][token]
+            reference = payload["reference"][token]
             ds, evaluate = for_scene(scene)
-            actual_a = evaluate(archived)
-            check_brake_gap_metrics(ds, reference["ds"], token, "DrSu")
-            check_brake_gap_metrics(actual_a, reference["scores"][BRAKE_GAP_CONTROL], token, "Drex A")
+            if live_pair:
+                check_brake_gap_metrics(ds, reference["ds"], token, "DrSu")
+            actual_a = evaluate(control)
+            if live_pair:
+                check_current_raw(actual_a, token, "A")
+            else:
+                check_brake_gap_metrics(ds, reference["ds"], token, "DrSu")
+                check_brake_gap_metrics(actual_a, reference["scores"][BRAKE_GAP_CONTROL], token, "Drex A")
             row = {"token": token, "session_id": scene["session_id"], "ds": ds, "a": actual_a}
+            if live_pair:
+                row["historical_a"] = reference["scores"][BRAKE_GAP_CONTROL]
             if staged is not None:
                 candidate = staged[token]
                 if candidate["token"] != token:
                     raise RuntimeError(f"Incorrect prediction token: {token}")
-                b = evaluate(candidate) if candidate["poses"] != archived["poses"] else actual_a
-                check_brake_gap_metrics(b, b, token, "Drex B schema")
+                b = evaluate(candidate) if candidate["poses"] != control["poses"] else actual_a
+                if live_pair:
+                    check_current_raw(b, token, "B")
+                else:
+                    check_brake_gap_metrics(b, b, token, "Drex B schema")
                 delta = {key: b[key] - actual_a[key] for key in actual_a}
-                row.update(b=b, delta=delta, distance_delta_m=candidate["poses"][-1][0] - archived["poses"][-1][0],
+                row.update(b=b, delta=delta, distance_delta_m=candidate["poses"][-1][0] - control["poses"][-1][0],
                            regressions=[key for key in BRAKE_GAP_PROTECTED if delta[key] < -EPSILON])
+                if live_pair and token in (BRAKE_GAP_TARGET, COLLISION_TOKEN):
+                    a_failed = any(actual_a[key] != 1.0 for key in RISK_METRICS)
+                    b_failed = any(b[key] != 1.0 for key in RISK_METRICS)
+                    row["nc_ttc"] = {"role": "target" if token == BRAKE_GAP_TARGET else "positive_control",
+                                     "current_a_failed": a_failed, "b_failed": b_failed,
+                                     "repaired": a_failed and not b_failed}
             rows.append(row)
             pending.remove(token)
             if staged is not None and (row["regressions"] or (
@@ -1082,6 +1129,172 @@ def check_brake_gap_receipt(receipt, chain, smoke, cases, tokens):
         raise RuntimeError("Incomplete predictions or prediction receipt does not belong to this verified attempt")
 
 
+def require_brake_gap_reference(report, experiment, manifest_sha):
+    if (report.get("experiment_id") != experiment or report.get("stage") != "baseline"
+            or report.get("manifest_sha256") != manifest_sha or report.get("status") != "baseline_verified"):
+        raise RuntimeError("Astra baseline parity has not passed for this experiment, stage and manifest")
+
+
+def current_brake_gap_runtime(args):
+    """Run only inside the Slurm GPU allocation, not on the login node."""
+    job = os.environ.get("SLURM_JOB_ID")
+    if not job or platform.python_version_tuple()[:2] != ("3", "12"):
+        raise RuntimeError("Paired Drex requires the Python 3.12 runtime on a Slurm compute node")
+    if args.weights is None or args.upstream is None:
+        raise RuntimeError("Paired Drex requires --weights and --upstream")
+    source = find_spec("drex_max")
+    if (source is None or not source.origin
+            or Path(source.origin).resolve() != (args.upstream / "drex_max" / "__init__.py").resolve()):
+        raise RuntimeError("Drex is not imported from the expected upstream checkout")
+    versions = {}
+    for name in ("torch", "transformers", "tokenizers", "triton", "safetensors", "accelerate", "numpy"):
+        try:
+            versions[name] = version(name)
+        except PackageNotFoundError:
+            if name in ("torch", "transformers", "tokenizers"):
+                raise RuntimeError(f"Missing {name} in the compute-node Drex runtime") from None
+            versions[name] = None
+
+    import torch
+
+    if (not torch.cuda.is_available() or torch.cuda.device_count() != 1
+            or not torch.cuda.is_bf16_supported(including_emulation=False)):
+        raise RuntimeError("Expected one visible CUDA device with native BF16")
+
+    trees = {}
+    for label, path in (("weights", args.weights), ("upstream", args.upstream)):
+        tree = path.resolve(strict=True)
+        if any(p.is_symlink() and p.is_dir() and not {".git", "__pycache__"}.intersection(p.relative_to(tree).parts)
+               for p in tree.rglob("*")):
+            raise RuntimeError(f"Cannot fingerprint nested directory symlinks in {label}")
+        trees[f"{label}_path"] = str(tree)
+        trees[f"{label}_sha256"] = tree_sha256(tree)
+    exe = Path(sys.executable).resolve(strict=True)
+    identity = {**trees, "python": platform.python_version(), "python_sha256": file_sha256(exe),
+                "python_prefix": str(Path(sys.prefix).resolve()), "versions": versions,
+                "torch_cuda": torch.version.cuda, "torch_revision": torch.version.git_version,
+                "triton_default_fp_fusion": os.environ.get("TRITON_DEFAULT_FP_FUSION")}
+    return {"identity": identity, "node": platform.node(), "slurm_job_id": job,
+            "gpu": torch.cuda.get_device_name(0), "gpu_capability": list(torch.cuda.get_device_capability(0)),
+            "seed_per_arm": BRAKE_GAP_PAIR_SEED}, torch.manual_seed
+
+
+def paired_smoke_marker(chain, runtime, cases):
+    return {"status": "passed", **chain, "runtime_sha256": straight.digest(runtime),
+            "first_pair_sha256": {arm: straight.digest(rows[BRAKE_GAP_TARGET]) for arm, rows in cases.items()}}
+
+
+def read_current_brake_gap_pairs(folder, chain, expected_tokens, prior_smoke=None):
+    cases = {arm: {p.stem: straight.read(p) for p in (folder / arm).glob("*.json")} for arm in ("a", "b")}
+    if any(set(rows) != expected_tokens for rows in cases.values()):
+        raise RuntimeError("Paired run does not contain exactly the required tokens in both arms")
+    runtime, smoke = (straight.read(folder / name) for name in ("runtime.json", "smoke.json"))
+    if smoke != paired_smoke_marker(chain, runtime, cases):
+        raise RuntimeError("Paired smoke does not match this attempt and its first pair")
+    if prior_smoke is not None:
+        expected_receipt = paired_prediction_receipt(smoke, cases, prior_smoke)
+        if straight.read(folder / "prediction-receipt.json") != expected_receipt:
+            raise RuntimeError("Paired prediction receipt changed or belongs to another attempt")
+    return cases, runtime, smoke
+
+
+def paired_prediction_receipt(smoke, cases, prior_smoke):
+    return {"status": "predicted", "pilot_smoke_sha256": straight.digest(smoke),
+            "prior_smoke_sha256": straight.digest(prior_smoke),
+            "prediction_sha256": {arm: {token: straight.digest(case) for token, case in rows.items()}
+                                  for arm, rows in cases.items()}}
+
+
+def predict_current_brake_gap_pairs(folder, plan, chain, runtime, reset_seed, load, *, smoke_only, prior_smoke=None):
+    """Use one model for both arms; keep completed A even if the matching B fails."""
+    folder.mkdir()
+    cases = {"a": {}, "b": {}}
+    for arm in cases:
+        (folder / arm).mkdir()
+    write_brake_gap_artifact(folder / "runtime.json", runtime)
+    records = sorted(plan["scenes"], key=lambda scene: scene["token"] != BRAKE_GAP_TARGET)
+    if not records or records[0]["token"] != BRAKE_GAP_TARGET:
+        raise RuntimeError("Required paired smoke scene is missing")
+    if smoke_only:
+        records = records[:1]
+    model = load()
+    setup = PREVIEW_SETUPS[BRAKE_GAP_CONTROL]
+    smoke = None
+    for scene in records:
+        token = scene["token"]
+        for arm in ("a", "b"):
+            enabled = arm == "b"
+            first = True
+
+            def choose(request):
+                nonlocal first
+                if enabled:
+                    if first and request_json(without_brake_gap(request)) != request_json(
+                            cases["a"][token]["decisions"][0]["request"]):
+                        raise RuntimeError(f"Paired starting requests differ beyond the one factor: {token}")
+                    check_brake_gap_token_pair(model.model, request)
+                else:
+                    no_brake_gap_truncation(model.model, request)
+                first = False
+                return model.choose(request)
+
+            reset_seed(BRAKE_GAP_PAIR_SEED)
+            case = straight.build_plan(scene, choose, *setup, lead_brake_gap=enabled)
+            check_brake_gap_pose_rows(case)
+            write_brake_gap_artifact(folder / arm / f"{token}.json", case)
+            cases[arm][token] = case
+        if token == BRAKE_GAP_TARGET:
+            smoke = paired_smoke_marker(chain, runtime, cases)
+            write_brake_gap_artifact(folder / "smoke.json", smoke)
+        print(f"Predicted current A/B pair: {token}", flush=True)
+    if not smoke_only:
+        write_brake_gap_artifact(folder / "prediction-receipt.json",
+                                 paired_prediction_receipt(smoke, cases, prior_smoke))
+
+
+def run_current_brake_gap(args, stage, root, plan, chain, payload, reference):
+    smoke_dir, pilot_dir = root / "paired-smoke", root / "paired-pilot"
+    preflight = stage.startswith("ready-")
+    stage = stage.removeprefix("ready-")
+    prior_runtime, prior_smoke = None, None
+    if stage in ("predict", "score"):
+        _, prior_runtime, prior_smoke = read_current_brake_gap_pairs(smoke_dir, chain, {BRAKE_GAP_TARGET})
+    if stage in ("smoke", "predict"):
+        folder = smoke_dir if stage == "smoke" else pilot_dir
+        if folder.exists():
+            raise RuntimeError("Run stage already exists; preserve it and use a separate attempt")
+        if preflight:
+            print(f"Paired {stage} inputs verified; CUDA/runtime will be checked on the compute node")
+            return 0
+        runtime, reset_seed = current_brake_gap_runtime(args)
+        if prior_runtime is not None and runtime["identity"] != prior_runtime["identity"]:
+            raise RuntimeError("Current weights/runtime changed since the separate smoke job")
+
+        from .driver import DrexMax
+
+        predict_current_brake_gap_pairs(folder, plan, chain, runtime, reset_seed, lambda: DrexMax(args.weights),
+                                        smoke_only=stage == "smoke", prior_smoke=prior_smoke)
+        return 0
+
+    output = root / "comparison.json"
+    if output.exists():
+        raise RuntimeError("Comparison already attempted; do not overwrite")
+    tokens = set(check_plan(plan))
+    cases, runtime, smoke = read_current_brake_gap_pairs(pilot_dir, chain, tokens, prior_smoke=prior_smoke)
+    if runtime["identity"] != prior_runtime["identity"]:
+        raise RuntimeError("Paired pilot and smoke runtimes differ")
+    compact = {arm: {t: {"token": case["token"], "poses": case["poses"]} for t, case in rows.items()}
+               for arm, rows in cases.items()}
+    result = on_astra("astra-night-brake-gap-score", args, {"plan": payload["plan"], "export": payload["export"],
+                       "reference": payload["reference"], "expected_scorer": reference["scorer"],
+                       "experiment_id": BRAKE_GAP_PAIRED_EXPERIMENT,
+                       "current_a": compact["a"], "predictions": compact["b"]})
+    receipt = paired_prediction_receipt(smoke, cases, prior_smoke)
+    write_brake_gap_artifact(output, {**result, "prediction_receipt_sha256": straight.digest(receipt)})
+    print(f"{result['status']}: {output}", flush=True)
+    return {"pass": 0, "rejected": 3}.get(result["status"], 2)
+
+
 def run_brake_gap(args):
     if args.archive is None:
         raise RuntimeError("--archive is required")
@@ -1089,6 +1302,9 @@ def run_brake_gap(args):
     if root != args.out.absolute() or root == archive or archive in root.parents or root in archive.parents:
         raise RuntimeError("Use a canonical, non-symlink output directory separate from the read-only archive")
     stage = args.stage.removeprefix("brake-gap-")
+    paired = stage.startswith("paired-")
+    if paired:
+        stage = stage.removeprefix("paired-")
     preflight = stage.startswith("preflight-")
     if preflight:
         stage = stage.removeprefix("preflight-")
@@ -1101,6 +1317,12 @@ def run_brake_gap(args):
                 "archive": str(archive),
                 "binding": binding, "revision": revision, "lead_brake_mps2": straight.PREVIEW_LEAD_BRAKE_MPS2,
                 "inference": "argmax, no sampling; max_length=2048", "bootstrap_seed": 20261124}
+    if paired:
+        manifest.pop("baseline_job")
+        manifest.update(experiment_id=BRAKE_GAP_PAIRED_EXPERIMENT, historical_reference_job=298185,
+                        control="A recomputed in the same job as B", inference_seed_per_arm=BRAKE_GAP_PAIR_SEED)
+        script = Path(__file__).with_name("lead_brake_gap.sh")
+        revision["source_sha256"][script.name] = file_sha256(script)
     manifest_path = root / "manifest.json"
     if stage == "verify":
         root.mkdir(mode=0o700, parents=True, exist_ok=False)
@@ -1110,20 +1332,26 @@ def run_brake_gap(args):
     if straight.read(manifest_path) != manifest:
         raise RuntimeError("Current code or archived inputs differ from the verified manifest")
     manifest_sha = straight.digest(manifest)
-    baseline = root / "baseline-score.json"
-    if stage == "baseline-score":
+    baseline = root / ("reference-score.json" if paired else "baseline-score.json")
+    if stage == ("reference-score" if paired else "baseline-score"):
         if baseline.exists():
             raise RuntimeError("Baseline score already attempted; do not overwrite")
         result = on_astra("astra-night-brake-gap-score", args, {
-            **payload, "archived": {t: {"token": case["token"], "poses": case["poses"]}
+            **payload, "experiment_id": manifest["experiment_id"],
+            "archived": {t: {"token": case["token"], "poses": case["poses"]}
                                    for t, case in payload["archived"].items()}})
-        write_brake_gap_artifact(baseline, {**result, "manifest_sha256": manifest_sha})
+        result["manifest_sha256"] = manifest_sha
+        write_brake_gap_artifact(baseline, result)
         print(f"{result['status']}: {baseline}", flush=True)
-        return 0 if result["status"] == "baseline_verified" else 2
+        if result["status"] != "baseline_verified":
+            return 2
+        require_brake_gap_reference(result, manifest["experiment_id"], manifest_sha)
+        return 0
     baseline_result = straight.read(baseline)
-    if baseline_result["status"] != "baseline_verified" or baseline_result.get("manifest_sha256") != manifest_sha:
-        raise RuntimeError("Astra baseline parity has not passed for this manifest")
+    require_brake_gap_reference(baseline_result, manifest["experiment_id"], manifest_sha)
     chain = {"attempt": str(root), "manifest_sha256": manifest_sha, "baseline_sha256": straight.digest(baseline_result)}
+    if paired:
+        return run_current_brake_gap(args, stage, root, plan, chain, payload, baseline_result)
     smoke = root / "gpu-smoke.json"
     predictions = root / "predictions"
     receipt = root / "prediction-receipt.json"
@@ -1206,7 +1434,10 @@ def main():
                                           "astra-night-preview-score", "astra-night-regressions",
                                           "astra-night-brake-gap-score", "brake-gap-verify", "brake-gap-baseline-score",
                                           "brake-gap-preflight-gpu-smoke", "brake-gap-preflight-predict",
-                                          "brake-gap-gpu-smoke", "brake-gap-predict", "brake-gap-score"))
+                                          "brake-gap-gpu-smoke", "brake-gap-predict", "brake-gap-score",
+                                          "brake-gap-paired-verify", "brake-gap-paired-reference-score",
+                                          "brake-gap-paired-ready-smoke", "brake-gap-paired-ready-predict",
+                                          "brake-gap-paired-smoke", "brake-gap-paired-predict", "brake-gap-paired-score"))
     parser.add_argument("--out", type=Path)
     parser.add_argument("--pilot", type=Path)
     parser.add_argument("--weights", type=Path)

@@ -25,6 +25,59 @@ def example_plan():
 
 
 class NightTests(unittest.TestCase):
+    def test_current_pair_preflight_does_not_require_cuda_on_login_node(self):
+        with TemporaryDirectory() as tmp, patch.object(night, "current_brake_gap_runtime") as hardware:
+            root = Path(tmp)
+            self.assertEqual(night.run_current_brake_gap(None, "ready-smoke", root, None, {}, None, None), 0)
+            self.assertFalse((root / "paired-smoke").exists())
+            hardware.assert_not_called()
+
+    def test_current_pilot_loads_once_keeps_both_arms_and_binds_receipt(self):
+        first, second = example_plan()["scenes"]
+        geometry = {"corridor_objects": [], "ego_bounds": {"front_m": 3, "rear_m": -1}}
+        first = {**first, **geometry, "token": night.BRAKE_GAP_TARGET}
+        second = {**second, **geometry}
+        plan = {"scenes": [second, first]}
+        runtime, chain, prior = {"identity": {"weights_sha256": "current"}}, {"attempt": "new"}, {"status": "passed"}
+        model = SimpleNamespace(model=object(), choose=Mock(return_value=("maintain", None)))
+        load, seed = Mock(return_value=model), Mock()
+        with TemporaryDirectory() as tmp, patch.object(night, "no_brake_gap_truncation"), \
+                patch.object(night, "check_brake_gap_token_pair"):
+            folder = Path(tmp) / "pilot"
+            night.predict_current_brake_gap_pairs(folder, plan, chain, runtime, seed, load,
+                                                smoke_only=False, prior_smoke=prior)
+            load.assert_called_once_with()
+            self.assertEqual([c.args for c in seed.call_args_list], [(night.BRAKE_GAP_PAIR_SEED,)] * 4)
+            self.assertEqual(model.choose.call_count, 32)
+            tokens = {first["token"], second["token"]}
+            pairs, frozen, smoke = night.read_current_brake_gap_pairs(folder, chain, tokens, prior)
+            self.assertEqual(frozen, runtime)
+            self.assertEqual(smoke["status"], "passed")
+            a, b = (pairs[arm][first["token"]]["decisions"][0]["request"] for arm in ("a", "b"))
+            self.assertNotEqual(a, b)
+            self.assertEqual(a, night.without_brake_gap(b))
+            changed = {**pairs["b"][second["token"]], "unexpected": True}
+            straight.write(folder / "b" / f'{second["token"]}.json', changed)
+            with self.assertRaisesRegex(RuntimeError, "receipt changed"):
+                night.read_current_brake_gap_pairs(folder, chain, tokens, prior)
+
+    def test_current_smoke_failure_keeps_a_but_does_not_start_remaining_pairs(self):
+        scenes = [{**row, "corridor_objects": [], "ego_bounds": {"front_m": 3, "rear_m": -1}}
+                  for row in example_plan()["scenes"]]
+        scenes[0]["token"] = night.BRAKE_GAP_TARGET
+        model = SimpleNamespace(model=object(), choose=Mock(return_value=("maintain", None)))
+        with TemporaryDirectory() as tmp, patch.object(night, "no_brake_gap_truncation"), \
+                patch.object(night, "check_brake_gap_token_pair", side_effect=RuntimeError("erased")):
+            folder = Path(tmp) / "pilot"
+            with self.assertRaisesRegex(RuntimeError, "erased"):
+                night.predict_current_brake_gap_pairs(folder, {"scenes": scenes}, {}, {}, Mock(), lambda: model,
+                                                      smoke_only=False, prior_smoke={"status": "passed"})
+            self.assertEqual(model.choose.call_count, 8)
+            self.assertTrue((folder / "a" / f"{night.BRAKE_GAP_TARGET}.json").is_file())
+            self.assertFalse((folder / "a" / "b.json").exists())
+            self.assertFalse((folder / "smoke.json").exists())
+            self.assertFalse((folder / "prediction-receipt.json").exists())
+
     def test_brake_gap_replays_historical_requests_and_poses_without_numpy(self):
         scene = {**example_plan()["scenes"][0], "corridor_objects": [], "ego_bounds": {"front_m": 3, "rear_m": -1}}
         archived = straight.build_plan(scene, lambda _: ("maintain", None), observation_variant="corridor-preview")
@@ -123,6 +176,151 @@ class NightTests(unittest.TestCase):
             self.assertEqual(outcome["cases"][0]["regressions"], ["lane_keeping"])
             self.assertEqual(outcome["unscored_tokens"], ["b"])
             self.assertNotIn("summary", outcome)
+
+    def mock_paired_brake_gap(self):
+        target, control = night.BRAKE_GAP_TARGET, night.COLLISION_TOKEN
+        plan = example_plan()
+        plan["scenes"][0]["token"], plan["scenes"][1]["token"] = control, target
+        export = {"observation_sha256": straight.digest(plan), "objects": {target: [], control: []}}
+        good = {key: 1.0 for key in (*night.BRAKE_GAP_PROTECTED, "ego_progress", "pdm_score")}
+        historical_a = {**good, "no_at_fault_collisions": 0.0, "pdm_score": 0.0}
+        current_a_failed = {**good, "time_to_collision_within_bound": 0.0, "pdm_score": .5}
+        reference = {t: {"ds": good, "scores": {night.BRAKE_GAP_CONTROL: historical_a}} for t in (target, control)}
+
+        def prediction(token, distance):
+            return {"token": token, "poses": [[distance, 0, 0] for _ in range(straight.POSES)]}
+
+        current_a = {t: prediction(t, 1) for t in (target, control)}
+        predictions = {target: prediction(target, 2), control: prediction(control, 1)}
+        scorer = {"config_sha256": straight.digest({}), "navsim_sha256": "frozen", "tools_sha256": "frozen",
+                  "python": "mock", "versions": dict.fromkeys(("numpy", "hydra-core", "shapely", "nuplan-devkit"), "mock")}
+        payload = {"plan": plan, "export": export, "reference": reference, "current_a": current_a,
+                   "experiment_id": night.BRAKE_GAP_PAIRED_EXPERIMENT,
+                   "predictions": predictions, "expected_scorer": scorer}
+        context = Mock(return_value=({}, {}, None, {}, {}))
+        replays = {target: Mock(side_effect=[current_a_failed, good]), control: Mock(return_value=good)}
+        for_scene = Mock(side_effect=lambda scene: (good, replays[scene["token"]]))
+        for patcher in (
+                patch.dict(sys.modules, rollout_replay=SimpleNamespace(config_core=lambda _: {})),
+                patch.object(night, "archive_context", context),
+                patch.object(night, "archive_evaluator", return_value=(for_scene, ())),
+                patch.object(night, "tree_sha256", return_value="frozen"),
+                patch.object(night.platform, "python_version", return_value="mock"),
+                patch.object(night, "version", return_value="mock")):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        args = SimpleNamespace(repo=Path.cwd(), source=Path.cwd())
+        return args, payload, context, for_scene, replays
+
+    def test_paired_reference_score_is_labelled_and_rejects_legacy_or_wrong_stage(self):
+        args, payload, _, _, replays = self.mock_paired_brake_gap()
+        historical = {k: v for k, v in payload.items() if k not in ("current_a", "predictions")}
+        historical["archived"] = payload["current_a"]
+        for token, replay in replays.items():
+            replay.side_effect = None
+            replay.return_value = payload["reference"][token]["scores"][night.BRAKE_GAP_CONTROL]
+        result = night.score_brake_gap(args, historical)
+        self.assertEqual(result["status"], "baseline_verified")
+        self.assertEqual(result["experiment_id"], night.BRAKE_GAP_PAIRED_EXPERIMENT)
+        self.assertEqual(result["stage"], "baseline")
+        result["manifest_sha256"] = "matching"
+        night.require_brake_gap_reference(result, night.BRAKE_GAP_PAIRED_EXPERIMENT, "matching")
+        for mismatch in ({"experiment_id": night.BRAKE_GAP_EXPERIMENT}, {"stage": "comparison"}):
+            with self.assertRaisesRegex(RuntimeError, "experiment, stage and manifest"):
+                night.require_brake_gap_reference({**result, **mismatch}, night.BRAKE_GAP_PAIRED_EXPERIMENT, "matching")
+
+    def test_paired_brake_gap_scores_current_a_instead_of_historical_a(self):
+        args, payload, _, for_scene, replays = self.mock_paired_brake_gap()
+        target, control = night.BRAKE_GAP_TARGET, night.COLLISION_TOKEN
+        result = night.score_brake_gap(args, payload)
+        self.assertEqual(result["experiment_id"], night.BRAKE_GAP_PAIRED_EXPERIMENT)
+        self.assertEqual(result["status"], "pass")
+        self.assertEqual(result["unscored_tokens"], [])
+        self.assertEqual([c.args[0]["token"] for c in for_scene.call_args_list], [target, control])
+        self.assertEqual([c.args[0] for c in replays[target].call_args_list],
+                         [payload["current_a"][target], payload["predictions"][target]])
+        case = result["cases"][0]
+        self.assertEqual(case["a"]["pdm_score"], .5)
+        self.assertEqual(case["historical_a"]["pdm_score"], 0.0)
+        self.assertEqual(case["delta"]["pdm_score"], .5)
+        self.assertEqual(case["distance_delta_m"], 1)
+        self.assertEqual(case["nc_ttc"], {"role": "target", "current_a_failed": True,
+                                         "b_failed": False, "repaired": True})
+        self.assertEqual(result["summary"]["mean_delta_pp"]["pdm_score"], 25.0)
+
+    def test_paired_brake_gap_rejects_incomplete_pairs_before_scoring(self):
+        args, payload, context, for_scene, _ = self.mock_paired_brake_gap()
+        target, control = night.BRAKE_GAP_TARGET, night.COLLISION_TOKEN
+        for arm in ("current_a", "predictions"):
+            valid = payload[arm]
+            for invalid, reason in (
+                    ({target: valid[target]}, "membership"),
+                    ({**valid, "extra": valid[target]}, "membership"),
+                    ({**valid, control: valid[target]}, "Incorrect prediction token"),
+                    ({**valid, control: {"token": control}}, "Invalid straight trajectory")):
+                with self.subTest(arm=arm, reason=reason):
+                    result = night.score_brake_gap(args, {**payload, arm: invalid})
+                    self.assertEqual(result["status"], "incomplete")
+                    self.assertIn(reason, result["first_failed_gate"]["reason"])
+                    self.assertEqual(result["cases"], [])
+                    self.assertEqual(set(result["unscored_tokens"]), {target, control})
+                    self.assertNotIn("summary", result)
+        without_predictions = {key: val for key, val in payload.items() if key != "predictions"}
+        self.assertEqual(night.score_brake_gap(args, without_predictions)["status"], "incomplete")
+        context.assert_not_called()
+        for_scene.assert_not_called()
+
+    def test_paired_brake_gap_clean_current_a_is_not_a_repair(self):
+        args, payload, _, _, replays = self.mock_paired_brake_gap()
+        target, control = night.BRAKE_GAP_TARGET, night.COLLISION_TOKEN
+        good = payload["reference"][target]["ds"]
+        replays[target].side_effect = [{**good, "ego_progress": .5, "pdm_score": .5}, good]
+        result = night.score_brake_gap(args, payload)
+        self.assertEqual(result["status"], "pass")
+        for case, role in zip(result["cases"], ("target", "positive_control")):
+            self.assertEqual(case["historical_a"]["no_at_fault_collisions"], 0.0)
+            self.assertEqual(case["nc_ttc"], {"role": role, "current_a_failed": False,
+                                             "b_failed": False, "repaired": False})
+        replays[control].assert_called_once_with(payload["current_a"][control])
+        self.assertEqual(result["cases"][1]["delta"]["pdm_score"], 0.0)
+
+    def test_paired_brake_gap_keeps_scorer_identity_and_drsu_parity_gates(self):
+        args, payload, _, for_scene, replays = self.mock_paired_brake_gap()
+        target = night.BRAKE_GAP_TARGET
+        result = night.score_brake_gap(args, {**payload, "expected_scorer": {}})
+        self.assertEqual(result["status"], "incomplete")
+        self.assertIn("Scorer identity", result["first_failed_gate"]["reason"])
+        for_scene.assert_not_called()
+
+        reference = payload["reference"][target]
+        reference["ds"] = {**reference["ds"], "pdm_score": .5}
+        result = night.score_brake_gap(args, payload)
+        self.assertEqual(result["status"], "incomplete")
+        self.assertEqual(result["first_failed_gate"]["token"], target)
+        self.assertIn("Historical DrSu raw-score parity", result["first_failed_gate"]["reason"])
+        self.assertNotIn("summary", result)
+        for_scene.assert_called_once()
+        replays[target].assert_not_called()
+
+    def test_paired_brake_gap_stops_at_first_failed_gate_without_summary(self):
+        args, payload, _, _, replays = self.mock_paired_brake_gap()
+        target, control = night.BRAKE_GAP_TARGET, night.COLLISION_TOKEN
+        good = payload["reference"][target]["ds"]
+        for a, b, status, reason in (
+                ({**good, "pdm_score": float("nan")}, good, "incomplete", "Drex A raw scores"),
+                (good, {**good, "pdm_score": float("inf")}, "incomplete", "Drex B raw scores"),
+                (good, {**good, "lane_keeping": 0.0}, "rejected", "protected/target gate"),
+                ({**good, "time_to_collision_within_bound": 0.0},
+                 {**good, "time_to_collision_within_bound": 0.0}, "rejected", "protected/target gate")):
+            with self.subTest(status=status, reason=reason):
+                replays[target].side_effect = [a, b]
+                result = night.score_brake_gap(args, payload)
+                self.assertEqual(result["status"], status)
+                self.assertEqual(result["first_failed_gate"]["token"], target)
+                self.assertIn(reason, result["first_failed_gate"]["reason"])
+                self.assertIn(control, result["unscored_tokens"])
+                self.assertNotIn("summary", result)
+        replays[control].assert_not_called()
 
     def test_regression_selection_catches_ttc_only_and_keeps_the_rescued_scene(self):
         plan = example_plan()
