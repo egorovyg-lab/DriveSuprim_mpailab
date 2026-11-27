@@ -5,6 +5,8 @@ umask 077
 module=scripts.drex_drive.navsim_night
 historical_experiment=corridor-preview-lead-brake-gap-v1
 paired_experiment=corridor-preview-lead-brake-gap-paired-v1
+bc_experiment=corridor-preview-lead-brake-gap-conditional-v1
+bc_module=scripts.drex_drive.lead_brake_gap_bc
 
 check_attempt_path() {
   local parent="${out%/*}"
@@ -63,6 +65,7 @@ if [[ ${1:-} == worker ]]; then
   case "$stage" in
     brake-gap-gpu-smoke|brake-gap-predict) experiment=$historical_experiment ;;
     brake-gap-paired-smoke|brake-gap-paired-predict) experiment=$paired_experiment ;;
+    brake-gap-bc-smoke|brake-gap-bc-predict) experiment=$bc_experiment; module=$bc_module ;;
     *) exit 2 ;;
   esac
   check_attempt_path
@@ -75,7 +78,7 @@ if [[ ${1:-} == worker ]]; then
   if [[ $experiment == "$historical_experiment" ]]; then
     worker_args+=(--provenance "$provenance")
   fi
-  run_logged_worker srun --ntasks=1 "$runtime/venv/bin/python" -B -m "$module" "$stage" \
+  run_logged_worker srun --ntasks=1 "$runtime/venv/bin/python" -B -m "$module" "${stage#brake-gap-bc-}" \
     "${worker_args[@]}"
   exit 0
 fi
@@ -90,19 +93,27 @@ attempt=${2:-attempt-001}
 [[ $attempt =~ ^attempt-[0-9]{3,}$ ]] || { echo 'Use attempt-NNN' >&2; exit 2; }
 case "${1:-}" in
   paired-*|submit-paired*) experiment=$paired_experiment ;;
+  bc-*|submit-bc*) experiment=$bc_experiment; module=$bc_module ;;
   *) experiment=$historical_experiment ;;
 esac
 out="$runtime/runs/$experiment/$attempt"
 check_attempt_path
 
 case "${1:-}" in
-  check|paired-check)
+  check|paired-check|bc-check)
     for path in observations.json corridor-preview-input.json corridor-preview.json \
                 corridor-preview/identity.json control/identity.json; do
       [[ -s "$archive/$path" ]] || { echo "Missing archive input: $path" >&2; exit 2; }
     done
     [[ -x "$python" && -f "$runtime/upstream/drex_max/model.py" \
        && -d "$runtime/models/drex-max-v1" ]] || { echo 'Missing Drex runtime or weights' >&2; exit 2; }
+    if [[ $experiment == "$bc_experiment" ]]; then
+      prior="$runtime/runs/$paired_experiment/attempt-002"
+      for path in comparison.json manifest.json paired-pilot/runtime.json paired-pilot/smoke.json \
+                  paired-pilot/prediction-receipt.json; do
+        [[ -s "$prior/$path" ]] || { echo "Missing attempt-002 reference: $prior/$path" >&2; exit 2; }
+      done
+    fi
     printf 'Login interpreter (not the compute-node runtime): '
     "$python" --version
     printf 'Read-only archive: %s\nNew attempt: %s\n' "$archive" "$out"
@@ -112,14 +123,16 @@ case "${1:-}" in
     sinfo -p "${DREX_PARTITION:-batch}" -o '%P %a %l %D %t %c %m %G'
     squeue -u "$USER" -o '%.18i %.24j %.10T %.6D %R'
     exit 0 ;;
-  verify|baseline-score|submit-smoke|submit-pilot|score|paired-verify|paired-reference-score|submit-paired-smoke|submit-paired|paired-score) ;;
-  *) echo "Usage: $0 {paired-check|paired-verify|paired-reference-score|submit-paired-smoke|submit-paired|paired-score} [attempt-NNN]" >&2; exit 2 ;;
+  verify|baseline-score|submit-smoke|submit-pilot|score|paired-verify|paired-reference-score|submit-paired-smoke|submit-paired|paired-score|bc-verify|submit-bc-smoke|bc-score-smoke|submit-bc-pilot|bc-score) ;;
+  *) echo "Usage: $0 {paired-check|paired-verify|paired-reference-score|submit-paired-smoke|submit-paired|paired-score|bc-check|bc-verify|submit-bc-smoke|bc-score-smoke|submit-bc-pilot|bc-score} [attempt-NNN]" >&2; exit 2 ;;
 esac
 
 head=$(git rev-parse HEAD)
 diff_sha=$(git diff --no-ext-diff HEAD -- scripts/drex_drive | sha256sum | cut -d ' ' -f 1)
 args=(--out "$out" --archive "$archive" --git-head "$head" --git-diff-sha256 "$diff_sha")
-if [[ $1 == verify || $1 == paired-verify ]]; then
+if [[ $1 == bc-verify ]]; then
+  exec "$python" -B -m "$module" verify "${args[@]}"
+elif [[ $1 == verify || $1 == paired-verify ]]; then
   exec "$python" -B -m "$module" "brake-gap-$1" "${args[@]}"
 fi
 [[ -O "$out" && -s "$out/manifest.json" ]] || { echo 'Run verify first' >&2; exit 2; }
@@ -128,6 +141,17 @@ submit_worker() {
   # Fresh private logging directory doubles as the write-once reservation.
   check_attempt_path
   mkdir -- "$out/$stage-slurm"
+  if [[ $experiment == "$bc_experiment" ]]; then
+    # Outer Slurm logs include failures before the exclusive combined srun log opens.
+    # The fresh private reservation is created before submission; append is for Slurm reopens.
+    set -o noclobber
+    exec > "$out/$stage-slurm/submit.log" 2>&1
+    exec sbatch --wait --parsable --job-name="$stage" --partition="${DREX_PARTITION:-batch}" \
+      --nodes=1 --ntasks=1 --gres=gpu:1 --cpus-per-task=4 --mem=96G --time="$wall" --no-requeue \
+      --chdir="$repo" --open-mode=append --output="$out/$stage-slurm/slurm-%j.stdout.log" \
+      --error="$out/$stage-slurm/slurm-%j.stderr.log" "$script" worker "$stage" "$repo" "$runtime" \
+      "$archive" "$out" "$provenance" "$head" "$diff_sha"
+  fi
   exec sbatch --wait --parsable --job-name="$stage" --partition="${DREX_PARTITION:-batch}" \
     --nodes=1 --ntasks=1 --gres=gpu:1 --cpus-per-task=4 --mem=96G --time="$wall" \
     --chdir="$repo" --output=/dev/null --error=/dev/null "$script" worker "$stage" "$repo" "$runtime" \
@@ -135,6 +159,28 @@ submit_worker() {
 }
 
 case "$1" in
+  submit-bc-smoke|submit-bc-pilot)
+    # Explicit submission; the scored-smoke gate is repeated by the pilot worker.
+    lock_attempt
+    provenance=unused
+    stage=brake-gap-bc-smoke
+    wall=00:10:00
+    if [[ $1 == submit-bc-pilot ]]; then
+      stage=brake-gap-bc-predict
+      wall=00:30:00
+    fi
+    "$python" -B -m "$module" "ready-${stage#brake-gap-bc-}" "${args[@]}"
+    # submit_worker execs sbatch. Release before the compute worker takes its lock.
+    rmdir -- "$out/.lead-brake-gap.lock"
+    trap - EXIT
+    submit_worker ;;
+  bc-score-smoke|bc-score)
+    lock_attempt
+    mkdir -- "$out/$1-started"
+    set -o noclobber
+    exec > "$out/$1.log" 2>&1
+    export DREX_ASTRA_DS_DEVICE=cpu
+    "$python" -B -m "$module" "${1#bc-}" "${args[@]}" ;;
   submit-paired-smoke|submit-paired)
     provenance=unused
     stage=brake-gap-paired-smoke

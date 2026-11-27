@@ -812,15 +812,22 @@ def score_regressions(args, payload):
             "scenes": len(rows), "cases": rows}
 
 
-def on_astra(stage, args, payload):
+def on_astra(stage, args, payload, *, extra_source=None):
     straight_code = Path(straight.__file__).read_text(encoding="utf-8")
     bundled_straight = b64encode(compress(straight_code.encode())).decode()
     bundled_night = b64encode(compress(Path(__file__).read_bytes())).decode()
     launcher = ("import sys, types\nfrom base64 import b64decode\nfrom zlib import decompress\n"
                 "module = types.ModuleType('_drex_night_straight')\n"
                 "sys.modules[module.__name__] = module\n"
-                f"exec(compile(decompress(b64decode({bundled_straight!r})), 'navsim_straight.py', 'exec'), module.__dict__)\n"
-                f"exec(compile(decompress(b64decode({bundled_night!r})), 'navsim_night.py', 'exec'))\n")
+                f"exec(compile(decompress(b64decode({bundled_straight!r})), 'navsim_straight.py', 'exec'), module.__dict__)\n")
+    if extra_source is not None:
+        bundled_extra = b64encode(compress(extra_source.read_bytes())).decode()
+        launcher += ("night = types.ModuleType('_drex_night')\n"
+                     "sys.modules[night.__name__] = night\n"
+                     f"exec(compile(decompress(b64decode({bundled_night!r})), 'navsim_night.py', 'exec'), night.__dict__)\n"
+                     f"exec(compile(decompress(b64decode({bundled_extra!r})), 'lead_brake_gap_bc.py', 'exec'))\n")
+    else:
+        launcher += f"exec(compile(decompress(b64decode({bundled_night!r})), 'navsim_night.py', 'exec'))\n"
     return straight.on_astra(stage, args, payload, source_code=launcher)
 
 
@@ -998,10 +1005,19 @@ def brake_gap_summary(rows):
             "ties": sum(abs(d) <= EPSILON for d in deltas)}
 
 
-def score_brake_gap(args, payload):
-    """Run baseline or paired scoring in the existing Astra container; return partials on first failed gate."""
+def brake_gap_scorer_identity(args, plan):
     from rollout_replay import config_core
 
+    _, _, _, template, _ = archive_context(args, plan)
+    return {"config_sha256": straight.digest(config_core(template)),
+            "navsim_sha256": tree_sha256(args.repo / "navsim"),
+            "tools_sha256": tree_sha256(args.source / "tools"),
+            "python": platform.python_version(),
+            "versions": {name: version(name) for name in ("numpy", "hydra-core", "shapely", "nuplan-devkit")}}
+
+
+def score_brake_gap(args, payload):
+    """Run baseline or paired scoring in the existing Astra container; return partials on first failed gate."""
     plan = with_corridor(payload["plan"], payload["export"])
     staged = payload.get("predictions")
     live_pair = "current_a" in payload
@@ -1037,12 +1053,7 @@ def score_brake_gap(args, payload):
                         raise RuntimeError(f"Incorrect prediction token in {name}: {token}")
                     check_brake_gap_pose_rows(prediction)
                 token = None
-        _, _, _, template, _ = archive_context(args, plan)
-        scorer = {"config_sha256": straight.digest(config_core(template)),
-                  "navsim_sha256": tree_sha256(args.repo / "navsim"),
-                  "tools_sha256": tree_sha256(args.source / "tools"),
-                  "python": platform.python_version(),
-                  "versions": {name: version(name) for name in ("numpy", "hydra-core", "shapely", "nuplan-devkit")}}
+        scorer = brake_gap_scorer_identity(args, plan)
         report["scorer"] = scorer
         if staged is not None and (payload["expected_scorer"] != scorer or set(staged) != set(pending)):
             raise RuntimeError("Scorer identity or full prediction membership changed after preflight")

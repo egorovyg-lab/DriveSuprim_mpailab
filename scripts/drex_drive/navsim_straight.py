@@ -349,14 +349,33 @@ def action_effects(ego, gap, lead_speed, accelerations, include_end=False, horiz
     return previews
 
 
+def lead_brake_gap_gate(has_leader: bool, closing_mps: float | None) -> str:
+    if not has_leader and closing_mps is None:
+        return "no_leader"
+    if not has_leader or type(closing_mps) not in (int, float) or not isfinite(closing_mps):
+        raise ValueError("Invalid selected radar leader/closing speed")
+    return "closing" if closing_mps > 0 else "zero" if closing_mps == 0 else "opening"
+
+
 def build_plan(record, choose, prompt_variant="baseline", observation_variant="radar", action_variant="standard",
-               *, lead_brake_gap: bool = False):
+               *, lead_brake_gap: bool = False, brake_gap_request=None):
     from .driver import request_for
     from .simulation import ACCELERATION, Action, STOPPED_MPS, Vehicle
 
     if lead_brake_gap and (prompt_variant, observation_variant, action_variant) != ("baseline", "corridor-preview",
-                                                                                 "standard"):
+                                                                                  "standard"):
         raise ValueError("lead_brake_gap requires baseline/corridor-preview/standard")
+    if brake_gap_request is not None:
+        def nonnegative(value):
+            return type(value) in (int, float) and isfinite(value) and value >= 0
+
+        if not lead_brake_gap or not nonnegative(record["speed_mps"]) or record["speed_mps"] > SPEED_CAP:
+            raise ValueError("Invalid conditional brake-gap setup or ego speed")
+        if not isinstance(record["leaders"], list) or any(
+            not isinstance(track, dict) or set(track) != {"gap_m", "speed_mps"}
+            or not all(nonnegative(value) for value in track.values()) for track in record["leaders"]
+        ):
+            raise ValueError("Invalid initial radar tracks")
 
     extra_actions = GENTLE_ACTIONS if action_variant == "gentle" else {}
     accelerations = {action.value: acceleration for action, acceleration in ACCELERATION.items()}
@@ -375,6 +394,7 @@ def build_plan(record, choose, prompt_variant="baseline", observation_variant="r
                          default=None)
         lead, gap, leader_speed = None, None, None
         radar = None
+        closing_speed = None
         if lead_index is not None:
             lead = leaders[lead_index]
             gap = lead["gap_m"] + elapsed * lead["speed_mps"] - ego.front_m
@@ -427,6 +447,10 @@ def build_plan(record, choose, prompt_variant="baseline", observation_variant="r
         row = request_for(state)
         row["question"]["instructions"] = BASE_INSTRUCTIONS + PROMPT_VARIANTS[prompt_variant]
         row["question"]["criteria"].update({name: description for name, (_, description) in extra_actions.items()})
+        if brake_gap_request is not None:
+            if lead is not None and not isfinite(gap):
+                raise ValueError("Invalid current radar range")
+            row = brake_gap_request(row, lead_brake_gap_gate(lead is not None, closing_speed))
         started = perf_counter()
         action, probabilities = choose(row)
         action = action.value if isinstance(action, Action) else action
