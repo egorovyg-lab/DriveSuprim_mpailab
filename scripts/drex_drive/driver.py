@@ -1,5 +1,7 @@
 """Decision request and the official Drex Max adapter."""
 
+from __future__ import annotations
+
 from math import isclose, isfinite
 from pathlib import Path
 
